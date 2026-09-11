@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { StatusChip } from "@/components/studio/status-chip";
 import { Field } from "@/components/studio/field";
@@ -9,12 +9,25 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import {
+  FULL_PERMISSIONS,
+  PARTNER_DEFAULT_PERMISSIONS,
+  PROGRESS_ONLY_PERMISSIONS,
+  PROJECT_TAB_KEYS,
+  type AccessLevel,
+  type MemberPermissions,
+  type ProjectTabKey,
+} from "@/modules/identity/permissions";
+import {
   inviteOrgMemberAction,
   resendInvitationAction,
   revokeInvitationAction,
 } from "@/modules/team/actions";
 import { invitePartnerLoginAction } from "@/modules/partners/actions";
 import type { OrgInvitation } from "@/modules/team/types";
+
+function clonePermissions(value: MemberPermissions): MemberPermissions {
+  return structuredClone(value);
+}
 
 export function InviteMemberForm({
   orgSlug,
@@ -29,11 +42,53 @@ export function InviteMemberForm({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [role, setRole] = useState("member");
+  const [preset, setPreset] = useState<"full" | "progress" | "partner" | "custom">("full");
+  const [permissions, setPermissions] = useState<MemberPermissions>(() =>
+    clonePermissions(FULL_PERMISSIONS),
+  );
+
+  const effectivePreset = role === "partner" && preset === "full" ? "partner" : preset;
+
+  const shownPermissions = useMemo(() => {
+    if (effectivePreset === "progress") return PROGRESS_ONLY_PERMISSIONS;
+    if (effectivePreset === "partner") return PARTNER_DEFAULT_PERMISSIONS;
+    if (effectivePreset === "full") return FULL_PERMISSIONS;
+    return permissions;
+  }, [effectivePreset, permissions]);
+
+  function setModuleAccess(module: keyof MemberPermissions, access: AccessLevel) {
+    setPreset("custom");
+    setPermissions((prev) => ({
+      ...prev,
+      [module]: {
+        ...prev[module],
+        access,
+        tabs: module === "delivery" ? prev.delivery?.tabs ?? FULL_PERMISSIONS.delivery?.tabs : undefined,
+      },
+    }));
+  }
+
+  function setTab(tab: ProjectTabKey, enabled: boolean) {
+    setPreset("custom");
+    setPermissions((prev) => ({
+      ...prev,
+      delivery: {
+        access: prev.delivery?.access ?? "write",
+        tabs: {
+          ...(prev.delivery?.tabs ?? FULL_PERMISSIONS.delivery?.tabs),
+          [tab]: enabled,
+        },
+      },
+    }));
+  }
 
   return (
     <form
       className={compact ? "grid gap-3" : "grid gap-3"}
       action={(formData) => {
+        formData.set("permissions_preset", effectivePreset);
+        formData.set("permissions", JSON.stringify(shownPermissions));
         start(async () => {
           const result = await inviteOrgMemberAction(orgSlug, formData);
           if (result.error) {
@@ -70,7 +125,19 @@ export function InviteMemberForm({
       </Field>
       <div className={`grid gap-3 ${projects.length > 0 ? "sm:grid-cols-2" : ""}`}>
         <Field label="Studio role" htmlFor="invite_role">
-          <NativeSelect id="invite_role" name="role" defaultValue="member">
+          <NativeSelect
+            id="invite_role"
+            name="role"
+            value={role}
+            onChange={(event) => {
+              const next = event.target.value;
+              setRole(next);
+              if (next === "partner") {
+                setPreset("partner");
+                setPermissions(clonePermissions(PARTNER_DEFAULT_PERMISSIONS));
+              }
+            }}
+          >
             <option value="admin">Admin</option>
             <option value="member">Member</option>
             <option value="viewer">Viewer</option>
@@ -104,6 +171,74 @@ export function InviteMemberForm({
           </NativeSelect>
         </Field>
       ) : null}
+
+      <Field label="Access" htmlFor="invite_access_preset">
+        <NativeSelect
+          id="invite_access_preset"
+          value={effectivePreset}
+          onChange={(event) => {
+            const next = event.target.value as typeof preset;
+            setPreset(next);
+            if (next === "full") setPermissions(clonePermissions(FULL_PERMISSIONS));
+            if (next === "progress") setPermissions(clonePermissions(PROGRESS_ONLY_PERMISSIONS));
+            if (next === "partner") setPermissions(clonePermissions(PARTNER_DEFAULT_PERMISSIONS));
+          }}
+        >
+          <option value="full">Full access</option>
+          <option value="progress">Progress only</option>
+          <option value="partner">Partner default</option>
+          <option value="custom">Custom</option>
+        </NativeSelect>
+      </Field>
+
+      <div className="grid gap-2 rounded-2xl bg-muted/40 p-3 ring-1 ring-border/30">
+        <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+          Modules
+        </p>
+        {(
+          [
+            ["delivery", "Projects"],
+            ["finance", "Finance"],
+            ["partners", "Partners"],
+            ["crm", "Leads"],
+            ["documents", "Documents"],
+          ] as const
+        ).map(([key, label]) => (
+          <label key={key} className="flex items-center justify-between gap-3 text-sm">
+            <span>{label}</span>
+            <NativeSelect
+              className="h-8 w-28"
+              value={shownPermissions[key]?.access ?? "none"}
+              onChange={(event) =>
+                setModuleAccess(key, event.target.value as AccessLevel)
+              }
+            >
+              <option value="none">Hidden</option>
+              <option value="read">View</option>
+              <option value="write">Edit</option>
+            </NativeSelect>
+          </label>
+        ))}
+        {(shownPermissions.delivery?.access ?? "none") !== "none" ? (
+          <div className="mt-2 grid gap-1.5 border-t border-border/40 pt-2">
+            <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+              Project tabs
+            </p>
+            {PROJECT_TAB_KEYS.map((tab) => (
+              <label key={tab} className="flex items-center gap-2 text-sm capitalize">
+                <input
+                  type="checkbox"
+                  className="size-3.5 rounded border-border"
+                  checked={shownPermissions.delivery?.tabs?.[tab] !== false}
+                  onChange={(event) => setTab(tab, event.target.checked)}
+                />
+                {tab}
+              </label>
+            ))}
+          </div>
+        ) : null}
+      </div>
+
       <Button type="submit" disabled={pending}>
         {pending ? "Sending…" : "Send invite"}
       </Button>
@@ -117,6 +252,7 @@ function inviteStatus(invite: OrgInvitation): "pending" | "expired" {
   }
   return "pending";
 }
+
 
 function formatExpiry(expiresAt: string | null) {
   if (!expiresAt) return null;

@@ -30,7 +30,7 @@ import {
   groupChargesByClient,
 } from "@/modules/finance/presentation";
 import { loadMonthlyStatement, loadOrgFinance } from "@/modules/finance/queries";
-import { requireOrg } from "@/modules/identity/org";
+import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { JOURNEY } from "@/shared/journey-copy";
 import { formatMoney } from "@/shared/money";
 import { cn } from "@/lib/utils";
@@ -75,6 +75,7 @@ export default async function FinancePage({
   const { orgSlug } = await params;
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
+  requireModuleAccess(ctx, "finance");
   const view = resolveFinanceView(typeof query.view === "string" ? query.view : undefined);
   const overdueOnly = query.filter === "overdue";
   const showCancelled = query.show === "cancelled";

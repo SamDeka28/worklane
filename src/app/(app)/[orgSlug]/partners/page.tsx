@@ -16,7 +16,7 @@ import {
 } from "@/components/studio/index-layout";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import { moneyLabel } from "@/modules/finance/ledger";
-import { requireOrg } from "@/modules/identity/org";
+import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { JOURNEY } from "@/shared/journey-copy";
 import { formatMoney } from "@/shared/money";
 import {
@@ -42,6 +42,7 @@ export default async function PartnersPage({
   const { orgSlug } = await params;
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
+  requireModuleAccess(ctx, "partners");
   const canInvite = ctx.role === "owner" || ctx.role === "admin";
   const view =
     query.view === "month" || query.view === "history" || query.view === "register"

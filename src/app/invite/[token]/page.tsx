@@ -66,10 +66,11 @@ export default async function InviteAcceptPage({
 
   const result = await acceptInvitationAction(token);
   if (result.ok) {
+    const qs = result.alreadyAccepted ? "" : "?joined=1";
     if (result.projectId) {
-      redirect(`/${result.orgSlug}/projects/${result.projectId}`);
+      redirect(`/${result.orgSlug}/projects/${result.projectId}${qs}`);
     }
-    redirect(`/${result.orgSlug}`);
+    redirect(`/${result.orgSlug}${qs}`);
   }
 
   return (
@@ -89,15 +90,13 @@ export default async function InviteAcceptPage({
         >
           Switch account
         </Button>
-        {result.orgSlug ? (
-          <Button
-            nativeButton={false}
-            render={<Link href={`/${result.orgSlug}`} />}
-            variant="outline"
-          >
-            Go to studio
-          </Button>
-        ) : null}
+        <Button
+          nativeButton={false}
+          render={<Link href={invite.org ? `/${invite.org.slug}` : "/onboarding"} />}
+          variant="outline"
+        >
+          Go to studio
+        </Button>
       </div>
     </main>
   );

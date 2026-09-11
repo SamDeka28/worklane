@@ -1,19 +1,35 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import {
+  canAccessModule,
+  canWriteModule,
+  parseMemberPermissions,
+  resolveMemberPermissions,
+  type MemberPermissions,
+} from "@/modules/identity/permissions";
+import {
   DEFAULT_MODULES,
+  type ModuleKey,
   type Organization,
   type OrgModules,
   type OrgRole,
 } from "@/modules/identity/types";
 import { requireUser } from "@/shared/db/require-user";
 
+export const LAST_ORG_COOKIE = "worklane_last_org";
+
 export type OrgContext = {
   org: Organization;
   role: OrgRole;
   userId: string;
   canWrite: boolean;
+  permissions: MemberPermissions;
   supabase: SupabaseClient;
+  user: {
+    email: string | null;
+    displayName: string | null;
+  };
 };
 
 type OrgRow = {
@@ -81,7 +97,7 @@ export async function requireOrg(slug: string): Promise<OrgContext> {
 
   const { data: membership } = await supabase
     .from("organization_members")
-    .select("role, status")
+    .select("role, status, permissions")
     .eq("organization_id", orgRow.id)
     .eq("user_id", user.id)
     .eq("status", "active")
@@ -92,13 +108,48 @@ export async function requireOrg(slug: string): Promise<OrgContext> {
   }
 
   const role = membership.role as OrgRole;
+  const org = mapOrganization(orgRow as OrgRow);
+  const permissions = resolveMemberPermissions({
+    role,
+    stored: parseMemberPermissions(membership.permissions),
+    orgModules: org.modules,
+  });
+
+  const roleCanWrite = role === "owner" || role === "admin" || role === "member";
+  const moduleWrite =
+    canWriteModule(permissions, "delivery") ||
+    canWriteModule(permissions, "finance") ||
+    canWriteModule(permissions, "crm") ||
+    canWriteModule(permissions, "documents") ||
+    canWriteModule(permissions, "partners");
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("email, display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
   return {
-    org: mapOrganization(orgRow as OrgRow),
+    org,
     role,
     userId: user.id,
-    canWrite: role === "owner" || role === "admin" || role === "member",
+    canWrite: roleCanWrite && (role === "owner" || role === "admin" || moduleWrite),
+    permissions,
     supabase,
+    user: {
+      email: (profile?.email as string | null) ?? user.email ?? null,
+      displayName:
+        (profile?.display_name as string | null) ??
+        (user.user_metadata?.full_name as string | undefined) ??
+        null,
+    },
   };
+}
+
+export function requireModuleAccess(ctx: OrgContext, module: ModuleKey) {
+  if (!canAccessModule(ctx.permissions, module)) {
+    notFound();
+  }
 }
 
 export async function requireWritableOrg(slug: string): Promise<OrgContext> {
@@ -114,6 +165,15 @@ export async function firstOrgPath(): Promise<string> {
   if (orgs.length === 0) {
     return "/onboarding?empty=1";
   }
+  try {
+    const jar = await cookies();
+    const last = jar.get(LAST_ORG_COOKIE)?.value;
+    if (last && orgs.some((row) => row.org.slug === last)) {
+      return `/${last}`;
+    }
+  } catch {
+    /* cookies unavailable */
+  }
   return `/${orgs[0].org.slug}`;
 }
 
@@ -125,7 +185,7 @@ export async function listOrgMembers(slug: string) {
   const { org, supabase, userId } = await requireOrg(slug);
   const { data, error } = await supabase
     .from("organization_members")
-    .select("id, role, status, user_id, created_at")
+    .select("id, role, status, user_id, created_at, permissions")
     .eq("organization_id", org.id)
     .order("created_at");
   if (error) throw new Error(error.message);
@@ -156,6 +216,7 @@ export async function listOrgMembers(slug: string) {
       displayName: profile?.displayName ?? null,
       createdAt: row.created_at as string,
       isYou: row.user_id === userId,
+      permissions: parseMemberPermissions(row.permissions),
     };
   });
 }

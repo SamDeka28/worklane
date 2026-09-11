@@ -28,6 +28,39 @@ export function AuthCard({
   const [pending, setPending] = useState(false);
   const isInvite = Boolean(inviteToken);
 
+  function inviteCallbackUrl(origin: string) {
+    return `${origin}/auth/callback?next=${encodeURIComponent(`/invite/${inviteToken}`)}`;
+  }
+
+  async function onGoogle() {
+    setPending(true);
+    setMessage(null);
+    const supabase = createBrowserSupabaseClient();
+    if (!supabase) {
+      setMessage("Supabase is not configured.");
+      setPending(false);
+      return;
+    }
+    const origin = window.location.origin;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: isInvite
+          ? inviteCallbackUrl(origin)
+          : `${origin}/auth/callback?next=${encodeURIComponent("/onboarding")}`,
+        queryParams: {
+          access_type: "offline",
+          prompt: "select_account",
+          ...(isInvite ? { skip_org: "true" } : {}),
+        },
+      },
+    });
+    if (error) {
+      setMessage(error.message);
+      setPending(false);
+    }
+  }
+
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -54,7 +87,9 @@ export function AuthCard({
             email,
             password,
             options: {
-              emailRedirectTo: `${origin}/auth/callback`,
+              emailRedirectTo: isInvite
+                ? inviteCallbackUrl(origin)
+                : `${origin}/auth/callback?next=${encodeURIComponent("/onboarding")}`,
               data: isInvite
                 ? {
                     skip_org: true,
@@ -101,7 +136,24 @@ export function AuthCard({
     <div className="w-full">
       <h1 className="font-heading text-3xl tracking-tight">{title}</h1>
       <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
-      <form className="mt-8 flex flex-col gap-5" onSubmit={onSubmit}>
+
+      <div className="mt-8 flex flex-col gap-3">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10"
+          disabled={pending}
+          onClick={() => void onGoogle()}
+        >
+          Continue with Google
+        </Button>
+        <div className="relative py-1 text-center text-xs text-muted-foreground">
+          <span className="bg-background relative z-10 px-2">or</span>
+          <span className="bg-border absolute inset-x-0 top-1/2 h-px" aria-hidden />
+        </div>
+      </div>
+
+      <form className="mt-2 flex flex-col gap-5" onSubmit={onSubmit}>
         {mode === "signup" && !isInvite ? (
           <div className="flex flex-col gap-2">
             <Label htmlFor="org_name">Studio name</Label>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  ChevronsUpDown,
   FileText,
   FolderKanban,
   Handshake,
@@ -15,9 +16,18 @@ import {
   Wallet,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
-import { NativeSelect } from "@/components/ui/native-select";
+import { AvatarMark } from "@/components/studio/chrome";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import type { ModuleKey, Organization } from "@/modules/identity/types";
+import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
+import type { ModuleKey, Organization, OrgRole } from "@/modules/identity/types";
 import { signOutAction } from "@/modules/identity/actions";
 
 type NavItem = {
@@ -56,20 +66,47 @@ const SECTIONS: Array<{ label: string | null; items: NavItem[] }> = [
   },
 ];
 
+function switchOrgPath(pathname: string, fromSlug: string, toSlug: string) {
+  if (!pathname.startsWith(`/${fromSlug}`)) return `/${toSlug}`;
+  const rest = pathname.slice(`/${fromSlug}`.length) || "";
+  const kept = rest.match(
+    /^(\/(?:crm|clients|projects|documents|team|finance|partners|settings|invoices)(?:\/[^/]+)?)/,
+  );
+  if (kept?.[1]) return `/${toSlug}${kept[1]}`;
+  if (rest === "" || rest === "/") return `/${toSlug}`;
+  return `/${toSlug}`;
+}
+
 export function AppSidebar({
   org,
   orgs = [],
+  permissions,
+  role,
+  user,
   expanded = false,
   className,
 }: {
   org: Organization;
   orgs?: Organization[];
+  permissions: MemberPermissions;
+  role: OrgRole;
+  user: { email: string | null; displayName: string | null };
   expanded?: boolean;
   className?: string;
 }) {
   const pathname = usePathname();
   const router = useRouter();
   const base = `/${org.slug}`;
+  const display =
+    user.displayName?.trim() || user.email?.split("@")[0] || "You";
+
+  function switchTo(slug: string) {
+    if (slug === org.slug) return;
+    document.cookie = `worklane_last_org=${encodeURIComponent(slug)};path=/;max-age=31536000;samesite=lax`;
+    const next = switchOrgPath(pathname, org.slug, slug);
+    router.push(next);
+    router.refresh();
+  }
 
   return (
     <aside
@@ -80,35 +117,43 @@ export function AppSidebar({
       )}
     >
       <div className="flex flex-col items-center gap-2 px-3 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
-        <Link
-          href={base}
-          className="flex items-center justify-center gap-2 group-data-[expanded=true]/rail:justify-start xl:justify-start"
-        >
-          <BrandMark size={28} />
-          <span className="hidden truncate text-sm font-semibold group-data-[expanded=true]/rail:inline xl:inline">
-            {org.name}
-          </span>
-        </Link>
-        {orgs.length > 1 ? (
-          <NativeSelect
-            className="hidden h-8 border-0 bg-transparent px-0 text-xs shadow-none group-data-[expanded=true]/rail:block xl:block"
-            value={org.slug}
-            onChange={(event) => router.push(`/${event.target.value}`)}
-            aria-label="Studio"
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            className="flex w-full items-center justify-center gap-2 rounded-2xl px-1 py-1.5 text-left hover:bg-muted group-data-[expanded=true]/rail:justify-between xl:justify-between"
           >
-            {orgs.map((item) => (
-              <option key={item.id} value={item.slug}>
-                {item.name}
-              </option>
-            ))}
-          </NativeSelect>
-        ) : null}
+            <span className="flex min-w-0 items-center gap-2">
+              <BrandMark size={28} />
+              <span className="hidden min-w-0 truncate text-sm font-semibold group-data-[expanded=true]/rail:inline xl:inline">
+                {org.name}
+              </span>
+            </span>
+            {orgs.length > 0 ? (
+              <ChevronsUpDown className="hidden size-3.5 shrink-0 text-muted-foreground group-data-[expanded=true]/rail:inline xl:inline" />
+            ) : null}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Studios</DropdownMenuLabel>
+              {(orgs.length > 0 ? orgs : [org]).map((item) => (
+                <DropdownMenuItem
+                  key={item.id}
+                  onClick={() => switchTo(item.slug)}
+                  className={item.slug === org.slug ? "bg-muted" : undefined}
+                >
+                  {item.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <nav className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-2 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
         {SECTIONS.map((section) => {
-          const items = section.items.filter(
-            (item) => !item.module || org.modules[item.module],
-          );
+          const items = section.items.filter((item) => {
+            if (!item.module) return true;
+            if (!org.modules[item.module]) return false;
+            return canAccessModule(permissions, item.module);
+          });
           if (items.length === 0) return null;
           return (
             <div key={section.label ?? "home"} className="flex flex-col gap-1">
@@ -146,26 +191,42 @@ export function AppSidebar({
           );
         })}
       </nav>
-      <div className="mt-auto flex flex-col items-center gap-1 px-2 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
-        <Link
-          href={`${base}/settings`}
-          prefetch
-          title="Settings"
-          className="flex size-11 items-center justify-center rounded-2xl text-muted-foreground hover:bg-muted hover:text-foreground group-data-[expanded=true]/rail:h-11 group-data-[expanded=true]/rail:w-full group-data-[expanded=true]/rail:justify-start group-data-[expanded=true]/rail:gap-3 group-data-[expanded=true]/rail:px-3 group-data-[expanded=true]/rail:text-sm xl:h-11 xl:w-full xl:justify-start xl:gap-3 xl:px-3 xl:text-sm"
-        >
-          <Settings className="size-4" />
-          <span className="hidden group-data-[expanded=true]/rail:inline xl:inline">Settings</span>
-        </Link>
-        <form action={signOutAction}>
-          <button
-            type="submit"
-            title="Sign out"
+      <div className="mt-auto flex flex-col gap-1 px-2 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
+        <div className="mb-1 hidden items-center gap-2 rounded-2xl px-2 py-2 group-data-[expanded=true]/rail:flex xl:flex">
+          <AvatarMark name={display} size="sm" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium">{display}</p>
+            <p className="truncate text-[10px] capitalize text-muted-foreground">
+              {role}
+              {user.email ? ` · ${user.email}` : ""}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col items-center gap-1 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
+          <Link
+            href={`${base}/settings`}
+            prefetch
+            title="Settings"
             className="flex size-11 items-center justify-center rounded-2xl text-muted-foreground hover:bg-muted hover:text-foreground group-data-[expanded=true]/rail:h-11 group-data-[expanded=true]/rail:w-full group-data-[expanded=true]/rail:justify-start group-data-[expanded=true]/rail:gap-3 group-data-[expanded=true]/rail:px-3 group-data-[expanded=true]/rail:text-sm xl:h-11 xl:w-full xl:justify-start xl:gap-3 xl:px-3 xl:text-sm"
           >
-            <LogOut className="size-4" />
-            <span className="hidden group-data-[expanded=true]/rail:inline xl:inline">Sign out</span>
-          </button>
-        </form>
+            <Settings className="size-4" />
+            <span className="hidden group-data-[expanded=true]/rail:inline xl:inline">
+              Settings
+            </span>
+          </Link>
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              title="Sign out"
+              className="flex size-11 items-center justify-center rounded-2xl text-muted-foreground hover:bg-muted hover:text-foreground group-data-[expanded=true]/rail:h-11 group-data-[expanded=true]/rail:w-full group-data-[expanded=true]/rail:justify-start group-data-[expanded=true]/rail:gap-3 group-data-[expanded=true]/rail:px-3 group-data-[expanded=true]/rail:text-sm xl:h-11 xl:w-full xl:justify-start xl:gap-3 xl:px-3 xl:text-sm"
+            >
+              <LogOut className="size-4" />
+              <span className="hidden group-data-[expanded=true]/rail:inline xl:inline">
+                Sign out
+              </span>
+            </button>
+          </form>
+        </div>
       </div>
     </aside>
   );

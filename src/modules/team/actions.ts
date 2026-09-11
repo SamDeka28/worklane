@@ -64,6 +64,23 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
     String(formData.get("project_role") ?? "member") === "lead" ? "lead" : "member";
   const partnerId = String(formData.get("partner_id") ?? "").trim() || null;
   const displayName = String(formData.get("display_name") ?? "").trim() || null;
+  const presetRaw = String(formData.get("permissions_preset") ?? "full");
+  const permissionsJson = String(formData.get("permissions") ?? "").trim();
+  const { permissionsPreset, parseMemberPermissions } = await import(
+    "@/modules/identity/permissions"
+  );
+  let permissions =
+    presetRaw === "progress"
+      ? permissionsPreset("progress")
+      : presetRaw === "partner" || role === "partner"
+        ? permissionsPreset("partner")
+        : presetRaw === "custom"
+          ? parseMemberPermissions(permissionsJson ? JSON.parse(permissionsJson) : null) ??
+            permissionsPreset("full")
+          : permissionsPreset("full");
+  if (role === "partner" && presetRaw === "full") {
+    permissions = permissionsPreset("partner");
+  }
 
   if (!email || !email.includes("@")) return { error: "Enter a valid email" };
 
@@ -174,6 +191,7 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
     project_id: projectId,
     project_role: projectId ? projectRole : null,
     partner_id: partnerId,
+    permissions,
   });
   if (error) return { error: error.message };
 
@@ -230,6 +248,73 @@ export async function revokeInvitationAction(orgSlug: string, invitationId: stri
   revalidatePath(`/${orgSlug}/settings`);
   revalidatePath(`/${orgSlug}/team`);
   revalidatePath(`/${orgSlug}/partners`);
+  return { ok: true as const };
+}
+
+export async function updateMemberAccessAction(
+  orgSlug: string,
+  memberId: string,
+  formData: FormData,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (ctx.role !== "owner" && ctx.role !== "admin") {
+    return { error: "Only owners and admins can edit access" };
+  }
+
+  const roleRaw = String(formData.get("role") ?? "member");
+  const role =
+    roleRaw === "admin" || roleRaw === "viewer" || roleRaw === "partner" || roleRaw === "member"
+      ? roleRaw
+      : "member";
+  const presetRaw = String(formData.get("permissions_preset") ?? "custom");
+  const permissionsJson = String(formData.get("permissions") ?? "").trim();
+  const { permissionsPreset, parseMemberPermissions } = await import(
+    "@/modules/identity/permissions"
+  );
+
+  let permissions =
+    presetRaw === "progress"
+      ? permissionsPreset("progress")
+      : presetRaw === "partner" || role === "partner"
+        ? permissionsPreset("partner")
+        : presetRaw === "full"
+          ? permissionsPreset("full")
+          : parseMemberPermissions(permissionsJson ? JSON.parse(permissionsJson) : null) ??
+            permissionsPreset("full");
+  if (role === "partner" && presetRaw === "full") {
+    permissions = permissionsPreset("partner");
+  }
+
+  const { data: member, error: loadError } = await ctx.supabase
+    .from("organization_members")
+    .select("id, user_id, role, status")
+    .eq("id", memberId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (loadError) return { error: loadError.message };
+  if (!member) return { error: "Member not found" };
+  if (member.status !== "active") return { error: "Member is not active" };
+
+  if (member.role === "owner") {
+    return { error: "Owner access can’t be changed here" };
+  }
+  if (role === "owner") {
+    return { error: "Cannot assign owner via this form" };
+  }
+  if (ctx.role === "admin" && (member.role === "admin" || role === "admin")) {
+    return { error: "Only owners can change admin access" };
+  }
+
+  const { error } = await ctx.supabase
+    .from("organization_members")
+    .update({ role, permissions })
+    .eq("id", memberId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/${orgSlug}/team`);
+  revalidatePath(`/${orgSlug}`);
+  revalidatePath(`/${orgSlug}/projects`);
   return { ok: true as const };
 }
 
@@ -318,7 +403,7 @@ export async function getInvitationByToken(token: string) {
   const { data, error } = await admin
     .from("organization_invitations")
     .select(
-      "id, email, role, organization_id, project_id, project_role, partner_id, expires_at, accepted_at, organizations ( id, slug, name )",
+      "id, email, role, organization_id, project_id, project_role, partner_id, permissions, expires_at, accepted_at, organizations ( id, slug, name )",
     )
     .eq("token_hash", tokenHash)
     .maybeSingle();
@@ -332,6 +417,7 @@ export async function getInvitationByToken(token: string) {
     projectId: (data.project_id as string | null) ?? null,
     projectRole: (data.project_role as string | null) ?? null,
     partnerId: (data.partner_id as string | null) ?? null,
+    permissions: data.permissions ?? null,
     expiresAt: (data.expires_at as string | null) ?? null,
     acceptedAt: (data.accepted_at as string | null) ?? null,
     org: org
@@ -348,7 +434,15 @@ export async function acceptInvitationAction(token: string) {
 
   const invite = await getInvitationByToken(token);
   if (!invite || !invite.org) return { error: "Invite not found" };
-  if (invite.acceptedAt) return { error: "Invite already accepted", orgSlug: invite.org.slug };
+  if (invite.acceptedAt) {
+    return {
+      ok: true as const,
+      alreadyAccepted: true as const,
+      orgSlug: invite.org.slug,
+      orgName: invite.org.name,
+      projectId: invite.projectId,
+    };
+  }
   if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
     return { error: "Invite expired" };
   }
@@ -367,13 +461,14 @@ export async function acceptInvitationAction(token: string) {
       user_id: user.id,
       role: invite.role,
       status: "active",
+      permissions: invite.permissions,
     },
     { onConflict: "organization_id,user_id" },
   );
   if (memberError) return { error: memberError.message };
 
   if (invite.projectId) {
-    await admin.from("project_members").upsert(
+    const { error: projectMemberError } = await admin.from("project_members").upsert(
       {
         organization_id: invite.organizationId,
         project_id: invite.projectId,
@@ -382,14 +477,20 @@ export async function acceptInvitationAction(token: string) {
       },
       { onConflict: "project_id,user_id" },
     );
+    if (projectMemberError) {
+      return { error: `Joined studio, but project access failed: ${projectMemberError.message}` };
+    }
   }
 
   if (invite.partnerId) {
-    await admin
+    const { error: partnerError } = await admin
       .from("partners")
       .update({ user_id: user.id, email: userEmail })
       .eq("id", invite.partnerId)
       .eq("organization_id", invite.organizationId);
+    if (partnerError) {
+      return { error: `Joined studio, but partner link failed: ${partnerError.message}` };
+    }
   }
 
   await admin
@@ -403,9 +504,18 @@ export async function acceptInvitationAction(token: string) {
     display_name: user.user_metadata?.full_name ?? userEmail.split("@")[0],
   });
 
+  revalidatePath(`/${invite.org.slug}`);
+  revalidatePath(`/${invite.org.slug}/projects`);
+  revalidatePath(`/${invite.org.slug}/team`);
+  revalidatePath(`/${invite.org.slug}/partners`);
+  if (invite.projectId) {
+    revalidatePath(`/${invite.org.slug}/projects/${invite.projectId}`);
+  }
+
   return {
     ok: true as const,
     orgSlug: invite.org.slug,
+    orgName: invite.org.name,
     projectId: invite.projectId,
   };
 }

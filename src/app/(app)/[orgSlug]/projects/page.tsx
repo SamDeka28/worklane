@@ -18,7 +18,7 @@ import { ProjectToolbar } from "@/modules/delivery/components/project-toolbar";
 import { projectNextStep } from "@/modules/delivery/next-step";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import type { ProjectStatus } from "@/modules/delivery/types";
-import { requireOrg } from "@/modules/identity/org";
+import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { dueThisMonthMinor, formatDay } from "@/modules/finance/presentation";
 import { loadOrgFinance } from "@/modules/finance/queries";
@@ -49,6 +49,7 @@ export default async function ProjectsPage({
   const { orgSlug } = await params;
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
+  requireModuleAccess(ctx, "delivery");
   const [board, clients, finance] = await Promise.all([
     listProjectBoard(orgSlug),
     listClients(orgSlug),

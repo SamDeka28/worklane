@@ -12,7 +12,7 @@ import { dueOnFromDays } from "@/modules/invoices/settings";
 import { ensureDefaultInvoiceTemplates } from "@/modules/invoices/templates";
 import { invoiceSubtotalMinor } from "@/modules/invoices/totals";
 import { INVOICE_STATUS_LABELS } from "@/modules/invoices/types";
-import { requireOrg } from "@/modules/identity/org";
+import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { formatMoney } from "@/shared/money";
 
 export default async function InvoicesPage({
@@ -22,6 +22,7 @@ export default async function InvoicesPage({
   const { orgSlug } = await params;
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
+  requireModuleAccess(ctx, "finance");
   if (!ctx.org.modules.finance) notFound();
 
   const [invoices, clients, config, templates] = await Promise.all([

@@ -27,9 +27,16 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { signOutAction } from "@/modules/identity/actions";
+import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
 import type { Organization } from "@/modules/identity/types";
 
-export function CommandPalette({ org }: { org: Organization }) {
+export function CommandPalette({
+  org,
+  permissions,
+}: {
+  org: Organization;
+  permissions: MemberPermissions;
+}) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const base = `/${org.slug}`;
@@ -55,6 +62,9 @@ export function CommandPalette({ org }: { org: Organization }) {
     router.push(href);
   };
 
+  const show = (module: Parameters<typeof canAccessModule>[1]) =>
+    org.modules[module] && canAccessModule(permissions, module);
+
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput placeholder="Search or jump…" />
@@ -64,7 +74,7 @@ export function CommandPalette({ org }: { org: Organization }) {
           <CommandItem onSelect={() => go(base)}>
             <Home /> Home
           </CommandItem>
-          {org.modules.crm ? (
+          {show("crm") ? (
             <CommandItem onSelect={() => go(`${base}/crm`)}>
               <Target /> Leads
             </CommandItem>
@@ -72,22 +82,22 @@ export function CommandPalette({ org }: { org: Organization }) {
           <CommandItem onSelect={() => go(`${base}/clients`)}>
             <Search /> Clients
           </CommandItem>
-          {org.modules.delivery ? (
+          {show("delivery") ? (
             <CommandItem onSelect={() => go(`${base}/projects`)}>
               <FolderKanban /> Projects
             </CommandItem>
           ) : null}
-          {org.modules.documents ? (
+          {show("documents") ? (
             <CommandItem onSelect={() => go(`${base}/documents`)}>
               <FileText /> Documents
             </CommandItem>
           ) : null}
-          {org.modules.finance ? (
+          {show("finance") ? (
             <CommandItem onSelect={() => go(`${base}/finance`)}>
               <Wallet /> Finance
             </CommandItem>
           ) : null}
-          {org.modules.partners ? (
+          {show("partners") ? (
             <CommandItem onSelect={() => go(`${base}/partners`)}>
               <Handshake /> Partners
             </CommandItem>
@@ -101,7 +111,7 @@ export function CommandPalette({ org }: { org: Organization }) {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Sell">
-          {org.modules.crm ? (
+          {show("crm") ? (
             <CommandItem onSelect={() => go(`${base}/crm?new=1`)}>
               <Target /> New lead
             </CommandItem>
@@ -109,7 +119,7 @@ export function CommandPalette({ org }: { org: Organization }) {
           <CommandItem onSelect={() => go(`${base}/clients?new=1`)}>
             <UserPlus /> New client
           </CommandItem>
-          {org.modules.documents ? (
+          {show("documents") ? (
             <CommandItem onSelect={() => go(`${base}/documents?new=1`)}>
               <FileText /> New document
             </CommandItem>
@@ -117,12 +127,12 @@ export function CommandPalette({ org }: { org: Organization }) {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Deliver">
-          {org.modules.delivery ? (
+          {show("delivery") ? (
             <CommandItem onSelect={() => go(`${base}/projects?new=1`)}>
               <FolderKanban /> New project
             </CommandItem>
           ) : null}
-          {org.modules.delivery ? (
+          {show("delivery") ? (
             <CommandItem onSelect={() => go(`${base}/projects`)}>
               <FolderKanban /> Log work
             </CommandItem>
@@ -133,16 +143,18 @@ export function CommandPalette({ org }: { org: Organization }) {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Money">
-          <CommandItem onSelect={() => go(`${base}/finance?view=collect`)}>
-            <Receipt /> Collect
-          </CommandItem>
-          <CommandItem onSelect={() => go(`${base}/finance?new=charge`)}>
-            <Plus /> New charge
-          </CommandItem>
-          {org.modules.finance ? (
-            <CommandItem onSelect={() => go(`${base}/finance?view=invoices`)}>
-              <FileText /> Invoices
-            </CommandItem>
+          {show("finance") ? (
+            <>
+              <CommandItem onSelect={() => go(`${base}/finance?view=collect`)}>
+                <Receipt /> Collect
+              </CommandItem>
+              <CommandItem onSelect={() => go(`${base}/finance?new=charge`)}>
+                <Plus /> New charge
+              </CommandItem>
+              <CommandItem onSelect={() => go(`${base}/finance?view=invoices`)}>
+                <FileText /> Invoices
+              </CommandItem>
+            </>
           ) : null}
         </CommandGroup>
         <CommandSeparator />

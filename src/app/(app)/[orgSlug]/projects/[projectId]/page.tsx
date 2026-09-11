@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
 import {
@@ -51,7 +51,12 @@ import { moneyLabel } from "@/modules/finance/ledger";
 import { collectTargets, chargeTitle, formatDay } from "@/modules/finance/presentation";
 import { loadProjectFinance } from "@/modules/finance/queries";
 import { listFilesForEntity } from "@/modules/files/queries";
-import { requireOrg, listOrgMembers } from "@/modules/identity/org";
+import { requireOrg, listOrgMembers, requireModuleAccess } from "@/modules/identity/org";
+import {
+  canAccessProjectTab,
+  firstAllowedProjectTab,
+  type ProjectTabKey,
+} from "@/modules/identity/permissions";
 import {
   ManageProjectPartnersDialog,
   ManageProjectTeamDialog,
@@ -98,6 +103,22 @@ function resolveProjectTab(query: {
   return "overview";
 }
 
+const emptyFinance = {
+  charges: [],
+  snapshot: {
+    currency: "USD" as const,
+    contractedMinor: BigInt(0),
+    billedMinor: BigInt(0),
+    chargedMinor: BigInt(0),
+    collectedMinor: BigInt(0),
+    refundedMinor: BigInt(0),
+    outstandingMinor: BigInt(0),
+    remainingMinor: BigInt(0),
+    unallocatedMinor: BigInt(0),
+    overdueMinor: BigInt(0),
+  },
+} as Awaited<ReturnType<typeof loadProjectFinance>>;
+
 export default async function ProjectDetailPage({
   params,
   searchParams,
@@ -105,11 +126,16 @@ export default async function ProjectDetailPage({
   const { orgSlug, projectId } = await params;
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
+  requireModuleAccess(ctx, "delivery");
   const project = await getProject(orgSlug, projectId);
   if (!project) notFound();
 
   const isHourly = project.billingMode === "hourly";
-  const tab = resolveProjectTab(query);
+  let tab = resolveProjectTab(query);
+  if (!canAccessProjectTab(ctx.permissions, tab as ProjectTabKey)) {
+    const allowed = firstAllowedProjectTab(ctx.permissions);
+    redirect(`/${orgSlug}/projects/${projectId}?tab=${allowed}`);
+  }
   const panel =
     query.panel === "log" ? "log" : query.panel === "board" ? "board" : isHourly ? "log" : "board";
   const selectedChargeId = typeof query.charge === "string" ? query.charge : undefined;
@@ -128,28 +154,83 @@ export default async function ProjectDetailPage({
     return `${base}?${params.toString()}`;
   };
 
-  const [milestones, milestoneItemsById, tasks, logs, finance, columns, documents, projectSurfaceDocs, partners, projectPartners, projectMembers, orgMembers, distributions, projectFiles, partnerEarnings] =
-    await Promise.all([
-      listMilestones(orgSlug, projectId),
-      listMilestoneItemsForProject(orgSlug, projectId),
-      listTasks(orgSlug, projectId),
-      listWorkLogs(orgSlug, projectId),
-      loadProjectFinance(orgSlug, projectId),
-      listProjectColumns(orgSlug, projectId),
-      listDocuments(orgSlug).catch(() => []),
-      listDocumentsForProjectSurface(orgSlug, projectId).catch(() => []),
-      listPartners(orgSlug).catch(() => []),
-      listProjectPartners(orgSlug, projectId).catch(() => []),
-      listProjectMembers(orgSlug, projectId).catch(() => []),
-      listOrgMembers(orgSlug).catch(() => []),
-      listProjectDistributions(orgSlug, projectId).catch(() => []),
-      listFilesForEntity(orgSlug, "project", projectId).catch(() => []),
-      loadProjectPartnerEarnings(orgSlug, projectId).catch(() => ({
-        rows: [],
-        details: [],
-        totalEarnedMinor: BigInt(0),
-      })),
-    ]);
+  const needOverviewBits = tab === "overview";
+  const needMilestones = tab === "overview" || tab === "milestones" || tab === "work";
+  const needTasks = tab === "overview" || tab === "milestones" || tab === "work";
+  const needLogs = tab === "overview" || tab === "work";
+  const needFinance =
+    tab === "overview" || tab === "charges" || tab === "milestones" || tab === "split";
+  const needColumns = tab === "work" || tab === "overview";
+  const needDocs = tab === "documents";
+  const needSplit = tab === "split" || tab === "overview";
+  const needTeam = tab === "work" || tab === "split" || tab === "overview";
+
+  const [
+    milestones,
+    milestoneItemsById,
+    tasks,
+    logs,
+    finance,
+    columns,
+    documents,
+    projectSurfaceDocs,
+    partners,
+    projectPartners,
+    projectMembers,
+    orgMembers,
+    distributions,
+    projectFiles,
+    partnerEarnings,
+  ] = await Promise.all([
+    needMilestones
+      ? listMilestones(orgSlug, projectId)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listMilestones>>),
+    needMilestones
+      ? listMilestoneItemsForProject(orgSlug, projectId)
+      : Promise.resolve(new Map() as Awaited<ReturnType<typeof listMilestoneItemsForProject>>),
+    needTasks
+      ? listTasks(orgSlug, projectId)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listTasks>>),
+    needLogs
+      ? listWorkLogs(orgSlug, projectId)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listWorkLogs>>),
+    needFinance
+      ? loadProjectFinance(orgSlug, projectId)
+      : Promise.resolve(emptyFinance as Awaited<ReturnType<typeof loadProjectFinance>>),
+    needColumns
+      ? listProjectColumns(orgSlug, projectId)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listProjectColumns>>),
+    needDocs ? listDocuments(orgSlug).catch(() => []) : Promise.resolve([]),
+    needDocs
+      ? listDocumentsForProjectSurface(orgSlug, projectId).catch(() => [])
+      : Promise.resolve([]),
+    needSplit ? listPartners(orgSlug).catch(() => []) : Promise.resolve([]),
+    needSplit || needTeam
+      ? listProjectPartners(orgSlug, projectId).catch(() => [])
+      : Promise.resolve([]),
+    needTeam
+      ? listProjectMembers(orgSlug, projectId).catch(() => [])
+      : Promise.resolve([]),
+    needTeam ? listOrgMembers(orgSlug).catch(() => []) : Promise.resolve([]),
+    needSplit
+      ? listProjectDistributions(orgSlug, projectId).catch(() => [])
+      : Promise.resolve([]),
+    needDocs
+      ? listFilesForEntity(orgSlug, "project", projectId).catch(() => [])
+      : Promise.resolve([]),
+    needSplit
+      ? loadProjectPartnerEarnings(orgSlug, projectId).catch(() => ({
+          rows: [],
+          details: [],
+          totalEarnedMinor: BigInt(0),
+        }))
+      : Promise.resolve({
+          rows: [],
+          details: [],
+          totalEarnedMinor: BigInt(0),
+        }),
+  ]);
+  void needOverviewBits;
   const clientDocs = documents.filter((doc) => doc.clientId === project.clientId);
   const projectDocs = projectSurfaceDocs;
   const attachableDocs = clientDocs.filter((doc) => !doc.projectId);
@@ -159,10 +240,14 @@ export default async function ProjectDetailPage({
     ctx.canWrite &&
     projectPartners.some((partner) => partner.active) &&
     distributions.length === 0;
-  const comments = await listTaskComments(
-    orgSlug,
-    tasks.map((task) => task.id),
-  );
+  const comments =
+    tab === "work"
+      ? await listTaskComments(
+          orgSlug,
+          tasks.map((task) => task.id),
+        )
+      : ([] as Awaited<ReturnType<typeof listTaskComments>>);
+
 
   const columnById = new Map(columns.map((column) => [column.id, column]));
   const openTasks = tasks.filter((task) => {
@@ -428,36 +513,48 @@ export default async function ProjectDetailPage({
       />
 
       <div className="flex shrink-0 flex-wrap gap-1 border-b border-border/30 px-5 py-2">
-        <SoftTab href={tabHref("overview")} active={tab === "overview"}>
-          Overview
-        </SoftTab>
-        <SoftTab href={tabHref("milestones")} active={tab === "milestones"}>
-          Milestones
-          {milestones.length > 0 ? ` · ${milestones.length}` : ""}
-        </SoftTab>
-        <SoftTab
-          href={tabHref("work", `panel=${isHourly ? "log" : "board"}`)}
-          active={tab === "work"}
-        >
-          Work
-          {openTasks > 0 ? ` · ${openTasks}` : ""}
-        </SoftTab>
-        <SoftTab href={tabHref("charges")} active={tab === "charges"}>
-          Charges
-          {money.outstandingMinor > BigInt(0)
-            ? ` · ${moneyLabel(money.outstandingMinor, project.currency)}`
-            : ""}
-        </SoftTab>
-        <SoftTab href={tabHref("split")} active={tab === "split"}>
-          Split
-          {totalEarnedMinor > BigInt(0)
-            ? ` · ${moneyLabel(totalEarnedMinor, project.currency)}`
-            : ""}
-        </SoftTab>
-        <SoftTab href={tabHref("documents")} active={tab === "documents"}>
-          Documents
-          {docsCount > 0 ? ` · ${docsCount}` : ""}
-        </SoftTab>
+        {canAccessProjectTab(ctx.permissions, "overview") ? (
+          <SoftTab href={tabHref("overview")} active={tab === "overview"}>
+            Overview
+          </SoftTab>
+        ) : null}
+        {canAccessProjectTab(ctx.permissions, "milestones") ? (
+          <SoftTab href={tabHref("milestones")} active={tab === "milestones"}>
+            Milestones
+            {milestones.length > 0 ? ` · ${milestones.length}` : ""}
+          </SoftTab>
+        ) : null}
+        {canAccessProjectTab(ctx.permissions, "work") ? (
+          <SoftTab
+            href={tabHref("work", `panel=${isHourly ? "log" : "board"}`)}
+            active={tab === "work"}
+          >
+            Work
+            {openTasks > 0 ? ` · ${openTasks}` : ""}
+          </SoftTab>
+        ) : null}
+        {canAccessProjectTab(ctx.permissions, "charges") ? (
+          <SoftTab href={tabHref("charges")} active={tab === "charges"}>
+            Charges
+            {money.outstandingMinor > BigInt(0)
+              ? ` · ${moneyLabel(money.outstandingMinor, project.currency)}`
+              : ""}
+          </SoftTab>
+        ) : null}
+        {canAccessProjectTab(ctx.permissions, "split") ? (
+          <SoftTab href={tabHref("split")} active={tab === "split"}>
+            Split
+            {totalEarnedMinor > BigInt(0)
+              ? ` · ${moneyLabel(totalEarnedMinor, project.currency)}`
+              : ""}
+          </SoftTab>
+        ) : null}
+        {canAccessProjectTab(ctx.permissions, "documents") ? (
+          <SoftTab href={tabHref("documents")} active={tab === "documents"}>
+            Documents
+            {docsCount > 0 ? ` · ${docsCount}` : ""}
+          </SoftTab>
+        ) : null}
       </div>
 
       <HubBody className="gap-4">

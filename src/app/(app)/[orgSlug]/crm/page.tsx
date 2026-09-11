@@ -18,7 +18,7 @@ import { CreateLeadDialog } from "@/modules/crm/components/lead-forms";
 import { CrmLeadSheet } from "@/modules/crm/components/crm-lead-sheet";
 import { getLead, listLeads } from "@/modules/crm/queries";
 import { LEAD_STAGE_LABELS } from "@/modules/crm/types";
-import { requireOrg } from "@/modules/identity/org";
+import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { JOURNEY } from "@/shared/journey-copy";
 import { formatMoney } from "@/shared/money";
 
@@ -29,6 +29,7 @@ export default async function CrmPage({
   const { orgSlug } = await params;
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
+  requireModuleAccess(ctx, "crm");
   if (!ctx.org.modules.crm) notFound();
 
   const view = query.view === "list" ? "list" : "board";

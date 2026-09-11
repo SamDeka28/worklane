@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { Menu, Plus, Search } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { AvatarMark } from "@/components/studio/chrome";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,7 +17,8 @@ import {
   NotificationsMenu,
   type HeaderNotification,
 } from "@/components/shell/notifications-menu";
-import type { Organization } from "@/modules/identity/types";
+import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
+import type { Organization, OrgRole } from "@/modules/identity/types";
 
 const TITLES: Record<string, string> = {
   "": "Overview",
@@ -36,17 +38,25 @@ export function AppHeader({
   orgs = [],
   canWrite = true,
   notifications = [],
+  permissions,
+  role,
+  user,
 }: {
   org: Organization;
   orgs?: Organization[];
   canWrite?: boolean;
   notifications?: HeaderNotification[];
+  permissions: MemberPermissions;
+  role: OrgRole;
+  user: { email: string | null; displayName: string | null };
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const base = `/${org.slug}`;
   const rest = pathname.replace(`/${org.slug}`, "").split("/").filter(Boolean)[0] ?? "";
   const title = TITLES[rest] ?? org.name;
+  const display =
+    user.displayName?.trim() || user.email?.split("@")[0] || "You";
 
   return (
     <header className="flex h-16 shrink-0 items-center gap-3 rounded-4xl bg-card/95 px-4 shadow-soft backdrop-blur-sm md:px-6">
@@ -66,6 +76,9 @@ export function AppHeader({
             <AppSidebar
               org={org}
               orgs={orgs}
+              permissions={permissions}
+              role={role}
+              user={user}
               expanded
               className="flex h-full w-full rounded-none shadow-none"
             />
@@ -99,7 +112,7 @@ export function AppHeader({
               }
             />
             <DropdownMenuContent align="end" className="min-w-44">
-              {org.modules.crm ? (
+              {org.modules.crm && canAccessModule(permissions, "crm") ? (
                 <DropdownMenuItem onClick={() => router.push(`${base}/crm?new=1`)}>
                   New lead
                 </DropdownMenuItem>
@@ -107,12 +120,12 @@ export function AppHeader({
               <DropdownMenuItem onClick={() => router.push(`${base}/clients?new=1`)}>
                 New client
               </DropdownMenuItem>
-              {org.modules.delivery ? (
+              {org.modules.delivery && canAccessModule(permissions, "delivery") ? (
                 <DropdownMenuItem onClick={() => router.push(`${base}/projects?new=1`)}>
                   New project
                 </DropdownMenuItem>
               ) : null}
-              {org.modules.finance ? (
+              {org.modules.finance && canAccessModule(permissions, "finance") ? (
                 <>
                   <DropdownMenuItem onClick={() => router.push(`${base}/finance?new=charge`)}>
                     New charge
@@ -122,7 +135,7 @@ export function AppHeader({
                   </DropdownMenuItem>
                 </>
               ) : null}
-              {org.modules.documents ? (
+              {org.modules.documents && canAccessModule(permissions, "documents") ? (
                 <DropdownMenuItem onClick={() => router.push(`${base}/documents?new=1`)}>
                   New document
                 </DropdownMenuItem>
@@ -131,10 +144,8 @@ export function AppHeader({
           </DropdownMenu>
         ) : null}
         <div className="hidden items-center gap-2 rounded-full bg-muted py-1 pr-3 pl-1 sm:flex">
-          <span className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
-            {org.name.slice(0, 1).toUpperCase()}
-          </span>
-          <span className="max-w-28 truncate text-sm font-medium">{org.name}</span>
+          <AvatarMark name={display} size="sm" />
+          <span className="max-w-28 truncate text-sm font-medium">{display}</span>
         </div>
       </div>
     </header>

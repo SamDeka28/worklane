@@ -18,7 +18,7 @@ import { listClients } from "@/modules/clients/queries";
 import { listProjects } from "@/modules/delivery/queries";
 import { CreateDocumentDialog } from "@/modules/documents/components/document-forms";
 import { listDocuments } from "@/modules/documents/queries";
-import { requireOrg } from "@/modules/identity/org";
+import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { JOURNEY } from "@/shared/journey-copy";
 
 export default async function DocumentsPage({
@@ -28,6 +28,7 @@ export default async function DocumentsPage({
   const { orgSlug } = await params;
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
+  requireModuleAccess(ctx, "documents");
   const kind = typeof query.kind === "string" ? query.kind : "all";
 
   const [documents, clients, projects] = await Promise.all([
