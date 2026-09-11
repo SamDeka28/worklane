@@ -4,8 +4,14 @@ import { EmptyState } from "@/components/studio/empty-state";
 import { StatusChip } from "@/components/studio/status-chip";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import { listOrgMembers, requireOrg } from "@/modules/identity/org";
+import {
+  FULL_PERMISSIONS,
+  PARTNER_DEFAULT_PERMISSIONS,
+  resolveMemberPermissions,
+} from "@/modules/identity/permissions";
 import { isEmailConfigured } from "@/shared/email";
 import { listPendingInvitations } from "@/modules/team/actions";
+import { EditMemberAccessSheet } from "@/modules/team/components/edit-member-access";
 import {
   InviteMemberForm,
   PendingInvitesList,
@@ -16,11 +22,11 @@ export default async function TeamPage({
 }: PageProps<"/[orgSlug]/team">) {
   const { orgSlug } = await params;
   const ctx = await requireOrg(orgSlug);
-  const canInvite = ctx.role === "owner" || ctx.role === "admin";
+  const canManage = ctx.role === "owner" || ctx.role === "admin";
   const [members, board, pendingInvites] = await Promise.all([
     listOrgMembers(orgSlug),
     listProjectBoard(orgSlug).catch(() => []),
-    canInvite ? listPendingInvitations(orgSlug) : Promise.resolve([]),
+    canManage ? listPendingInvitations(orgSlug) : Promise.resolve([]),
   ]);
   const projects = board.map((row) => ({
     id: row.project.id,
@@ -29,9 +35,7 @@ export default async function TeamPage({
 
   return (
     <WorkSurface>
-      <StudioToolbar
-        purpose="Studio team — invite people and manage access"
-      />
+      <StudioToolbar purpose="Studio team — invite people and manage access" />
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-6">
         <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           <span>
@@ -45,41 +49,80 @@ export default async function TeamPage({
           <SoftCard className="p-5">
             <p className="mb-1 text-sm font-semibold tracking-tight">Members</p>
             <p className="mb-4 text-xs text-muted-foreground">
-              People with studio access
+              People with studio access — edit role and module permissions
             </p>
             {members.length === 0 ? (
               <EmptyState title="No members yet" body="Invite a teammate to get started." />
             ) : (
               <ul className="space-y-1">
-                {members.map((member) => (
-                  <li
-                    key={member.id}
-                    className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm hover:bg-muted/60"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">
-                        {member.isYou
-                          ? "You"
-                          : member.displayName || member.email || member.userId.slice(0, 8)}
-                      </p>
-                      {member.email && !member.isYou ? (
-                        <p className="truncate text-xs text-muted-foreground">{member.email}</p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <StatusChip tone="paid">Active</StatusChip>
-                      <Badge variant="secondary" className="capitalize">
-                        {member.role}
-                      </Badge>
-                    </div>
-                  </li>
-                ))}
+                {members.map((member) => {
+                  const effective = resolveMemberPermissions({
+                    role: member.role,
+                    stored: member.permissions,
+                    orgModules: ctx.org.modules,
+                  });
+                  const accessHint =
+                    member.role === "owner"
+                      ? "Full"
+                      : !member.permissions
+                        ? member.role === "partner"
+                          ? "Partner default"
+                          : "Full"
+                        : effective.finance?.access === "none" &&
+                            effective.delivery?.access !== "none"
+                          ? "Progress"
+                          : "Custom";
+                  return (
+                    <li
+                      key={member.id}
+                      className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm hover:bg-muted/60"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">
+                          {member.isYou
+                            ? "You"
+                            : member.displayName ||
+                              member.email ||
+                              member.userId.slice(0, 8)}
+                        </p>
+                        {member.email && !member.isYou ? (
+                          <p className="truncate text-xs text-muted-foreground">
+                            {member.email}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <StatusChip tone="paid">Active</StatusChip>
+                        <Badge variant="secondary" className="capitalize">
+                          {member.role}
+                        </Badge>
+                        <span className="hidden text-[11px] text-muted-foreground sm:inline">
+                          {accessHint}
+                        </span>
+                        {canManage ? (
+                          <EditMemberAccessSheet
+                            orgSlug={orgSlug}
+                            actorRole={ctx.role}
+                            member={{
+                              ...member,
+                              permissions:
+                                member.permissions ??
+                                (member.role === "partner"
+                                  ? PARTNER_DEFAULT_PERMISSIONS
+                                  : FULL_PERMISSIONS),
+                            }}
+                          />
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </SoftCard>
 
           <div className="space-y-5">
-            {canInvite ? (
+            {canManage ? (
               <SoftCard className="p-5">
                 <p className="mb-1 text-sm font-semibold tracking-tight">Invite</p>
                 <p className="mb-4 text-xs text-muted-foreground">
@@ -95,9 +138,11 @@ export default async function TeamPage({
               </SoftCard>
             )}
 
-            {canInvite ? (
+            {canManage ? (
               <SoftCard className="p-5">
-                <p className="mb-1 text-sm font-semibold tracking-tight">Pending invites</p>
+                <p className="mb-1 text-sm font-semibold tracking-tight">
+                  Pending invites
+                </p>
                 <p className="mb-4 text-xs text-muted-foreground">
                   Not accepted yet — resend or revoke
                 </p>

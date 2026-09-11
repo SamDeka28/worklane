@@ -298,9 +298,6 @@ export async function updateMemberAccessAction(
   if (member.role === "owner") {
     return { error: "Owner access can’t be changed here" };
   }
-  if (role === "owner") {
-    return { error: "Cannot assign owner via this form" };
-  }
   if (ctx.role === "admin" && (member.role === "admin" || role === "admin")) {
     return { error: "Only owners can change admin access" };
   }
