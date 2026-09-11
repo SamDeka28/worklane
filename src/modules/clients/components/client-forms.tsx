@@ -1,0 +1,423 @@
+"use client";
+
+import { MoreHorizontal } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
+import { SoftDocField } from "@/components/editor/soft-doc-field";
+import { ActionSheet } from "@/components/studio/action-sheet";
+import { Field } from "@/components/studio/field";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import {
+  addContactAction,
+  archiveClientAction,
+  createClientAction,
+  updateClientAction,
+} from "@/modules/clients/actions";
+
+export function CreateClientDialog({
+  orgSlug,
+  defaultOpen = false,
+  hideTrigger = false,
+  returnHref,
+}: {
+  orgSlug: string;
+  defaultOpen?: boolean;
+  hideTrigger?: boolean;
+  returnHref?: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(defaultOpen);
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOpen(defaultOpen);
+  }, [defaultOpen]);
+
+  function close() {
+    setOpen(false);
+    if (defaultOpen) {
+      router.replace(returnHref ?? `/${orgSlug}/clients`);
+    }
+  }
+
+  return (
+    <ActionSheet
+      title="New client"
+      description="One record. Contacts attach here."
+      triggerLabel="New client"
+      hideTrigger={hideTrigger}
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) close();
+        else setOpen(true);
+      }}
+    >
+      <form
+        className="grid gap-4"
+        action={(formData) => {
+          start(async () => {
+            const result = await createClientAction(orgSlug, formData);
+            if (result.error) {
+              setError(result.error);
+              toast.error(result.error);
+              return;
+            }
+            toast.success("Client created");
+            close();
+            router.push(`/${orgSlug}/clients/${result.id}`);
+            router.refresh();
+          });
+        }}
+      >
+        <Field label="Kind" htmlFor="kind">
+          <NativeSelect id="kind" name="kind" defaultValue="company">
+            <option value="company">Company</option>
+            <option value="person">Person</option>
+          </NativeSelect>
+        </Field>
+        <Field label="Name" htmlFor="name">
+          <Input id="name" name="name" required placeholder="Latisha, RNPL…" />
+        </Field>
+        <Field label="Currency" htmlFor="currency">
+          <NativeSelect id="currency" name="currency" defaultValue="USD">
+            <option value="USD">USD</option>
+            <option value="INR">INR</option>
+          </NativeSelect>
+        </Field>
+        <SoftDocField
+          label="Internal notes"
+          name="notes"
+          orgSlug={orgSlug}
+          placeholder="Private — never shown on the portal"
+        />
+        <p className="text-xs text-muted-foreground">Primary contact (optional)</p>
+        <Field label="Contact name" htmlFor="contact_name">
+          <Input id="contact_name" name="contact_name" />
+        </Field>
+        <Field label="Email" htmlFor="email">
+          <Input id="email" name="email" type="email" />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Phone" htmlFor="phone">
+            <Input id="phone" name="phone" />
+          </Field>
+          <Field label="WhatsApp" htmlFor="whatsapp">
+            <Input id="whatsapp" name="whatsapp" />
+          </Field>
+        </div>
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        <Button type="submit" size="lg" className="w-full" disabled={pending}>
+          {pending ? "Saving…" : "Create client"}
+        </Button>
+      </form>
+    </ActionSheet>
+  );
+}
+
+export function EditClientForm({
+  orgSlug,
+  clientId,
+  name,
+  kind,
+  notes,
+  notesDoc,
+}: {
+  orgSlug: string;
+  clientId: string;
+  name: string;
+  kind: string;
+  notes: string | null;
+  notesDoc?: Record<string, unknown> | null;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <form
+      className="grid gap-4"
+      action={(formData) => {
+        start(async () => {
+          const result = await updateClientAction(orgSlug, clientId, formData);
+          if (result.error) {
+            setError(result.error);
+            toast.error(result.error);
+            return;
+          }
+          toast.success("Saved");
+          router.refresh();
+        });
+      }}
+    >
+      <Field label="Kind" htmlFor="kind">
+        <NativeSelect id="kind" name="kind" defaultValue={kind}>
+          <option value="company">Company</option>
+          <option value="person">Person</option>
+        </NativeSelect>
+      </Field>
+      <Field label="Name" htmlFor="name">
+        <Input id="name" name="name" required defaultValue={name} />
+      </Field>
+      <SoftDocField
+        label="Internal notes"
+        name="notes"
+        orgSlug={orgSlug}
+        initialDoc={notesDoc}
+        initialPlain={notes}
+        placeholder="Private — never shown on the portal"
+      />
+      {error ? <p className="text-sm text-destructive">{error}</p> : null}
+      <Button type="submit" disabled={pending} variant="outline">
+        {pending ? "Saving…" : "Save"}
+      </Button>
+    </form>
+  );
+}
+
+export function AddContactForm({ orgSlug, clientId }: { orgSlug: string; clientId: string }) {
+  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
+  const [pending, start] = useTransition();
+
+  return (
+    <form
+      ref={formRef}
+      className="flex flex-wrap items-end gap-2"
+      action={(formData) => {
+        start(async () => {
+          const result = await addContactAction(orgSlug, clientId, formData);
+          if (result.error) {
+            toast.error(result.error);
+            return;
+          }
+          toast.success("Contact added");
+          formRef.current?.reset();
+          router.refresh();
+        });
+      }}
+    >
+      <label className="flex min-w-36 flex-1 flex-col gap-1">
+        <span className="text-[11px] text-muted-foreground">Name</span>
+        <Input name="contact_name" />
+      </label>
+      <label className="flex min-w-36 flex-1 flex-col gap-1">
+        <span className="text-[11px] text-muted-foreground">Email</span>
+        <Input name="email" type="email" />
+      </label>
+      <label className="flex w-32 flex-col gap-1">
+        <span className="text-[11px] text-muted-foreground">Phone</span>
+        <Input name="phone" />
+      </label>
+      <label className="flex w-32 flex-col gap-1">
+        <span className="text-[11px] text-muted-foreground">WhatsApp</span>
+        <Input name="whatsapp" />
+      </label>
+      <label className="flex h-8 items-center gap-2 text-sm">
+        <input type="checkbox" name="is_primary" className="size-4 rounded border-input" />
+        Primary
+      </label>
+      <Button type="submit" disabled={pending} variant="outline">
+        {pending ? "Adding…" : "Add"}
+      </Button>
+    </form>
+  );
+}
+
+export function ClientOverflow({
+  orgSlug,
+  clientId,
+  onEditProfile,
+  onNewProject,
+  onNewCharge,
+}: {
+  orgSlug: string;
+  clientId: string;
+  onEditProfile?: () => void;
+  onNewProject?: () => void;
+  onNewCharge?: () => void;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="icon" aria-label="More" />}
+      >
+        <MoreHorizontal />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {onEditProfile ? (
+          <DropdownMenuItem onClick={onEditProfile}>Edit profile</DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            onClick={() => router.push(`/${orgSlug}/clients/${clientId}?edit=1`)}
+          >
+            Edit profile
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuItem
+          onClick={() =>
+            onNewProject
+              ? onNewProject()
+              : router.push(`/${orgSlug}/clients/${clientId}?new=project`)
+          }
+        >
+          New project
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() =>
+            onNewCharge
+              ? onNewCharge()
+              : router.push(`/${orgSlug}/clients/${clientId}?new=charge`)
+          }
+        >
+          New charge
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          variant="destructive"
+          disabled={pending}
+          onClick={() => {
+            if (!window.confirm("Archive this client? It leaves the active list.")) return;
+            start(async () => {
+              const result = await archiveClientAction(orgSlug, clientId);
+              if (result.error) {
+                toast.error(result.error);
+                return;
+              }
+              toast.success("Archived");
+              router.push(`/${orgSlug}/clients`);
+              router.refresh();
+            });
+          }}
+        >
+          Archive
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function EditClientSheet({
+  orgSlug,
+  clientId,
+  name,
+  kind,
+  notes,
+  notesDoc,
+  open,
+  onOpenChange,
+}: {
+  orgSlug: string;
+  clientId: string;
+  name: string;
+  kind: string;
+  notes: string | null;
+  notesDoc?: Record<string, unknown> | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <ActionSheet
+      title="Edit profile"
+      description="Name, kind, and internal notes."
+      hideTrigger
+      open={open}
+      onOpenChange={onOpenChange}
+    >
+      <EditClientForm
+        orgSlug={orgSlug}
+        clientId={clientId}
+        name={name}
+        kind={kind}
+        notes={notes}
+        notesDoc={notesDoc}
+      />
+    </ActionSheet>
+  );
+}
+
+export function AddContactSheet({
+  orgSlug,
+  clientId,
+  open,
+  onOpenChange,
+  defaultOpen = false,
+}: {
+  orgSlug: string;
+  clientId: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  defaultOpen?: boolean;
+}) {
+  const router = useRouter();
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const [pending, start] = useTransition();
+  const controlled = open !== undefined;
+  const isOpen = controlled ? open : internalOpen;
+  const setOpen = controlled ? onOpenChange! : setInternalOpen;
+
+  useEffect(() => {
+    if (!controlled) setInternalOpen(defaultOpen);
+  }, [defaultOpen, controlled]);
+
+  return (
+    <ActionSheet
+      title="Add contact"
+      description="Who you reach for this client."
+      triggerLabel="Add contact"
+      triggerVariant="outline"
+      hideTrigger={controlled}
+      open={isOpen}
+      onOpenChange={setOpen}
+    >
+      <form
+        className="grid gap-4"
+        action={(formData) => {
+          start(async () => {
+            const result = await addContactAction(orgSlug, clientId, formData);
+            if (result.error) {
+              toast.error(result.error);
+              return;
+            }
+            toast.success("Contact added");
+            setOpen(false);
+            router.refresh();
+          });
+        }}
+      >
+        <Field label="Name" htmlFor="sheet_contact_name">
+          <Input id="sheet_contact_name" name="contact_name" />
+        </Field>
+        <Field label="Email" htmlFor="sheet_email">
+          <Input id="sheet_email" name="email" type="email" />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Phone" htmlFor="sheet_phone">
+            <Input id="sheet_phone" name="phone" />
+          </Field>
+          <Field label="WhatsApp" htmlFor="sheet_whatsapp">
+            <Input id="sheet_whatsapp" name="whatsapp" />
+          </Field>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="is_primary" className="size-4 rounded border-input" />
+          Primary
+        </label>
+        <Button type="submit" size="lg" className="w-full" disabled={pending}>
+          {pending ? "Adding…" : "Add contact"}
+        </Button>
+      </form>
+    </ActionSheet>
+  );
+}

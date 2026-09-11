@@ -1,0 +1,105 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import { ActionSheet } from "@/components/studio/action-sheet";
+import { Field } from "@/components/studio/field";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { createDocumentAction } from "@/modules/documents/actions";
+
+export function CreateDocumentDialog({
+  orgSlug,
+  clients,
+  projects,
+  defaultOpen = false,
+  defaultClientId,
+  defaultProjectId,
+  triggerLabel = "New document",
+  triggerVariant = "default",
+}: {
+  orgSlug: string;
+  clients: { id: string; name: string }[];
+  projects: { id: string; name: string; clientId: string }[];
+  defaultOpen?: boolean;
+  defaultClientId?: string;
+  defaultProjectId?: string;
+  triggerLabel?: string;
+  triggerVariant?: "default" | "outline" | "ghost";
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(defaultOpen);
+  const [pending, start] = useTransition();
+
+  return (
+    <ActionSheet
+      title="New document"
+        description="Set title and context — we seed a starter template you can edit in the studio."
+      triggerLabel={triggerLabel}
+      triggerVariant={triggerVariant}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <form
+        className="grid gap-4"
+        action={(formData) => {
+          start(async () => {
+            const result = await createDocumentAction(orgSlug, formData);
+            if (result.error) {
+              toast.error(result.error);
+              return;
+            }
+            toast.success("Document created");
+            setOpen(false);
+            router.push(`/${orgSlug}/documents/${result.id}`);
+            router.refresh();
+          });
+        }}
+      >
+        <Field label="Title" htmlFor="doc_title" required>
+          <Input id="doc_title" name="title" required placeholder="Website redesign proposal" />
+        </Field>
+        <Field label="Kind" htmlFor="doc_kind">
+          <NativeSelect id="doc_kind" name="kind" defaultValue="proposal">
+            <option value="proposal">Proposal</option>
+            <option value="sow">SOW</option>
+            <option value="other">Other</option>
+          </NativeSelect>
+        </Field>
+        <Field label="Client" htmlFor="doc_client">
+          <NativeSelect
+            id="doc_client"
+            name="client_id"
+            defaultValue={defaultClientId ?? ""}
+          >
+            <option value="">None</option>
+            {clients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Field label="Project" htmlFor="doc_project">
+          <NativeSelect
+            id="doc_project"
+            name="project_id"
+            defaultValue={defaultProjectId ?? ""}
+          >
+            <option value="">None</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Button type="submit" size="lg" className="w-full" disabled={pending}>
+          {pending ? "Creating…" : "Create"}
+        </Button>
+      </form>
+    </ActionSheet>
+  );
+}
