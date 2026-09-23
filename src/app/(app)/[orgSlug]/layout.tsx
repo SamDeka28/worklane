@@ -31,7 +31,7 @@ export default async function OrgLayout({
   const orgs = memberships.map((row) => row.org);
 
   return (
-    <div className="lane-app flex h-svh max-h-svh gap-3 overflow-hidden p-3 sm:gap-3.5 sm:p-3.5">
+    <div className="lane-app flex h-svh max-h-svh gap-3 overflow-hidden overscroll-none p-3 sm:gap-3.5 sm:p-3.5">
       <AppSidebar
         org={ctx.org}
         orgs={orgs}

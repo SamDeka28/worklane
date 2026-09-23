@@ -422,6 +422,75 @@
   }
 }
 
+@keyframes lane-marketing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lane-marketing-veil {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.lane-marketing {
+  scroll-behavior: smooth;
+}
+
+.lane-mkt-rise {
+  animation: lane-marketing-rise 1s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.lane-mkt-product {
+  animation: lane-marketing-rise 1.1s cubic-bezier(0.22, 1, 0.36, 1) 160ms both;
+}
+
+.lane-mkt-glow {
+  animation: lane-marketing-rise 1s cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
+}
+
+.lane-mkt-cta {
+  animation: lane-marketing-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.lane-marketing-hero > * {
+  animation: lane-marketing-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.lane-marketing-hero > *:nth-child(1) {
+  animation-delay: 80ms;
+}
+.lane-marketing-hero > *:nth-child(2) {
+  animation-delay: 180ms;
+}
+.lane-marketing-hero > *:nth-child(3) {
+  animation-delay: 280ms;
+}
+.lane-marketing-hero > *:nth-child(4) {
+  animation-delay: 380ms;
+}
+
+.lane-marketing-section {
+  animation: lane-marketing-veil 1.1s ease both;
+}
+
+.lane-marketing-product {
+  animation: lane-marketing-rise 1s cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+}
+
+.lane-marketing-cta {
+  animation: lane-marketing-rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -430,6 +499,14 @@
   .lane-skeleton,
   .lane-fade-up,
   .lane-stagger > *,
+  .lane-marketing-hero > *,
+  .lane-marketing-section,
+  .lane-marketing-product,
+  .lane-marketing-cta,
+  .lane-mkt-rise,
+  .lane-mkt-product,
+  .lane-mkt-glow,
+  .lane-mkt-cta,
   * {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;

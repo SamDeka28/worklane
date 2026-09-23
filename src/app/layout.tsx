@@ -22,7 +22,8 @@ export const metadata: Metadata = {
     default: "Worklane",
     template: "%s · Worklane",
   },
-  description: "From first conversation to final payment.",
+  description:
+    "Worklane is the studio operating system — Studio Board, leads, projects, documents, finance, and partners in one continuous lane from first conversation to final payment.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -30,9 +31,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${plusJakarta.variable} ${fraunces.variable} h-svh overflow-hidden antialiased`}
+      className={`${plusJakarta.variable} ${fraunces.variable} antialiased`}
     >
-      <body className={`${plusJakarta.className} h-full overflow-hidden font-sans antialiased`}>
+      <body className={`${plusJakarta.className} min-h-svh font-sans antialiased`}>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>
