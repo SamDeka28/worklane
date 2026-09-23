@@ -135,7 +135,7 @@ export function InvoiceSettingsForm({
         </Field>
       </div>
 
-      <div className="rounded-2xl border border-border/50 p-3">
+      <div className="lane-inset p-3">
         <p className="text-sm font-medium">Logo</p>
         <p className="mt-0.5 text-xs text-muted-foreground">PNG or JPEG, used on preview and PDF</p>
         {previewUrl ? (
@@ -317,7 +317,7 @@ function TemplateEditor({
 
   return (
     <form
-      className="grid gap-3 rounded-2xl border border-border/50 p-4"
+      className="grid gap-3 lane-panel p-4"
       action={(formData) => {
         start(async () => {
           if (template) formData.set("template_id", template.id);

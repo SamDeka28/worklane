@@ -722,7 +722,7 @@ function KanbanColumn({
               {column.name}
             </h2>
           )}
-          <span className="rounded-md bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm ring-1 ring-foreground/6">
+          <span className="rounded-md bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm ring-1 ring-white/10">
             {tasks.length}
           </span>
           {manageLists && canWrite && canManageColumns ? (
@@ -909,7 +909,7 @@ function AddColumn({ orgSlug, projectId }: { orgSlug: string; projectId: string 
   const [pending, start] = useTransition();
 
   return (
-    <div className="flex w-80 shrink-0 flex-col self-start rounded-2xl bg-surface-lane p-2.5 ring-1 ring-foreground/6">
+    <div className="flex w-80 shrink-0 flex-col self-start lane-inset p-2.5">
       {open ? (
         <form
           className="flex flex-col gap-2 p-1"

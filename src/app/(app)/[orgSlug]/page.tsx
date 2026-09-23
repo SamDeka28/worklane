@@ -344,7 +344,7 @@ export default async function DashboardPage({
 
           {seeMoney && finance != null ? (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-            <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
+            <div className="rounded-2xl lane-inset p-5">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Money mix</p>
@@ -394,7 +394,7 @@ export default async function DashboardPage({
               </div>
             </div>
 
-            <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
+            <div className="flex flex-col rounded-2xl lane-inset p-5">
               <div className="mb-1 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Collections</p>
@@ -489,7 +489,7 @@ export default async function DashboardPage({
 
           {seeMoney && finance != null ? (
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
+            <div className="rounded-2xl lane-inset p-5">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Projects</p>
@@ -532,7 +532,7 @@ export default async function DashboardPage({
               )}
             </div>
 
-            <div className="flex min-h-0 flex-col rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
+            <div className="flex min-h-0 flex-col rounded-2xl lane-inset p-5">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Who owes</p>
@@ -573,7 +573,7 @@ export default async function DashboardPage({
           ) : null}
 
           {seeCrm && openLeads.length > 0 ? (
-            <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
+            <div className="rounded-2xl lane-inset p-5">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Lead pipeline</p>
@@ -594,7 +594,7 @@ export default async function DashboardPage({
                 {stageCounts.map((row) => (
                   <li
                     key={row.stage}
-                    className="rounded-xl bg-card px-3.5 py-3.5 ring-1 ring-foreground/6"
+                    className="rounded-xl bg-card px-3.5 py-3.5 ring-1 ring-white/10"
                   >
                     <p className="text-[11px] text-muted-foreground">{row.label}</p>
                     <p className="mt-1.5 text-2xl font-semibold tabular-nums">{row.count}</p>
@@ -611,7 +611,7 @@ export default async function DashboardPage({
           ) : null}
 
           {(seeMoney || recentActivities.length > 0) ? (
-          <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
+          <div className="rounded-2xl lane-inset p-5">
             <p className="text-base font-semibold tracking-tight">Recent activity</p>
             {recentActivities.length === 0 ? (
               <p className="mt-4 text-sm text-muted-foreground">

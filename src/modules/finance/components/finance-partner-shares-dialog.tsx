@@ -148,7 +148,7 @@ export function PartnerSharesDetailDialog({
           {month ? (
             <section>
               <SectionLabel>Overview</SectionLabel>
-              <div className="mt-3 flex flex-col gap-5 rounded-2xl bg-muted/30 px-4 py-5 ring-1 ring-foreground/4 dark:ring-white/6 sm:flex-row sm:items-center sm:px-5">
+              <div className="mt-3 flex flex-col gap-5 lane-inset px-4 py-5 sm:flex-row sm:items-center sm:px-5">
                 <MoneyDonut
                   size="md"
                   className="sm:min-w-56"
@@ -340,7 +340,7 @@ function OverviewStat({
   return (
     <div
       className={cn(
-        "rounded-xl bg-card px-4 py-3 ring-1 ring-foreground/4 dark:ring-white/6",
+        "rounded-xl bg-card px-4 py-3 ring-1 ring-white/10",
         emphasize && "ring-primary/20",
       )}
     >

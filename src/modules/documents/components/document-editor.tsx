@@ -274,7 +274,7 @@ export function DocumentEditor({
         milestones={milestones}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[1.25rem] bg-muted/20 ring-1 ring-border/30">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lane-inset">
         <form
           id="document-studio-form"
           className="flex min-h-0 flex-1 flex-col"

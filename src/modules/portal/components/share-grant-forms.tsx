@@ -140,7 +140,7 @@ export function ShareGrantList({
   }
 
   return (
-    <ul className="divide-y divide-border/60 rounded-2xl border border-border/60">
+    <ul className="divide-y divide-border/60 lane-panel overflow-hidden">
       {grants.map((grant) => (
         <li key={grant.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
           <div className="min-w-0 flex-1">

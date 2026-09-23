@@ -24,7 +24,7 @@ const COMPANY_LINKS = [
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="lane-marketing min-h-svh bg-[#05070F] text-white">
+    <div className="lane-marketing lane-auth min-h-svh text-foreground">
       <MarketingHeader />
       {children}
       <footer className="border-t border-white/8 px-5 py-14 sm:px-8 lg:px-12">

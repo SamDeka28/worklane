@@ -179,7 +179,7 @@ export function AddInvoiceLineForm({
       className={
         compact
           ? "grid gap-2"
-          : "grid gap-3 rounded-2xl border border-border/60 p-4"
+          : "grid gap-3 lane-panel p-4"
       }
       action={(formData) => {
         start(async () => {
@@ -316,7 +316,7 @@ function LineEditRow({
 }) {
   return (
     <form
-      className="grid gap-2 rounded-2xl border border-border/50 p-3"
+      className="grid gap-2 lane-inset p-3"
       action={(formData) => onSave(formData)}
     >
       <Input name="description" required defaultValue={line.description} />

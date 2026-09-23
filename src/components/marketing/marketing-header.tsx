@@ -37,7 +37,7 @@ export function MarketingHeader() {
       className={cn(
         "fixed inset-x-0 top-0 z-40 transition-[background-color,border-color,backdrop-filter] duration-300",
         scrolled
-          ? "border-b border-white/8 bg-[#070A16]/80 backdrop-blur-xl"
+          ? "border-b border-white/8 bg-canvas/80 backdrop-blur-xl"
           : "border-b border-transparent bg-transparent",
       )}
     >
@@ -69,7 +69,7 @@ export function MarketingHeader() {
           </Button>
           <Button
             size="sm"
-            className="bg-white text-[#070A16] hover:bg-white/90"
+            className="bg-primary text-primary-foreground hover:brightness-110"
             nativeButton={false}
             render={<Link href="/signup" />}
           >
@@ -120,7 +120,7 @@ export function MarketingHeader() {
                   Sign in
                 </Button>
                 <Button
-                  className="w-full bg-white text-[#070A16] hover:bg-white/90"
+                  className="w-full bg-primary text-primary-foreground hover:brightness-110"
                   nativeButton={false}
                   render={<Link href="/signup" onClick={() => setOpen(false)} />}
                 >

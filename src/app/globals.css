@@ -44,6 +44,8 @@
   --color-lane-cyan: var(--lane-cyan);
   --color-lane-violet: var(--lane-violet);
   --color-canvas: var(--canvas);
+  --color-shell: var(--shell);
+  --color-inset: var(--inset);
   --color-nav-active: var(--nav-active);
   --color-nav-active-foreground: var(--nav-active-foreground);
   --color-surface-lane: var(--surface-lane);
@@ -100,6 +102,8 @@
   --chart-5: oklch(0.62 0.12 85);
   --radius: 0.5rem;
   --canvas: oklch(0.945 0.018 265);
+  --shell: oklch(0.98 0.008 265);
+  --inset: oklch(0.96 0.014 265);
   --surface-lane: oklch(0.96 0.014 265);
   --nav-active: oklch(0.5 0.2 275);
   --nav-active-foreground: oklch(0.99 0.01 275);
@@ -142,69 +146,71 @@
 
 .dark {
   color-scheme: dark;
-  /* Mark dark: deep indigo slate + luminous blue-violet */
-  --background: oklch(0.17 0.03 275);
-  --foreground: oklch(0.96 0.01 270);
-  --card: oklch(0.22 0.03 275);
-  --card-foreground: oklch(0.96 0.01 270);
-  --popover: oklch(0.22 0.03 275);
-  --popover-foreground: oklch(0.96 0.01 270);
-  --primary: oklch(0.7 0.16 275);
-  --primary-foreground: oklch(0.18 0.04 275);
-  --secondary: oklch(0.27 0.03 275);
-  --secondary-foreground: oklch(0.94 0.01 270);
-  --muted: oklch(0.27 0.03 275);
-  --muted-foreground: oklch(0.72 0.025 270);
-  --accent: oklch(0.3 0.055 275);
-  --accent-foreground: oklch(0.92 0.04 275);
+  /* Auth-aligned night: deep violet canvas + elevated shells */
+  --background: oklch(0.12 0.045 295);
+  --foreground: oklch(0.97 0.01 280);
+  --card: oklch(0.18 0.035 290);
+  --card-foreground: oklch(0.97 0.01 280);
+  --popover: oklch(0.18 0.035 290);
+  --popover-foreground: oklch(0.97 0.01 280);
+  --primary: oklch(0.62 0.22 285);
+  --primary-foreground: oklch(0.99 0.01 280);
+  --secondary: oklch(0.24 0.04 290);
+  --secondary-foreground: oklch(0.94 0.01 280);
+  --muted: oklch(0.22 0.04 290);
+  --muted-foreground: oklch(0.7 0.025 280);
+  --accent: oklch(0.26 0.055 290);
+  --accent-foreground: oklch(0.94 0.04 285);
   --destructive: oklch(0.68 0.18 25);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 11%);
-  --ring: oklch(0.7 0.14 275);
-  --chart-1: oklch(0.72 0.16 275);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.65 0.18 285);
+  --chart-1: oklch(0.68 0.18 285);
   --chart-2: oklch(0.7 0.12 245);
   --chart-3: oklch(0.72 0.1 200);
   --chart-4: oklch(0.72 0.1 155);
   --chart-5: oklch(0.75 0.1 85);
-  --canvas: oklch(0.14 0.03 275);
-  --surface-lane: oklch(0.24 0.03 275);
-  --nav-active: oklch(0.68 0.16 275);
-  --nav-active-foreground: oklch(0.99 0.01 275);
+  --canvas: oklch(0.12 0.045 295);
+  --shell: oklch(0.16 0.04 292);
+  --inset: oklch(0.21 0.04 290);
+  --surface-lane: oklch(0.2 0.038 290);
+  --nav-active: oklch(0.62 0.22 285);
+  --nav-active-foreground: oklch(0.99 0.01 280);
   --shadow-soft:
-    0 1px 2px oklch(0 0 0 / 0.45),
-    0 10px 32px oklch(0.4 0.1 275 / 0.2);
+    0 1px 2px oklch(0 0 0 / 0.5),
+    0 12px 36px oklch(0.3 0.08 295 / 0.35);
   --shadow-lift:
-    0 2px 6px oklch(0 0 0 / 0.4),
-    0 16px 40px oklch(0.45 0.12 275 / 0.28);
-  --shadow-glow: 0 0 0 1px oklch(0.7 0.16 275 / 0.32), 0 10px 36px oklch(0.55 0.14 275 / 0.32);
-  --sidebar: oklch(0.18 0.03 275);
-  --sidebar-foreground: oklch(0.96 0.01 270);
-  --sidebar-primary: oklch(0.68 0.16 275);
-  --sidebar-primary-foreground: oklch(0.99 0.01 275);
-  --sidebar-accent: oklch(0.28 0.05 275);
-  --sidebar-accent-foreground: oklch(0.92 0.04 275);
-  --sidebar-border: oklch(1 0 0 / 9%);
-  --sidebar-ring: oklch(0.7 0.14 275);
+    0 2px 8px oklch(0 0 0 / 0.45),
+    0 20px 48px oklch(0.35 0.1 295 / 0.4);
+  --shadow-glow: 0 0 0 1px oklch(0.62 0.22 285 / 0.35), 0 12px 40px oklch(0.45 0.16 285 / 0.35);
+  --sidebar: oklch(0.16 0.04 292);
+  --sidebar-foreground: oklch(0.97 0.01 280);
+  --sidebar-primary: oklch(0.62 0.22 285);
+  --sidebar-primary-foreground: oklch(0.99 0.01 280);
+  --sidebar-accent: oklch(0.26 0.055 290);
+  --sidebar-accent-foreground: oklch(0.94 0.04 285);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.65 0.18 285);
   --lane-blue: oklch(0.7 0.14 250);
   --lane-cyan: oklch(0.74 0.1 210);
-  --lane-violet: oklch(0.72 0.16 285);
-  --lane-magenta: oklch(0.72 0.12 320);
-  --status-due: oklch(0.34 0.07 250);
+  --lane-violet: oklch(0.68 0.18 285);
+  --lane-magenta: oklch(0.7 0.14 320);
+  --status-due: oklch(0.32 0.07 250);
   --status-due-fg: oklch(0.86 0.07 250);
-  --status-overdue: oklch(0.34 0.1 25);
+  --status-overdue: oklch(0.32 0.1 25);
   --status-overdue-fg: oklch(0.9 0.1 25);
-  --status-paid: oklch(0.34 0.08 155);
+  --status-paid: oklch(0.32 0.08 155);
   --status-paid-fg: oklch(0.86 0.08 155);
-  --status-partial: oklch(0.34 0.07 275);
-  --status-partial-fg: oklch(0.9 0.07 275);
-  --status-planning: oklch(0.34 0.08 275);
-  --status-planning-fg: oklch(0.9 0.08 275);
-  --status-active: oklch(0.34 0.08 155);
+  --status-partial: oklch(0.32 0.07 285);
+  --status-partial-fg: oklch(0.9 0.07 285);
+  --status-planning: oklch(0.32 0.08 285);
+  --status-planning-fg: oklch(0.9 0.08 285);
+  --status-active: oklch(0.32 0.08 155);
   --status-active-fg: oklch(0.86 0.08 155);
-  --status-hold: oklch(0.4 0.1 85);
+  --status-hold: oklch(0.38 0.1 85);
   --status-hold-fg: oklch(0.95 0.05 85);
-  --status-cancelled: oklch(0.3 0.02 275);
-  --status-cancelled-fg: oklch(0.72 0.02 270);
+  --status-cancelled: oklch(0.28 0.03 290);
+  --status-cancelled-fg: oklch(0.72 0.02 280);
 }
 
 @layer base {
@@ -257,6 +263,43 @@
 }
 
 @layer utilities {
+  /*
+   * Layout utilities (canonical surfaces):
+   * .lane-shell  → elevated outer card (auth shell)
+   * .lane-panel  → section panel — SoftCard default, form column, header
+   * .lane-inset  → field / list well / board column fill
+   * .lane-ring   → shared white ring + soft shadow
+   * .lane-app    → org canvas wash
+   * .lane-auth   → auth/marketing page wash
+   */
+  .lane-ring {
+    box-shadow:
+      var(--shadow-soft),
+      0 0 0 1px color-mix(in oklch, white 10%, transparent);
+  }
+
+  .lane-shell {
+    border-radius: 1.75rem;
+    background-color: var(--shell);
+    box-shadow:
+      var(--shadow-soft),
+      0 0 0 1px color-mix(in oklch, white 10%, transparent);
+  }
+
+  .lane-panel {
+    border-radius: var(--radius-2xl);
+    background-color: var(--card);
+    box-shadow:
+      var(--shadow-soft),
+      0 0 0 1px color-mix(in oklch, white 10%, transparent);
+  }
+
+  .lane-inset {
+    border-radius: var(--radius-xl);
+    background-color: var(--inset);
+    box-shadow: 0 0 0 1px color-mix(in oklch, white 10%, transparent);
+  }
+
   .lane-gradient {
     background-image: linear-gradient(
       115deg,
@@ -270,13 +313,13 @@
     background-color: var(--canvas);
     background-image:
       radial-gradient(
-        900px 400px at 96% -10%,
-        color-mix(in oklch, var(--lane-violet) 14%, transparent),
+        900px 420px at 96% -10%,
+        color-mix(in oklch, var(--lane-violet) 22%, transparent),
         transparent 58%
       ),
       radial-gradient(
-        700px 300px at -8% 8%,
-        color-mix(in oklch, var(--lane-blue) 8%, transparent),
+        720px 320px at -8% 10%,
+        color-mix(in oklch, var(--lane-magenta) 12%, transparent),
         transparent 52%
       );
   }
@@ -284,10 +327,9 @@
   .surface-card {
     border-radius: var(--radius-2xl);
     background-color: var(--card);
-    box-shadow: var(--shadow-soft);
     box-shadow:
       var(--shadow-soft),
-      0 0 0 1px color-mix(in oklch, var(--foreground) 6%, transparent);
+      0 0 0 1px color-mix(in oklch, white 10%, transparent);
   }
 
   .surface-lane {
@@ -296,12 +338,11 @@
   }
 
   .lane-surface {
-    border-radius: 0.875rem;
+    border-radius: var(--radius-2xl);
     background-color: var(--card);
-    box-shadow: var(--shadow-soft);
     box-shadow:
       var(--shadow-soft),
-      inset 0 1px 0 color-mix(in oklch, white 6%, transparent);
+      0 0 0 1px color-mix(in oklch, white 10%, transparent);
     transition:
       transform 200ms ease-out,
       box-shadow 200ms ease-out;
@@ -376,18 +417,18 @@
   }
 
   .lane-auth {
+    background-color: var(--canvas);
     background-image:
       radial-gradient(
-        900px 380px at 100% -10%,
-        color-mix(in oklch, var(--lane-violet) 22%, transparent),
-        transparent 58%
+        ellipse 70% 60% at 20% 20%,
+        color-mix(in oklch, var(--lane-violet) 35%, transparent),
+        transparent 60%
       ),
       radial-gradient(
-        720px 280px at -5% 0%,
-        color-mix(in oklch, var(--lane-magenta) 14%, transparent),
-        transparent 52%
+        ellipse 50% 50% at 90% 80%,
+        color-mix(in oklch, var(--lane-violet) 28%, transparent),
+        transparent 55%
       );
-    background-color: var(--background);
   }
 
   .lane-skeleton {

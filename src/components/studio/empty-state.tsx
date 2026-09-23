@@ -25,14 +25,14 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "rounded-2xl bg-muted/40 px-6 py-10 ring-1 ring-foreground/6 dark:ring-white/8",
+        "rounded-2xl bg-inset/80 px-6 py-10 lane-ring",
         fill && "flex min-h-0 flex-1 flex-col items-center justify-center text-center",
         className,
       )}
     >
       <div
         className={cn(
-          "mb-4 size-12 rounded-2xl bg-card shadow-soft ring-1 ring-foreground/8 dark:ring-white/10",
+          "mb-4 size-12 rounded-2xl bg-card lane-ring",
           fill && "mx-auto",
         )}
         aria-hidden

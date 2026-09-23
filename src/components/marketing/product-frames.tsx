@@ -48,7 +48,7 @@ function Shell({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-[1.25rem] bg-[#0c1020] ring-1 ring-white/10 sm:rounded-[1.75rem]",
+        "overflow-hidden rounded-[1.25rem] bg-shell ring-1 ring-white/10 sm:rounded-[1.75rem]",
         className,
       )}
     >
@@ -61,7 +61,7 @@ function Shell({
         </span>
       </div>
       <div className="grid min-h-[20rem] grid-cols-1 md:min-h-[26rem] md:grid-cols-[12.5rem_1fr]">
-        <aside className="hidden border-r border-white/8 bg-[#0a0e1a] p-3 md:block">
+        <aside className="hidden border-r border-white/8 bg-canvas p-3 md:block">
           <div className="mb-4 flex items-center gap-2 px-2">
             <span className="flex size-6 items-center justify-center rounded-md bg-violet-500/25 text-[10px] font-bold text-violet-200">
               W
@@ -99,7 +99,7 @@ function Shell({
             </div>
           ))}
         </aside>
-        <div className="flex min-w-0 flex-col bg-[#0e1324]">
+        <div className="flex min-w-0 flex-col bg-card">
           <div className="border-b border-white/8 px-4 py-3 sm:px-5">
             <p className="text-sm font-semibold tracking-tight text-white">{title}</p>
             <p className="mt-0.5 text-[11px] text-white/40">{purpose}</p>
@@ -131,7 +131,7 @@ function TaskCard({
         ? "bg-amber-500 text-amber-950"
         : "bg-sky-600 text-white";
   return (
-    <div className="rounded-2xl bg-[#151b2e] p-3 ring-1 ring-white/8">
+    <div className="rounded-2xl bg-inset p-3 ring-1 ring-white/8">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[13px] font-medium leading-snug text-white/90">{title}</p>
         <span
@@ -231,13 +231,13 @@ export function BoardProductFrame({ className }: { className?: string }) {
         {columns.map((col) => (
           <div
             key={col.title}
-            className="flex w-[15.5rem] shrink-0 flex-col rounded-2xl bg-[#12182a] ring-1 ring-white/6"
+            className="flex w-[15.5rem] shrink-0 flex-col rounded-2xl bg-muted ring-1 ring-white/6"
           >
             <div className="flex items-center justify-between px-3 pt-3 pb-2">
               <p className="text-[11px] font-bold tracking-[0.08em] text-white/45 uppercase">
                 {col.title}
               </p>
-              <span className="rounded-md bg-[#0c1020] px-2 py-0.5 text-[11px] font-bold tabular-nums text-white/50 ring-1 ring-white/8">
+              <span className="rounded-md bg-shell px-2 py-0.5 text-[11px] font-bold tabular-nums text-white/50 ring-1 ring-white/8">
                 {col.cards.length}
               </span>
             </div>
@@ -290,13 +290,13 @@ export function LeadsProductFrame({ className }: { className?: string }) {
         {columns.map((col) => (
           <div
             key={col.title}
-            className="flex w-[15.5rem] shrink-0 flex-col rounded-2xl bg-[#12182a] ring-1 ring-white/6"
+            className="flex w-[15.5rem] shrink-0 flex-col rounded-2xl bg-muted ring-1 ring-white/6"
           >
             <div className="flex items-center justify-between px-3 pt-3 pb-2">
               <p className="text-[11px] font-bold tracking-[0.08em] text-white/45 uppercase">
                 {col.title}
               </p>
-              <span className="rounded-md bg-[#0c1020] px-2 py-0.5 text-[11px] font-bold tabular-nums text-white/50 ring-1 ring-white/8">
+              <span className="rounded-md bg-shell px-2 py-0.5 text-[11px] font-bold tabular-nums text-white/50 ring-1 ring-white/8">
                 {col.cards.length}
               </span>
             </div>
@@ -304,7 +304,7 @@ export function LeadsProductFrame({ className }: { className?: string }) {
               {col.cards.map((card) => (
                 <div
                   key={card.name}
-                  className="rounded-2xl bg-[#151b2e] p-3 ring-1 ring-white/8"
+                  className="rounded-2xl bg-inset p-3 ring-1 ring-white/8"
                 >
                   <p className="text-[13px] font-medium text-white/90">{card.name}</p>
                   <div className="mt-2 flex items-center gap-1.5">
@@ -379,7 +379,7 @@ export function ProjectsProductFrame({ className }: { className?: string }) {
         {rows.map((row) => (
           <div
             key={row.name}
-            className="flex items-center gap-3 rounded-2xl bg-[#151b2e] px-3.5 py-3 ring-1 ring-white/8"
+            className="flex items-center gap-3 rounded-2xl bg-inset px-3.5 py-3 ring-1 ring-white/8"
           >
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-medium text-white/90">
@@ -457,7 +457,7 @@ export function DocumentsProductFrame({ className }: { className?: string }) {
           ))}
         </div>
         <div className="overflow-hidden rounded-2xl ring-1 ring-white/8">
-          <div className="flex border-b border-white/8 bg-[#12182a] px-4 py-2 text-[11px] font-medium text-white/35">
+          <div className="flex border-b border-white/8 bg-muted px-4 py-2 text-[11px] font-medium text-white/35">
             <span className="min-w-0 flex-1">Document</span>
             <span className="w-20 text-right">Kind</span>
             <span className="w-24 text-right">Status</span>
@@ -534,7 +534,7 @@ export function FinanceProductFrame({ className }: { className?: string }) {
           ].map((stat) => (
             <div
               key={stat.label}
-              className="rounded-2xl bg-[#151b2e] px-4 py-3 ring-1 ring-white/8"
+              className="rounded-2xl bg-inset px-4 py-3 ring-1 ring-white/8"
             >
               <p className="text-[11px] text-white/40">{stat.label}</p>
               <p className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-white">
@@ -544,7 +544,7 @@ export function FinanceProductFrame({ className }: { className?: string }) {
           ))}
         </div>
         <div className="overflow-hidden rounded-2xl ring-1 ring-white/8">
-          <div className="flex border-b border-white/8 bg-[#12182a] px-4 py-2 text-[11px] font-medium text-white/35">
+          <div className="flex border-b border-white/8 bg-muted px-4 py-2 text-[11px] font-medium text-white/35">
             <span className="flex-1">Client</span>
             <span className="w-24 text-right">Status</span>
             <span className="w-24 text-right">Due</span>
@@ -598,17 +598,17 @@ export function PartnersProductFrame({ className }: { className?: string }) {
     >
       <div className="space-y-4 p-4 sm:p-5">
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl bg-[#151b2e] px-4 py-3 ring-1 ring-white/8">
+          <div className="rounded-2xl bg-inset px-4 py-3 ring-1 ring-white/8">
             <p className="text-[11px] text-white/40">Partner payable</p>
             <p className="mt-1 text-xl font-semibold tabular-nums text-white">$1,900</p>
           </div>
-          <div className="rounded-2xl bg-[#151b2e] px-4 py-3 ring-1 ring-white/8">
+          <div className="rounded-2xl bg-inset px-4 py-3 ring-1 ring-white/8">
             <p className="text-[11px] text-white/40">Settled this month</p>
             <p className="mt-1 text-xl font-semibold tabular-nums text-white">$5,300</p>
           </div>
         </div>
         <div className="overflow-hidden rounded-2xl ring-1 ring-white/8">
-          <div className="grid grid-cols-[1.2fr_1fr_1fr_1fr] gap-2 border-b border-white/8 bg-[#12182a] px-4 py-2 text-[11px] font-medium text-white/35">
+          <div className="grid grid-cols-[1.2fr_1fr_1fr_1fr] gap-2 border-b border-white/8 bg-muted px-4 py-2 text-[11px] font-medium text-white/35">
             <span>Partner</span>
             <span className="text-right">Earned</span>
             <span className="text-right">Settled</span>

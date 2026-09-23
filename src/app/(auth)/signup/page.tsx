@@ -15,7 +15,7 @@ export default async function SignupPage({
 
   return (
     <AuthCard
-      title={inviteToken ? "Join the studio" : "Create your studio"}
+      title={inviteToken ? "Join the studio" : "Create an account"}
       description={
         inviteToken
           ? "Create an account with the invited email. You won’t get a separate studio."

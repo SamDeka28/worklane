@@ -165,7 +165,7 @@ export default function MarketingHomePage() {
             <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
               <Button
                 size="lg"
-                className="h-12 rounded-full bg-white px-7 text-[15px] font-semibold text-[#05070F] hover:bg-white/92"
+                className="h-12 rounded-full bg-primary px-7 text-[15px] font-semibold text-primary-foreground hover:brightness-110"
                 nativeButton={false}
                 render={<Link href="/signup" />}
               >
@@ -299,7 +299,7 @@ export default function MarketingHomePage() {
       {/* How it works */}
       <section
         id="lane"
-        className="scroll-mt-24 relative overflow-hidden border-y border-white/8 bg-[#080B16] px-5 py-24 sm:px-8 sm:py-28 lg:px-12"
+        className="scroll-mt-24 relative overflow-hidden border-y border-white/8 bg-shell px-5 py-24 sm:px-8 sm:py-28 lg:px-12"
       >
         <div
           className="pointer-events-none absolute inset-0 opacity-50"
@@ -415,7 +415,7 @@ export default function MarketingHomePage() {
       </section>
 
       {/* Who */}
-      <section className="border-t border-white/8 bg-[#080B16] px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
+      <section className="border-t border-white/8 bg-shell px-5 py-20 sm:px-8 sm:py-24 lg:px-12">
         <div className="mx-auto max-w-[90rem]">
           <p className="max-w-3xl font-heading text-[clamp(1.5rem,3.2vw,2.35rem)] font-semibold leading-[1.28] tracking-[-0.025em] text-white/90">
             Built for studios that share the work — freelancers, partners, and
@@ -528,7 +528,7 @@ export default function MarketingHomePage() {
           }}
         />
         <div className="lane-mkt-cta relative mx-auto max-w-[90rem] overflow-hidden rounded-[2rem] ring-1 ring-white/12 sm:rounded-[2.5rem]">
-          <div className="absolute inset-0 bg-[#0A0E1C]" />
+          <div className="absolute inset-0 bg-shell" />
           <div
             className="pointer-events-none absolute inset-0 opacity-60"
             aria-hidden
@@ -552,7 +552,7 @@ export default function MarketingHomePage() {
             <div className="flex flex-wrap gap-3 lg:justify-end">
               <Button
                 size="lg"
-                className="h-12 rounded-full bg-white px-7 text-[15px] font-semibold text-[#05070F] hover:bg-white/92"
+                className="h-12 rounded-full bg-primary px-7 text-[15px] font-semibold text-primary-foreground hover:brightness-110"
                 nativeButton={false}
                 render={<Link href="/signup" />}
               >

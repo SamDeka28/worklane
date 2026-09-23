@@ -69,7 +69,7 @@ export function AppHeader({
     user.displayName?.trim() || user.email?.split("@")[0] || "You";
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 rounded-2xl bg-card px-4 shadow-soft ring-1 ring-foreground/6 dark:ring-white/8 md:px-5">
+    <header className="lane-panel flex h-14 shrink-0 items-center gap-3 px-4 md:px-5">
       <div className="flex items-center gap-2 lg:hidden">
         <Sheet>
           <SheetTrigger

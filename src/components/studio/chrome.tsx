@@ -25,7 +25,7 @@ export function SoftCard({
   return (
     <div
       className={cn(
-        "rounded-2xl bg-card shadow-soft ring-1 ring-foreground/4 transition-[transform,box-shadow] duration-200 ease-out dark:ring-white/6",
+        "lane-panel transition-[transform,box-shadow] duration-200 ease-out",
         hover && "lane-surface-hover",
         className,
       )}
@@ -370,7 +370,7 @@ export function NextStepCard({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 sm:flex-row sm:items-center",
+        "flex flex-col gap-3 lane-panel px-4 py-3.5 sm:flex-row sm:items-center",
         "border-l-[3px] border-l-primary",
         className,
       )}

@@ -126,7 +126,7 @@ export function PriorityMark({
         className,
       )}
     >
-      <Icon className="size-3.5 stroke-[2.5]" aria-hidden />
+      {/* <Icon className="size-3.5 strokimage.pnge-[2.5]" aria-hidden /> */}
       {mark.letter}
     </span>
   );
@@ -242,10 +242,10 @@ export function TaskBoardCard({
   return (
     <div
       className={cn(
-        "group/card relative w-full rounded-xl bg-card shadow-sm ring-1 ring-foreground/8 transition-[box-shadow,transform,ring-color,background-color,color] duration-150 dark:ring-white/10",
+        "group/card relative w-full rounded-xl bg-card shadow-sm ring-1 ring-white/10 transition-[box-shadow,transform,ring-color,background-color,color] duration-150",
         onOpen &&
           !selected &&
-          "hover:-translate-y-px hover:shadow-md hover:ring-foreground/12 dark:hover:ring-white/16",
+          "hover:-translate-y-px hover:shadow-md hover:ring-white/16",
         selected &&
           "bg-primary/10 ring-2 ring-primary/60 dark:bg-primary/15 dark:ring-primary",
         className,

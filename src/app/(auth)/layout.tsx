@@ -1,41 +1,32 @@
 import type { ReactNode } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
+import { AuthVisualPanel } from "@/components/auth/auth-visual-panel";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-svh lg:grid-cols-2">
-      <div className="flex min-h-svh flex-col bg-background">
-        <header className="flex h-24 items-center px-8 md:px-12">
-          <Link href="/" className="flex items-center gap-3.5">
-            <BrandMark size={52} priority />
-            <span className="text-xl font-medium tracking-tight">Worklane</span>
-          </Link>
-        </header>
-        <main className="flex flex-1 items-center justify-center px-8 py-10 md:px-12">
-          <div className="w-full max-w-sm">{children}</div>
-        </main>
+    <div className="lane-auth relative flex min-h-svh items-center justify-center overflow-hidden p-4 sm:p-6 lg:p-8">
+      <div className="lane-shell relative z-10 grid w-full max-w-[64rem] overflow-hidden lg:min-h-[38rem] lg:grid-cols-2">
+        <AuthVisualPanel />
+
+        <section className="flex flex-col bg-card">
+          <header className="flex h-14 items-center justify-between px-6 lg:hidden">
+            <Link href="/" className="flex items-center gap-2">
+              <BrandMark size={24} priority />
+              <span className="text-sm font-semibold text-foreground">Worklane</span>
+            </Link>
+            <Link
+              href="/"
+              className="text-[12px] font-medium text-muted-foreground hover:text-foreground"
+            >
+              Back
+            </Link>
+          </header>
+          <div className="flex flex-1 flex-col justify-center px-7 py-10 sm:px-10 lg:px-12 lg:py-12">
+            <div className="mx-auto w-full max-w-[22rem]">{children}</div>
+          </div>
+        </section>
       </div>
-      <aside className="relative hidden overflow-hidden bg-[#070A16] lg:block">
-        <Image
-          src="/brand/worklane-hero-mesh.webp"
-          alt=""
-          fill
-          priority
-          sizes="50vw"
-          className="object-cover object-center"
-        />
-        <div className="absolute inset-0 bg-linear-to-t from-[#070A16] via-[#070A16]/40 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 p-12">
-          <p className="font-heading max-w-md text-4xl font-bold leading-tight tracking-tight text-white">
-            From first conversation to final payment.
-          </p>
-          <p className="mt-4 max-w-md text-sm leading-6 text-white/75">
-            Clients, charges, and what is actually outstanding — without a spreadsheet remaining column.
-          </p>
-        </div>
-      </aside>
     </div>
   );
 }

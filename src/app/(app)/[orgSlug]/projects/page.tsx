@@ -248,7 +248,7 @@ export default async function ProjectsPage({
                   showMoney={seeMoney}
                 />
               ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto rounded-[1.75rem] bg-card/50 p-4 shadow-soft ring-1 ring-border/30 sm:p-5">
+                <div className="min-h-0 flex-1 overflow-y-auto lane-inset p-4 sm:p-5">
                   <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
                     {cards.map((card) => {
                       const activityParts = [

@@ -808,7 +808,7 @@ export default async function ProjectDetailPage({
             }
           >
             {panel === "board" ? (
-              <div className="flex min-h-[min(70vh,42rem)] flex-1 flex-col overflow-hidden rounded-[1.75rem] bg-muted/20 ring-1 ring-border/30">
+              <div className="flex min-h-[min(70vh,42rem)] flex-1 flex-col overflow-hidden lane-inset">
                 <KanbanBoard
                   orgSlug={orgSlug}
                   scope="project"
@@ -1016,7 +1016,7 @@ export default async function ProjectDetailPage({
                   </div>
                 </div>
 
-                <div className="rounded-[1.5rem] bg-card/90 px-5 py-4 shadow-soft ring-1 ring-border/30">
+                <div className="lane-panel px-5 py-4">
                   <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
                     Earned to date
                   </p>

@@ -87,7 +87,7 @@ export function BoardColumn({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex max-h-full w-80 shrink-0 flex-col self-start overflow-hidden rounded-2xl bg-surface-lane ring-1 ring-foreground/6 transition-[box-shadow,background-color,ring-color] duration-150 dark:ring-white/8",
+        "flex max-h-full w-80 shrink-0 flex-col self-start overflow-hidden lane-inset transition-[box-shadow,background-color] duration-150",
         isOver &&
           "bg-primary/12 ring-2 ring-primary dark:bg-primary/18",
         className,
@@ -99,7 +99,7 @@ export function BoardColumn({
             {title}
           </p>
           {count != null ? (
-            <span className="rounded-lg bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm ring-1 ring-foreground/6">
+            <span className="rounded-lg bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm lane-ring">
               {count}
             </span>
           ) : null}
@@ -128,7 +128,7 @@ export function BoardCardShell({
         type="button"
         onClick={onClick}
         className={cn(
-          "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-foreground/8 transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-md",
+          "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-white/10 transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-md",
           className,
         )}
       >
@@ -139,7 +139,7 @@ export function BoardCardShell({
   return (
     <div
       className={cn(
-        "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-foreground/8",
+        "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-white/10",
         className,
       )}
     >

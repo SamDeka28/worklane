@@ -163,7 +163,7 @@ export function AppSidebar({
     <aside
       data-expanded={expanded ? "true" : undefined}
       className={cn(
-        "group/rail hidden h-full min-h-0 w-[4.75rem] shrink-0 flex-col self-stretch rounded-2xl bg-card py-3 shadow-soft ring-1 ring-foreground/6 dark:ring-white/8 lg:flex xl:w-56",
+        "group/rail hidden h-full min-h-0 w-[4.75rem] shrink-0 flex-col self-stretch lane-panel py-3 lg:flex xl:w-56",
         className,
       )}
     >

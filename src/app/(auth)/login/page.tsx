@@ -19,7 +19,7 @@ export default async function LoginPage({
       description={
         inviteToken
           ? "Use the email address on the invite."
-          : "Internal operating system. Clients and partners do not need accounts."
+          : "No account?"
       }
       mode="login"
       inviteToken={inviteToken}
