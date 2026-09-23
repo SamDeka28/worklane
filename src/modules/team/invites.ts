@@ -12,6 +12,7 @@ export type InvitationPreview = {
   role: string;
   organizationId: string;
   projectId: string | null;
+  projectIds: string[];
   projectRole: string | null;
   partnerId: string | null;
   permissions: unknown;
@@ -19,6 +20,16 @@ export type InvitationPreview = {
   acceptedAt: string | null;
   org: { id: string; slug: string; name: string } | null;
 };
+
+function normalizeProjectIds(
+  projectIds: unknown,
+  projectId: string | null,
+): string[] {
+  if (Array.isArray(projectIds) && projectIds.length > 0) {
+    return projectIds.map(String).filter(Boolean);
+  }
+  return projectId ? [projectId] : [];
+}
 
 export async function getInvitationByToken(token: string): Promise<InvitationPreview | null> {
   const tokenHash = hashToken(token);
@@ -32,12 +43,15 @@ export async function getInvitationByToken(token: string): Promise<InvitationPre
     });
     const row = Array.isArray(data) ? data[0] : data;
     if (!error && row) {
+      const projectId = (row.project_id as string | null) ?? null;
+      const projectIds = normalizeProjectIds(row.project_ids, projectId);
       return {
         id: row.id as string,
         email: row.email as string,
         role: row.role as string,
         organizationId: row.organization_id as string,
-        projectId: (row.project_id as string | null) ?? null,
+        projectId: projectIds[0] ?? null,
+        projectIds,
         projectRole: (row.project_role as string | null) ?? null,
         partnerId: (row.partner_id as string | null) ?? null,
         permissions: row.permissions ?? null,
@@ -57,18 +71,21 @@ export async function getInvitationByToken(token: string): Promise<InvitationPre
   const { data, error } = await admin
     .from("organization_invitations")
     .select(
-      "id, email, role, organization_id, project_id, project_role, partner_id, permissions, expires_at, accepted_at, organizations ( id, slug, name )",
+      "id, email, role, organization_id, project_id, project_ids, project_role, partner_id, permissions, expires_at, accepted_at, organizations ( id, slug, name )",
     )
     .eq("token_hash", tokenHash)
     .maybeSingle();
   if (error || !data) return null;
   const org = Array.isArray(data.organizations) ? data.organizations[0] : data.organizations;
+  const projectId = (data.project_id as string | null) ?? null;
+  const projectIds = normalizeProjectIds(data.project_ids, projectId);
   return {
     id: data.id as string,
     email: data.email as string,
     role: data.role as string,
     organizationId: data.organization_id as string,
-    projectId: (data.project_id as string | null) ?? null,
+    projectId: projectIds[0] ?? null,
+    projectIds,
     projectRole: (data.project_role as string | null) ?? null,
     partnerId: (data.partner_id as string | null) ?? null,
     permissions: data.permissions ?? null,
@@ -103,14 +120,14 @@ async function fulfillInvitation(
   );
   if (memberError) return { error: memberError.message };
 
-  if (invite.projectId) {
+  if (invite.projectIds.length > 0) {
     const { error: projectMemberError } = await admin.from("project_members").upsert(
-      {
+      invite.projectIds.map((pid) => ({
         organization_id: invite.organizationId,
-        project_id: invite.projectId,
+        project_id: pid,
         user_id: user.id,
         role: invite.projectRole === "lead" ? "lead" : "member",
-      },
+      })),
       { onConflict: "project_id,user_id" },
     );
     if (projectMemberError) {
@@ -147,15 +164,15 @@ async function fulfillInvitation(
   revalidatePath(`/${invite.org.slug}/projects`);
   revalidatePath(`/${invite.org.slug}/team`);
   revalidatePath(`/${invite.org.slug}/partners`);
-  if (invite.projectId) {
-    revalidatePath(`/${invite.org.slug}/projects/${invite.projectId}`);
+  for (const pid of invite.projectIds) {
+    revalidatePath(`/${invite.org.slug}/projects/${pid}`);
   }
 
   return {
     ok: true as const,
     orgSlug: invite.org.slug,
     orgName: invite.org.name,
-    projectId: invite.projectId,
+    projectId: invite.projectIds[0] ?? null,
   };
 }
 
@@ -268,7 +285,7 @@ export async function claimPendingInvitationsForUser() {
   const { data: rows } = await admin
     .from("organization_invitations")
     .select(
-      "id, email, role, organization_id, project_id, project_role, partner_id, permissions, expires_at, accepted_at, organizations ( id, slug, name )",
+      "id, email, role, organization_id, project_id, project_ids, project_role, partner_id, permissions, expires_at, accepted_at, organizations ( id, slug, name )",
     )
     .ilike("email", userEmail)
     .order("created_at", { ascending: false });
@@ -302,12 +319,16 @@ export async function claimPendingInvitationsForUser() {
       continue;
     }
 
+    const projectId = (row.project_id as string | null) ?? null;
+    const projectIds = normalizeProjectIds(row.project_ids, projectId);
+
     const invite: InvitationRow = {
       id: row.id as string,
       email: row.email as string,
       role: row.role as string,
       organizationId: orgId,
-      projectId: (row.project_id as string | null) ?? null,
+      projectId: projectIds[0] ?? null,
+      projectIds,
       projectRole: (row.project_role as string | null) ?? null,
       partnerId: (row.partner_id as string | null) ?? null,
       permissions: row.permissions ?? null,

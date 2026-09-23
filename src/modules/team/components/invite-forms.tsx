@@ -35,12 +35,21 @@ export function InviteMemberForm({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [role, setRole] = useState("member");
-  const [projectId, setProjectId] = useState(defaultProjectId ?? "");
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
+    defaultProjectId ? [defaultProjectId] : [],
+  );
   const access = useAccessPermissionsState(null, "member");
 
   const effectivePreset =
     role === "partner" && access.preset === "full" ? "partner" : access.preset;
-  const showProjectRole = Boolean(projectId) || Boolean(defaultProjectId && projects.length === 0);
+  const showProjectRole =
+    selectedProjectIds.length > 0 || Boolean(defaultProjectId && projects.length === 0);
+
+  function toggleProject(id: string) {
+    setSelectedProjectIds((prev) =>
+      prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id],
+    );
+  }
 
   return (
     <form
@@ -48,6 +57,9 @@ export function InviteMemberForm({
       action={(formData) => {
         formData.set("permissions_preset", effectivePreset);
         formData.set("permissions", JSON.stringify(access.shownPermissions));
+        for (const pid of selectedProjectIds) {
+          formData.append("project_ids", pid);
+        }
         start(async () => {
           const result = await inviteOrgMemberAction(orgSlug, formData);
           if (result.error) {
@@ -103,21 +115,39 @@ export function InviteMemberForm({
       </Field>
 
       {projects.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Add to project" htmlFor="invite_project">
-            <NativeSelect
-              id="invite_project"
-              name="project_id"
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
+        <div className="grid gap-3">
+          <Field
+            label="Add to projects"
+            htmlFor="invite_projects"
+            hint="Studio access is always included. Select any projects they should join."
+          >
+            <div
+              id="invite_projects"
+              className="lane-inset max-h-44 space-y-1 overflow-y-auto rounded-xl p-2"
             >
-              <option value="">Studio only</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </NativeSelect>
+              {projects.map((project) => {
+                const checked = selectedProjectIds.includes(project.id);
+                return (
+                  <label
+                    key={project.id}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] hover:bg-background/60"
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-3.5 rounded border-border accent-primary"
+                      checked={checked}
+                      onChange={() => toggleProject(project.id)}
+                    />
+                    <span className="min-w-0 truncate text-foreground">{project.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              {selectedProjectIds.length === 0
+                ? "Studio only — no project membership yet"
+                : `${selectedProjectIds.length} project${selectedProjectIds.length === 1 ? "" : "s"} selected`}
+            </p>
           </Field>
           {showProjectRole ? (
             <Field label="Project role" htmlFor="invite_project_role">
@@ -134,7 +164,7 @@ export function InviteMemberForm({
         </div>
       ) : defaultProjectId ? (
         <>
-          <input type="hidden" name="project_id" value={defaultProjectId} />
+          <input type="hidden" name="project_ids" value={defaultProjectId} />
           <Field label="Project role" htmlFor="invite_project_role">
             <NativeSelect
               id="invite_project_role"
@@ -216,7 +246,11 @@ export function PendingInvitesList({
               </div>
               <p className="mt-0.5 text-xs capitalize text-muted-foreground">
                 {invite.role}
-                {invite.projectId ? " · project access" : ""}
+                {invite.projectIds?.length
+                  ? ` · ${invite.projectIds.length} project${invite.projectIds.length === 1 ? "" : "s"}`
+                  : invite.projectId
+                    ? " · project access"
+                    : ""}
                 {invite.partnerId ? " · partner profile" : ""}
                 {expiryLabel
                   ? status === "expired"

@@ -27,7 +27,7 @@ export async function listPendingInvitations(orgSlug: string): Promise<OrgInvita
   const ctx = await requireOrg(orgSlug);
   const { data, error } = await ctx.supabase
     .from("organization_invitations")
-    .select("id, email, role, project_id, project_role, partner_id, expires_at, created_at")
+    .select("id, email, role, project_id, project_ids, project_role, partner_id, expires_at, created_at")
     .eq("organization_id", ctx.org.id)
     .is("accepted_at", null)
     .order("created_at", { ascending: false });
@@ -35,16 +35,24 @@ export async function listPendingInvitations(orgSlug: string): Promise<OrgInvita
     if (error.message.includes("organization_invitations")) return [];
     throw new Error(error.message);
   }
-  return (data ?? []).map((row) => ({
-    id: row.id as string,
-    email: row.email as string,
-    role: row.role as string,
-    projectId: (row.project_id as string | null) ?? null,
-    projectRole: (row.project_role as string | null) ?? null,
-    partnerId: (row.partner_id as string | null) ?? null,
-    expiresAt: (row.expires_at as string | null) ?? null,
-    createdAt: row.created_at as string,
-  }));
+  return (data ?? []).map((row) => {
+    const ids = Array.isArray(row.project_ids)
+      ? (row.project_ids as string[]).filter(Boolean)
+      : row.project_id
+        ? [row.project_id as string]
+        : [];
+    return {
+      id: row.id as string,
+      email: row.email as string,
+      role: row.role as string,
+      projectId: (ids[0] ?? null) as string | null,
+      projectIds: ids,
+      projectRole: (row.project_role as string | null) ?? null,
+      partnerId: (row.partner_id as string | null) ?? null,
+      expiresAt: (row.expires_at as string | null) ?? null,
+      createdAt: row.created_at as string,
+    };
+  });
 }
 
 export async function inviteOrgMemberAction(orgSlug: string, formData: FormData) {
@@ -59,7 +67,16 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
     roleRaw === "admin" || roleRaw === "viewer" || roleRaw === "partner" || roleRaw === "member"
       ? roleRaw
       : "member";
-  const projectId = String(formData.get("project_id") ?? "").trim() || null;
+  const projectIds = formData
+    .getAll("project_ids")
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+  // Legacy single field (project page invite).
+  const legacyProjectId = String(formData.get("project_id") ?? "").trim();
+  if (legacyProjectId && !projectIds.includes(legacyProjectId)) {
+    projectIds.push(legacyProjectId);
+  }
+  const projectId = projectIds[0] ?? null;
   const projectRole =
     String(formData.get("project_role") ?? "member") === "lead" ? "lead" : "member";
   const partnerId = String(formData.get("partner_id") ?? "").trim() || null;
@@ -94,17 +111,23 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
     if (!partner) return { error: "Partner not found" };
   }
 
-  let projectName: string | null = null;
-  if (projectId) {
-    const { data: project } = await ctx.supabase
+  let projectNames: string[] = [];
+  if (projectIds.length > 0) {
+    const { data: projects } = await ctx.supabase
       .from("projects")
       .select("id, name")
-      .eq("id", projectId)
       .eq("organization_id", ctx.org.id)
-      .maybeSingle();
-    if (!project) return { error: "Project not found" };
-    projectName = project.name as string;
+      .in("id", projectIds);
+    const found = new Set((projects ?? []).map((p) => p.id as string));
+    if (found.size !== projectIds.length) return { error: "One or more projects were not found" };
+    projectNames = (projects ?? []).map((p) => p.name as string);
   }
+  const projectName =
+    projectNames.length === 0
+      ? null
+      : projectNames.length === 1
+        ? projectNames[0]
+        : `${projectNames.length} projects`;
 
   // Already a member?
   const admin = createAdminSupabaseClient();
@@ -142,14 +165,14 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
           revalidatePath(`/${orgSlug}/team`);
           return { ok: true as const, alreadyMember: true as const };
         }
-        if (projectId) {
+        if (projectIds.length > 0) {
           await ctx.supabase.from("project_members").upsert(
-            {
+            projectIds.map((pid) => ({
               organization_id: ctx.org.id,
-              project_id: projectId,
+              project_id: pid,
               user_id: profile.id,
               role: projectRole,
-            },
+            })),
             { onConflict: "project_id,user_id" },
           );
           await notifyUser({
@@ -160,7 +183,9 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
             href: `${getAppUrl()}/${orgSlug}/projects/${projectId}`,
             email,
           });
-          revalidatePath(`/${orgSlug}/projects/${projectId}`);
+          for (const pid of projectIds) {
+            revalidatePath(`/${orgSlug}/projects/${pid}`);
+          }
           revalidatePath(`/${orgSlug}/team`);
           revalidatePath(`/${orgSlug}/settings`);
           return { ok: true as const, alreadyMember: true as const };
@@ -189,7 +214,8 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
     expires_at: expiresAt,
     token_hash: tokenHash,
     project_id: projectId,
-    project_role: projectId ? projectRole : null,
+    project_ids: projectIds,
+    project_role: projectIds.length > 0 ? projectRole : null,
     partner_id: partnerId,
     permissions,
   });
@@ -225,7 +251,9 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
   revalidatePath(`/${orgSlug}/settings`);
   revalidatePath(`/${orgSlug}/team`);
   revalidatePath(`/${orgSlug}/partners`);
-  if (projectId) revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  for (const pid of projectIds) {
+    revalidatePath(`/${orgSlug}/projects/${pid}`);
+  }
   return {
     ok: true as const,
     emailed: mailed.ok,
