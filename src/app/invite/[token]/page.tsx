@@ -2,10 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { SoftCard } from "@/components/studio/chrome";
 import { Button } from "@/components/ui/button";
+import { listMyOrgs } from "@/modules/identity/org";
 import {
-  acceptInvitationAction,
+  acceptInvitation,
   getInvitationByToken,
-} from "@/modules/team/actions";
+} from "@/modules/team/invites";
 import { getSessionUser } from "@/shared/db/require-user";
 
 export default async function InviteAcceptPage({
@@ -64,7 +65,18 @@ export default async function InviteAcceptPage({
     );
   }
 
-  const result = await acceptInvitationAction(token);
+  // Already in this studio — skip accept (avoids re-running join + keeps welcome once).
+  const memberships = await listMyOrgs();
+  const existing = memberships.find((row) => row.org.id === invite.organizationId);
+  if (existing) {
+    const qs = invite.acceptedAt ? "" : "?joined=1";
+    if (invite.projectId) {
+      redirect(`/${existing.org.slug}/projects/${invite.projectId}${qs}`);
+    }
+    redirect(`/${existing.org.slug}${qs}`);
+  }
+
+  const result = await acceptInvitation(token);
   if (result.ok) {
     const qs = result.alreadyAccepted ? "" : "?joined=1";
     if (result.projectId) {

@@ -191,7 +191,7 @@ export async function firstOrgPath(): Promise<string> {
   const orgs = await listMyOrgs();
   if (orgs.length === 0) {
     // Google / generic sign-in often skips /invite/[token] — claim open invites by email.
-    const { claimPendingInvitationsForUser } = await import("@/modules/team/actions");
+    const { claimPendingInvitationsForUser } = await import("@/modules/team/invites");
     const claimed = await claimPendingInvitationsForUser();
     if (claimed.length > 0) {
       const first = claimed[0];

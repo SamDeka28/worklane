@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { firstOrgPath } from "@/modules/identity/org";
-import { claimPendingInvitationsForUser } from "@/modules/team/actions";
+import { claimPendingInvitationsForUser } from "@/modules/team/invites";
 import { getSessionUser } from "@/shared/db/require-user";
 
 export const metadata = {
