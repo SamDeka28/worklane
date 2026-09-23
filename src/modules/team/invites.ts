@@ -167,7 +167,7 @@ export type AcceptInvitationResult =
       orgName: string;
       projectId: string | null;
     }
-  | { error: string; expectedEmail?: string };
+  | { ok: false; error: string; expectedEmail?: string };
 
 /** Accept invite for the signed-in user. Safe to call from Server Components (not a server action). */
 export async function acceptInvitation(token: string): Promise<AcceptInvitationResult> {
@@ -202,23 +202,25 @@ export async function acceptInvitation(token: string): Promise<AcceptInvitationR
   const admin = createAdminSupabaseClient();
   if (!admin) {
     return {
+      ok: false as const,
       error: rpcError?.message || "Could not accept invite. Try again or contact the studio owner.",
     };
   }
 
   const invite = await getInvitationByToken(token);
-  if (!invite || !invite.org) return { error: "Invite not found" };
+  if (!invite || !invite.org) return { ok: false as const, error: "Invite not found" };
 
   const userEmail = (user.email ?? "").trim().toLowerCase();
   if (!userEmail || userEmail !== invite.email.toLowerCase()) {
     return {
+      ok: false as const,
       error: `Sign in as ${invite.email} to accept this invite`,
       expectedEmail: invite.email,
     };
   }
 
   if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now() && !invite.acceptedAt) {
-    return { error: "Invite expired" };
+    return { ok: false as const, error: "Invite expired" };
   }
 
   const result = await fulfillInvitation(admin, { ...invite, org: invite.org }, user);
@@ -228,7 +230,7 @@ export async function acceptInvitation(token: string): Promise<AcceptInvitationR
       alreadyAccepted: Boolean(invite.acceptedAt),
     };
   }
-  return result;
+  return { ok: false as const, error: result.error };
 }
 
 /** Claim open (or orphaned) invites for the signed-in email. */
