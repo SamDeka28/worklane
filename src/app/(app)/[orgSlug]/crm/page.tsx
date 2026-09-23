@@ -172,11 +172,13 @@ export default async function CrmPage({
               columns={
                 <>
                   <span className="min-w-0 flex-1">Lead</span>
-                  <span className="w-28 text-right">Stage</span>
-                  {seeMoney ? <span className="w-28 text-right">Value</span> : null}
+                  <span className="hidden w-28 text-right sm:block">Stage</span>
+                  {seeMoney ? (
+                    <span className="hidden w-28 text-right md:block">Value</span>
+                  ) : null}
                 </>
               }
-              footer="Win a lead, then Become a client — no retyping."
+              footer="Win a lead, then Become a client: no retyping."
             >
               {leads.map((lead) => (
                 <DenseRow key={lead.id}>
@@ -189,23 +191,38 @@ export default async function CrmPage({
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
                         {[lead.company, lead.email, lead.source]
                           .filter(Boolean)
-                          .join(" · ") || "—"}
+                          .join(" · ") || "-"}
+                      </p>
+                      <p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground sm:hidden">
+                        <StatusChip tone={stageTone(lead.stage, stages)}>
+                          {stageLabel(lead.stage, stages)}
+                        </StatusChip>
+                        {seeMoney && lead.estimatedValueMinor != null
+                          ? formatMoney({
+                              amountMinor: lead.estimatedValueMinor,
+                              currency: lead.currency,
+                            })
+                          : null}
                       </p>
                     </Link>
                   </DenseCell>
-                  <DenseCell align="right" width="w-28">
+                  <DenseCell align="right" width="hidden w-28 sm:block">
                     <StatusChip tone={stageTone(lead.stage, stages)}>
                       {stageLabel(lead.stage, stages)}
                     </StatusChip>
                   </DenseCell>
                   {seeMoney ? (
-                    <DenseCell align="right" width="w-28" className="text-sm font-medium">
+                    <DenseCell
+                      align="right"
+                      width="hidden w-28 md:block"
+                      className="text-sm font-medium"
+                    >
                       {lead.estimatedValueMinor != null
                         ? formatMoney({
                             amountMinor: lead.estimatedValueMinor,
                             currency: lead.currency,
                           })
-                        : "—"}
+                        : "-"}
                     </DenseCell>
                   ) : null}
                 </DenseRow>

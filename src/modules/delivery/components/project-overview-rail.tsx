@@ -79,7 +79,7 @@ export function ProjectOverviewRail({
           <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">
             {money.totalPriceMinor > BigInt(0)
               ? moneyLabel(money.totalPriceMinor, currency)
-              : "—"}
+              : "-"}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">Client total</p>
 

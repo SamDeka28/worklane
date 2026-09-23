@@ -172,7 +172,7 @@ export function CreatePartnerDialog({
             if ("warning" in result && result.warning) {
               toast.message(result.warning);
             } else if (result.alreadyMember) {
-              toast.success("Partner linked — they already have studio access");
+              toast.success("Partner linked: they already have studio access");
             } else if (result.emailed) {
               toast.success("Partner invited by email");
             } else if (result.acceptUrl) {
@@ -244,7 +244,7 @@ export function EditPartnerDialog({
   return (
     <ActionSheet
       title="Edit partner"
-      description="Updates the studio partner record — not project splits."
+      description="Updates the studio partner record, not project splits."
       triggerLabel={triggerLabel}
       triggerVariant={triggerVariant}
       triggerSize={triggerSize}
@@ -302,7 +302,7 @@ export function EditPartnerDialog({
           name="notes"
           orgSlug={orgSlug}
           initialPlain={partner.notes}
-          placeholder="Internal only — never on client portal"
+          placeholder="Internal only, never on client portal"
         />
         <Field label="Status" htmlFor={`edit_partner_active_${partner.id}`}>
           <NativeSelect
@@ -732,7 +732,7 @@ export function ProjectSplitDialog({
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">Client total</span>
             <span className="font-medium tabular-nums">
-              {grossMinor > BigInt(0) ? moneyLabel(grossMinor, currency) : "—"}
+              {grossMinor > BigInt(0) ? moneyLabel(grossMinor, currency) : "-"}
             </span>
           </div>
           <div className="flex items-center justify-between gap-2">
@@ -773,7 +773,7 @@ export function ProjectSplitDialog({
         <div className="flex items-center justify-between rounded-2xl bg-muted/40 px-3 py-2 text-sm">
           <span className="text-muted-foreground">Remainder</span>
           <span className="font-semibold tabular-nums">
-            {poolParseError ? "—" : moneyLabel(remainderMinor, currency)}
+            {poolParseError ? "-" : moneyLabel(remainderMinor, currency)}
           </span>
         </div>
 
@@ -888,7 +888,7 @@ export function ProjectSplitDialog({
                       Gets {moneyLabel(remainderMinor, currency)} (
                       {projectTotalMinor > BigInt(0)
                         ? `${((Number(remainderMinor) / Number(projectTotalMinor)) * 100).toFixed(1)}%`
-                        : "—"}{" "}
+                        : "-"}{" "}
                       of distributable)
                     </p>
                   )}

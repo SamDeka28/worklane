@@ -12,6 +12,34 @@ export async function signOutAction() {
   redirect("/login");
 }
 
+/** Create a new organization owned by the current user. */
+export async function createOrganizationAction(formData: FormData) {
+  const supabase = await requireSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Name is required" as const };
+  if (name.length > 80) return { error: "Keep the name under 80 characters" as const };
+
+  const { data, error } = await supabase.rpc("create_my_organization", {
+    p_name: name,
+  });
+
+  if (error) return { error: error.message as string };
+
+  const row = Array.isArray(data) ? data[0] : data;
+  const slug =
+    row && typeof row === "object" && "org_slug" in row
+      ? String((row as { org_slug: string }).org_slug)
+      : null;
+  if (!slug) return { error: "Could not create organization" as const };
+
+  return { ok: true as const, slug };
+}
+
 export async function updateOrgAction(orgSlug: string, formData: FormData) {
   const ctx = await requireWritableOrg(orgSlug);
   const name = String(formData.get("name") ?? "").trim();

@@ -23,7 +23,7 @@ export function projectNextStep(input: {
   ) {
     return {
       title: "Add the first milestone",
-      detail: "Name a slice of work — amount optional until you’re ready to post a charge.",
+      detail: "Name a slice of work: amount optional until you’re ready to post a charge.",
       tab: "milestones",
       cta: "Add milestone",
     };

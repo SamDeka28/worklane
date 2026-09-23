@@ -369,7 +369,7 @@ function EditMilestoneDialog({
               initialDoc={descriptionDoc}
               initialPlain={description}
               placeholder="Context for this milestone…"
-              hint="Narrative only — checklist items live under Deliverables"
+              hint="Narrative only: checklist items live under Deliverables"
               minHeightClassName="min-h-24"
             />
             {!allowsMilestoneBilling(billingMode) ? (
@@ -442,229 +442,233 @@ function MilestoneRow({
     setEditOpen(true);
   }
 
+  const metaBits = [
+    MILESTONE_STATUS_LABEL[item.status],
+    item.dueOn ? `Due ${formatDay(item.dueOn)}` : "No due date",
+    items.length > 0
+      ? `${items.length} deliverable${items.length === 1 ? "" : "s"}${
+          taskedCount > 0 ? ` · ${taskedCount} on board` : ""
+        }`
+      : null,
+    linkedTaskId ? "Milestone card" : null,
+    showMoney && (billing === "due" || billing === "overdue") && charge
+      ? `${moneyLabel(due, currency)} still due`
+      : null,
+  ].filter(Boolean) as string[];
+
   return (
     <li id={`milestone-${item.id}`} className={cn(highlighted && "bg-lane-blue/10")}>
-      <div className="flex items-start gap-2 px-3 py-2.5 sm:items-center sm:gap-3 sm:px-4">
-        <button
-          type="button"
-          className={cn(
-            "min-w-0 flex-1 rounded-xl text-left transition-colors",
-            canWrite &&
-              "hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-          )}
-          onClick={openEditor}
-          disabled={!canWrite}
-        >
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="inline-flex h-7 min-w-8 items-center justify-center rounded-lg bg-muted px-2 text-xs font-semibold tabular-nums text-muted-foreground">
-              {code}
-            </span>
-            <p className="min-w-0 truncate text-sm font-semibold tracking-tight">{item.name}</p>
-            <StatusChip tone={billingTone(billing)}>{milestoneBillingLabel(billing)}</StatusChip>
-          </div>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-            <span>{MILESTONE_STATUS_LABEL[item.status]}</span>
-            <span aria-hidden>·</span>
-            <span>{item.dueOn ? `Due ${formatDay(item.dueOn)}` : "No due date"}</span>
-            {items.length > 0 ? (
-              <>
-                <span aria-hidden>·</span>
-                <span>
-                  {items.length} deliverable{items.length === 1 ? "" : "s"}
-                  {taskedCount > 0 ? ` · ${taskedCount} on board` : ""}
-                </span>
-              </>
-            ) : null}
-            {linkedTaskId ? (
-              <>
-                <span aria-hidden>·</span>
-                <span className="text-violet-700">Milestone card</span>
-              </>
-            ) : null}
-            {showMoney && (billing === "due" || billing === "overdue") && charge ? (
-              <>
-                <span aria-hidden>·</span>
-                <span className="tabular-nums">{moneyLabel(due, currency)} still due</span>
-              </>
-            ) : null}
+      <div className="px-3 py-3.5 sm:px-4 sm:py-4">
+        <div className="flex items-start gap-3">
+          <button
+            type="button"
+            className={cn(
+              "min-w-0 flex-1 rounded-xl text-left transition-colors",
+              canWrite &&
+                "hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+            )}
+            onClick={openEditor}
+            disabled={!canWrite}
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="inline-flex h-7 min-w-8 shrink-0 items-center justify-center rounded-lg bg-muted px-2 text-xs font-semibold tabular-nums text-muted-foreground">
+                {code}
+              </span>
+              <p className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
+                {item.name}
+              </p>
+            </div>
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <StatusChip tone={billingTone(billing)}>{milestoneBillingLabel(billing)}</StatusChip>
+              <p className="min-w-0 truncate text-xs text-muted-foreground">
+                {metaBits.map((bit, i) => (
+                  <span key={`${bit}-${i}`}>
+                    {i > 0 ? <span aria-hidden> · </span> : null}
+                    <span
+                      className={
+                        bit === "Milestone card"
+                          ? "text-violet-700 dark:text-violet-300"
+                          : undefined
+                      }
+                    >
+                      {bit}
+                    </span>
+                  </span>
+                ))}
+              </p>
+            </div>
             {description ? (
-              <>
-                <span aria-hidden>·</span>
-                <span className="max-w-[18rem] truncate">{description}</span>
-              </>
+              <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground/90">
+                {description}
+              </p>
             ) : null}
-          </p>
-        </button>
+          </button>
 
-        <div
-          className="flex shrink-0 flex-col items-end gap-1.5"
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-        >
           {showMoney ? (
             <button
               type="button"
               className={cn(
-                "text-sm font-semibold tabular-nums",
+                "shrink-0 pt-1 text-sm font-semibold tabular-nums tracking-tight",
                 canWrite && "rounded-lg px-1.5 py-0.5 hover:bg-muted/50",
               )}
               onClick={openEditor}
               disabled={!canWrite}
             >
-              {item.amountMinor != null ? moneyLabel(item.amountMinor, currency) : "—"}
+              {item.amountMinor != null ? moneyLabel(item.amountMinor, currency) : "-"}
             </button>
           ) : null}
-          {canWrite ? (
-            <div className="flex flex-wrap items-center justify-end gap-1">
-              <NativeSelect
-                className="h-8 w-[6.5rem] text-xs"
-                value={item.status}
-                disabled={pending}
-                aria-label={`${code} status`}
-                onClick={(event) => event.stopPropagation()}
-                onChange={(event) => {
-                  const status = event.target.value as MilestoneStatus;
-                  start(async () => {
-                    const result = await updateMilestoneStatusAction(orgSlug, item.id, status);
-                    if (result.error) {
-                      toast.error(result.error);
-                      return;
-                    }
-                    router.refresh();
-                  });
-                }}
-              >
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {MILESTONE_STATUS_LABEL[status]}
-                  </option>
-                ))}
-              </NativeSelect>
-
-              <EditMilestoneDialog
-                orgSlug={orgSlug}
-                currency={currency}
-                milestone={item}
-                items={items}
-                code={code}
-                billingMode={billingMode}
-                billed={Boolean(item.chargeId)}
-                workHref={workHref}
-                open={editOpen}
-                onOpenChange={setEditOpen}
-              />
-
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="px-2"
-                      aria-label={`${code} more actions`}
-                      onClick={(event) => event.stopPropagation()}
-                    />
-                  }
-                >
-                  <MoreHorizontal className="size-3.5" />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-44">
-                  {linkedTaskId ? (
-                    <>
-                      <DropdownMenuItem
-                        onClick={() => router.push(workHref ?? "#work")}
-                      >
-                        Open on board
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={pending}
-                        onClick={() => {
-                          start(async () => {
-                            const result = await removeMilestoneBoardTaskAction(orgSlug, item.id);
-                            if (result.error) {
-                              toast.error(result.error);
-                              return;
-                            }
-                            toast.success(`${code} removed from the board`);
-                            router.refresh();
-                          });
-                        }}
-                      >
-                        Remove from board
-                      </DropdownMenuItem>
-                    </>
-                  ) : (
-                    <DropdownMenuItem
-                      disabled={pending || item.status === "cancelled"}
-                      onClick={() => {
-                        start(async () => {
-                          const result = await createTaskFromMilestoneAction(orgSlug, item.id);
-                          if (result.error) {
-                            toast.error(result.error);
-                            return;
-                          }
-                          toast.success(`${code} added to the board`);
-                          router.refresh();
-                        });
-                      }}
-                    >
-                      Add to board
-                    </DropdownMenuItem>
-                  )}
-
-                  {showMoney && billing === "unbilled" && canBill ? (
-                    <DropdownMenuItem
-                      disabled={pending || item.amountMinor == null || item.status === "cancelled"}
-                      onClick={() => {
-                        start(async () => {
-                          const result = await billMilestoneAction(orgSlug, item.id);
-                          if (result.error) {
-                            toast.error(result.error);
-                            return;
-                          }
-                          toast.success("Charge posted — collect when paid");
-                          if (result.chargeId) {
-                            router.push(
-                              `/${orgSlug}/projects/${projectId}?tab=charges&collect=1&charge=${result.chargeId}`,
-                            );
-                          }
-                          router.refresh();
-                        });
-                      }}
-                    >
-                      Charge
-                    </DropdownMenuItem>
-                  ) : null}
-
-                  {showMoney && (billing === "due" || billing === "overdue") && charge ? (
-                    <DropdownMenuItem
-                      onClick={() =>
-                        router.push(
-                          `${collectBaseHref}${collectBaseHref.includes("?") ? "&" : "?"}charge=${charge.id}`,
-                        )
-                      }
-                    >
-                      Collect
-                    </DropdownMenuItem>
-                  ) : null}
-
-                  {showMoney && billing === "paid" && charge ? (
-                    <DropdownMenuItem
-                      onClick={() =>
-                        router.push(
-                          `/${orgSlug}/projects/${projectId}?tab=charges&charge=${charge.id}`,
-                        )
-                      }
-                    >
-                      View charge
-                    </DropdownMenuItem>
-                  ) : null}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ) : null}
         </div>
+
+        {canWrite ? (
+          <div
+            className="mt-2.5 flex items-center gap-1"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <NativeSelect
+              className="h-8 w-29 text-xs"
+              value={item.status}
+              disabled={pending}
+              aria-label={`${code} status`}
+              onChange={(event) => {
+                const status = event.target.value as MilestoneStatus;
+                start(async () => {
+                  const result = await updateMilestoneStatusAction(orgSlug, item.id, status);
+                  if (result.error) {
+                    toast.error(result.error);
+                    return;
+                  }
+                  router.refresh();
+                });
+              }}
+            >
+              {STATUS_OPTIONS.map((status) => (
+                <option key={status} value={status}>
+                  {MILESTONE_STATUS_LABEL[status]}
+                </option>
+              ))}
+            </NativeSelect>
+
+            <EditMilestoneDialog
+              orgSlug={orgSlug}
+              currency={currency}
+              milestone={item}
+              items={items}
+              code={code}
+              billingMode={billingMode}
+              billed={Boolean(item.chargeId)}
+              workHref={workHref}
+              open={editOpen}
+              onOpenChange={setEditOpen}
+            />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="px-2"
+                    aria-label={`${code} more actions`}
+                  />
+                }
+              >
+                <MoreHorizontal className="size-3.5" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-44">
+                {linkedTaskId ? (
+                  <>
+                    <DropdownMenuItem onClick={() => router.push(workHref ?? "#work")}>
+                      Open on board
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={pending}
+                      onClick={() => {
+                        start(async () => {
+                          const result = await removeMilestoneBoardTaskAction(orgSlug, item.id);
+                          if (result.error) {
+                            toast.error(result.error);
+                            return;
+                          }
+                          toast.success(`${code} removed from the board`);
+                          router.refresh();
+                        });
+                      }}
+                    >
+                      Remove from board
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <DropdownMenuItem
+                    disabled={pending || item.status === "cancelled"}
+                    onClick={() => {
+                      start(async () => {
+                        const result = await createTaskFromMilestoneAction(orgSlug, item.id);
+                        if (result.error) {
+                          toast.error(result.error);
+                          return;
+                        }
+                        toast.success(`${code} added to the board`);
+                        router.refresh();
+                      });
+                    }}
+                  >
+                    Add to board
+                  </DropdownMenuItem>
+                )}
+
+                {showMoney && billing === "unbilled" && canBill ? (
+                  <DropdownMenuItem
+                    disabled={pending || item.amountMinor == null || item.status === "cancelled"}
+                    onClick={() => {
+                      start(async () => {
+                        const result = await billMilestoneAction(orgSlug, item.id);
+                        if (result.error) {
+                          toast.error(result.error);
+                          return;
+                        }
+                        toast.success("Charge posted: collect when paid");
+                        if (result.chargeId) {
+                          router.push(
+                            `/${orgSlug}/projects/${projectId}?tab=charges&collect=1&charge=${result.chargeId}`,
+                          );
+                        }
+                        router.refresh();
+                      });
+                    }}
+                  >
+                    Charge
+                  </DropdownMenuItem>
+                ) : null}
+
+                {showMoney && (billing === "due" || billing === "overdue") && charge ? (
+                  <DropdownMenuItem
+                    onClick={() =>
+                      router.push(
+                        `${collectBaseHref}${collectBaseHref.includes("?") ? "&" : "?"}charge=${charge.id}`,
+                      )
+                    }
+                  >
+                    Collect
+                  </DropdownMenuItem>
+                ) : null}
+
+                {showMoney && billing === "paid" && charge ? (
+                  <DropdownMenuItem
+                    onClick={() =>
+                      router.push(
+                        `/${orgSlug}/projects/${projectId}?tab=charges&charge=${charge.id}`,
+                      )
+                    }
+                  >
+                    View charge
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : null}
       </div>
     </li>
   );

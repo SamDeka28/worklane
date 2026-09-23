@@ -80,11 +80,11 @@ export function ProjectListPanel({
           <span className="hidden w-28 text-right lg:block">Work</span>
           {showMoney ? (
             <>
-              <span className="w-24 text-right sm:w-28">Due</span>
+              <span className="hidden w-24 text-right sm:block sm:w-28">Due</span>
               <span className="hidden w-24 text-right md:block sm:w-28">Left</span>
             </>
           ) : null}
-          <span className="w-[5.75rem] shrink-0 text-right">Board</span>
+          <span className="w-20 shrink-0 text-right sm:w-[5.75rem]">Board</span>
         </>
       }
       footer="Open a project for overview, or jump straight to its board."
@@ -131,12 +131,12 @@ function ProjectListRow({
   const boardHref = projectBoardHref(orgSlug, card.project.id);
 
   return (
-    <DenseRow className="gap-4 py-3.5">
+    <DenseRow className="gap-3 sm:gap-4">
       <DenseCell className="min-w-0 flex-[1.6]">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <Link
             href={`/${orgSlug}/projects/${card.project.id}`}
-            className="shrink-0"
+            className="mt-0.5 shrink-0"
           >
             <AvatarMark name={card.project.name} size="sm" />
           </Link>
@@ -152,7 +152,7 @@ function ProjectListRow({
                 {STATUS_LABEL[card.project.status]}
               </StatusChip>
             </div>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+            <p className="mt-1 truncate text-xs text-muted-foreground">
               <Link
                 href={`/${orgSlug}/clients/${card.project.clientId}`}
                 className="hover:underline"
@@ -168,25 +168,29 @@ function ProjectListRow({
                 </>
               ) : null}
             </p>
-            <p className="mt-1 truncate text-[11px] text-muted-foreground xl:hidden">
-              {showMoney && total > 0
-                ? `${moneyLabel(card.money.collectedMinor, card.project.currency)} of ${moneyLabel(card.money.totalPriceMinor, card.project.currency)}`
-                : workBits.length > 0
-                  ? workBits.join(" · ")
-                  : card.next.title}
-            </p>
+            {showMoney && total > 0 ? (
+              <p className="mt-2 text-sm font-semibold tabular-nums tracking-tight text-foreground xl:hidden">
+                {card.money.outstandingMinor > BigInt(0)
+                  ? `${moneyLabel(card.money.outstandingMinor, card.project.currency)} due`
+                  : `${moneyLabel(card.money.collectedMinor, card.project.currency)} of ${moneyLabel(card.money.totalPriceMinor, card.project.currency)}`}
+              </p>
+            ) : !showMoney && (workBits.length > 0 || card.next.title) ? (
+              <p className="mt-2 truncate text-xs text-muted-foreground xl:hidden">
+                {workBits.length > 0 ? workBits.join(" · ") : card.next.title}
+              </p>
+            ) : null}
           </div>
         </div>
       </DenseCell>
 
       {showMoney ? (
         <DenseCell width="hidden w-44 xl:block">
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 pt-0.5">
             <Meter value={progress} tone={progressTone} />
             <p className="truncate text-[11px] tabular-nums text-muted-foreground">
               {total > 0 ? (
                 <>
-                  <span className="font-medium text-foreground/80">
+                  <span className="font-semibold text-foreground">
                     {moneyLabel(card.money.collectedMinor, card.project.currency)}
                   </span>
                   {" / "}
@@ -203,7 +207,7 @@ function ProjectListRow({
       <DenseCell
         align="right"
         width="hidden w-28 lg:block"
-        className="text-xs text-muted-foreground"
+        className="pt-0.5 text-xs text-muted-foreground"
       >
         {workBits.length > 0 ? (
           <div className="space-y-0.5">
@@ -229,19 +233,19 @@ function ProjectListRow({
             ) : null}
           </div>
         ) : (
-          <p>—</p>
+          <p>-</p>
         )}
       </DenseCell>
 
       {showMoney ? (
         <DenseCell
           align="right"
-          width="w-24 sm:w-28"
-          className="text-sm font-semibold tabular-nums tracking-tight"
+          width="hidden w-24 sm:block sm:w-28"
+          className="pt-0.5 text-base font-semibold tabular-nums tracking-tight"
         >
           <p>{moneyLabel(card.money.outstandingMinor, card.project.currency)}</p>
           {card.monthDueMinor > BigInt(0) ? (
-            <p className="mt-0.5 text-[11px] font-normal text-amber-800/85">
+            <p className="mt-0.5 text-[11px] font-medium text-amber-800/85 dark:text-amber-300/90">
               {moneyLabel(card.monthDueMinor, card.project.currency)} this mo
             </p>
           ) : null}
@@ -252,19 +256,19 @@ function ProjectListRow({
         <DenseCell
           align="right"
           width="hidden w-24 md:block sm:w-28"
-          className="text-sm tabular-nums text-muted-foreground"
+          className="pt-0.5 text-sm font-medium tabular-nums text-muted-foreground"
         >
           {moneyLabel(card.money.remainingMinor, card.project.currency)}
         </DenseCell>
       ) : null}
 
-      <DenseCell width="w-[5.75rem] shrink-0" align="right">
+      <DenseCell width="w-20 shrink-0 sm:w-[5.75rem]" align="right" className="pt-0.5">
         <Link
           href={boardHref}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary/12 px-2.5 text-[13px] font-semibold text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/18 hover:ring-primary/35"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary/12 px-2 text-[13px] font-semibold text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/18 hover:ring-primary/35 sm:px-2.5"
         >
           <Columns3 className="size-3.5 opacity-90" aria-hidden />
-          Board
+          <span className="hidden sm:inline">Board</span>
         </Link>
       </DenseCell>
     </DenseRow>

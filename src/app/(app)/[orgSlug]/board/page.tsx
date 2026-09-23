@@ -49,7 +49,7 @@ export default async function BoardPage({ params }: PageProps<"/[orgSlug]/board"
 
   return (
     <WorkSurface className="min-h-0">
-      <StudioToolbar purpose="Studio board — every open card across active projects" />
+      <StudioToolbar purpose="Studio board: every open card across active projects" />
       {activeProjects.length === 0 ? (
         <EmptyState
           fill

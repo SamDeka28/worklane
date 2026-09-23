@@ -72,7 +72,7 @@ export function DocumentCreateSheets({
   };
 
   const descriptions: Record<DocumentCreateType, string> = {
-    client: "Full client record — then insert as an @ tag.",
+    client: "Full client record, then insert as an @ tag.",
     project: "Project fields plus client. Links this document automatically.",
     milestone: "Name, status, amount, due date, and description for the linked project.",
     task: "Board task with priority, due date, and optional milestone.",

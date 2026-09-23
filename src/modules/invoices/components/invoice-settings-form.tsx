@@ -164,7 +164,7 @@ export function InvoiceSettingsForm({
                 }
                 setLogoFileId(result.id);
                 setPreviewUrl(result.url ?? previewUrl);
-                toast.success("Logo uploaded — save settings");
+                toast.success("Logo uploaded. Save settings");
               });
             }}
           />

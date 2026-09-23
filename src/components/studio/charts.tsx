@@ -243,7 +243,7 @@ export function ProjectMoneyCurves({
 }
 
 function formatMajor(value: number) {
-  if (!Number.isFinite(value)) return "—";
+  if (!Number.isFinite(value)) return "-";
   return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: "USD",
@@ -298,7 +298,7 @@ export function DotStackChart({
             title={row.meta ?? row.label}
           >
             <span className="pointer-events-none absolute -top-1 z-10 -translate-y-full rounded-lg bg-card px-2 py-1 text-[10px] tabular-nums text-foreground opacity-0 shadow-lift ring-1 ring-border/50 transition-opacity group-hover:opacity-100">
-              {row.meta ?? (row.value > 0 ? String(row.value) : "—")}
+              {row.meta ?? (row.value > 0 ? String(row.value) : "-")}
             </span>
             <div className="flex flex-col-reverse items-center gap-1.5">
               {Array.from({ length: DOTS }, (_, index) => {

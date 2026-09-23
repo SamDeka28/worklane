@@ -36,7 +36,7 @@ export function CreateDocumentDialog({
   return (
     <ActionSheet
       title="New document"
-        description="Set title and context — we seed a starter template you can edit in the studio."
+        description="Set title and context: we seed a starter template you can edit in the studio."
       triggerLabel={triggerLabel}
       triggerVariant={triggerVariant}
       open={open}

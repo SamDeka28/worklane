@@ -74,13 +74,13 @@ export function ProjectDocsAttachFields({
         </ul>
       ) : (
         <p className="text-xs text-muted-foreground">
-          No unlinked Docs yet — upload a file below or create one after.
+          No unlinked Docs yet: upload a file below or create one after.
         </p>
       )}
       <Field
         label="Upload files"
         htmlFor="project_attachments_picker"
-        hint="PDF, Word, or images — SOWs and signed copies"
+        hint="PDF, Word, or images: SOWs and signed copies"
       >
         <FileAttachControl inputId="project_attachments_picker" name="attachments" />
       </Field>

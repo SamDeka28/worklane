@@ -71,10 +71,10 @@ function accessCopy(status: LoginStatus, hasEmail: boolean) {
     case "pending":
       return "Waiting for them to accept the invite.";
     case "expired":
-      return "The invite link expired — send a new one.";
+      return "The invite link expired. Send a new one.";
     default:
       return hasEmail
-        ? "No login yet — send an invite so they can sign in."
+        ? "No login yet. Send an invite so they can sign in."
         : "Add an email first, then invite them to log in.";
   }
 }
@@ -136,18 +136,18 @@ export function PartnersBalancesWorkbench({
   const selectedPayable = selected ? BigInt(selected.payableMinor) : BigInt(0);
 
   return (
-    <Workbench className="min-h-0 flex-1 flex-col gap-3 md:flex-row">
+    <Workbench className="min-h-0 flex-1 flex-col gap-3 md:min-h-0 md:flex-row md:overflow-hidden">
       <DenseListPanel
         className="md:min-w-0 md:flex-1"
         columns={
           <>
             <span className="min-w-0 flex-1">Partner</span>
             <span className="hidden w-28 text-right sm:block">Earned</span>
-            <span className="w-28 text-right">Payable</span>
-            <span className="w-20 text-right"> </span>
+            <span className="w-24 text-right sm:w-28">Payable</span>
+            <span className="hidden w-20 text-right sm:block"> </span>
           </>
         }
-        footer="Select a partner for login access and settlement. Settle from the row when payable."
+        footer="Select a partner for login access and settlement."
       >
         {balances.map((row) => {
           const partner = partnersById.get(row.partnerId);
@@ -168,16 +168,16 @@ export function PartnersBalancesWorkbench({
               <DenseCell className="min-w-0 flex-1">
                 <button
                   type="button"
-                  className="flex min-w-0 w-full items-center gap-3 text-left"
+                  className="flex min-w-0 w-full items-start gap-3 text-left"
                   onClick={() => setSelectedId(row.partnerId)}
                 >
                   <AvatarMark name={row.name} size="sm" />
                   <div className="min-w-0">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <p className="truncate text-sm font-medium">{row.name}</p>
+                      <p className="truncate text-sm font-semibold tracking-tight">{row.name}</p>
                       {statusChip(status)}
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
                       {partner?.email ?? "No email"}
                       <span className="capitalize"> · {row.kind}</span>
                     </p>
@@ -187,14 +187,18 @@ export function PartnersBalancesWorkbench({
               <DenseCell
                 align="right"
                 width="hidden w-28 sm:block"
-                className="text-sm text-muted-foreground"
+                className="pt-0.5 text-sm font-medium tabular-nums text-muted-foreground"
               >
                 {moneyLabel(BigInt(row.earnedMinor), row.currency)}
               </DenseCell>
-              <DenseCell align="right" width="w-28" className="text-sm font-medium">
+              <DenseCell
+                align="right"
+                width="w-24 sm:w-28"
+                className="pt-0.5 text-base font-semibold tabular-nums tracking-tight"
+              >
                 {moneyLabel(payable, row.currency)}
               </DenseCell>
-              <DenseCell align="right" width="w-20">
+              <DenseCell align="right" width="hidden w-20 sm:block">
                 <div onClick={(event) => event.stopPropagation()}>
                   {canWrite && payable > BigInt(0) ? (
                     <RecordSettlementDialog
@@ -213,7 +217,7 @@ export function PartnersBalancesWorkbench({
                       triggerAriaLabel={`Settle ${partner?.name ?? "partner"}`}
                     />
                   ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <span className="text-xs text-muted-foreground">-</span>
                   )}
                 </div>
               </DenseCell>
@@ -222,7 +226,7 @@ export function PartnersBalancesWorkbench({
         })}
       </DenseListPanel>
 
-      <SoftCard className="flex w-full shrink-0 flex-col overflow-hidden p-0 md:w-[22rem]">
+      <SoftCard className="flex w-full flex-col overflow-hidden p-0 md:w-[22rem] md:shrink-0">
         {selectedPartner && selected ? (
           <>
             <div className="border-b border-border/40 px-5 pt-5 pb-4">

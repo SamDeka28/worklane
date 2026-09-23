@@ -114,8 +114,8 @@ export default async function DocumentDetailPage({
           {version.snapshot ? (
             <p className="mt-4 text-xs text-muted-foreground">
               Frozen {String(version.snapshot.frozenAt)} · client{" "}
-              {String(version.snapshot.clientName ?? "—")} · project{" "}
-              {String(version.snapshot.projectName ?? "—")}
+              {String(version.snapshot.clientName ?? "-")} · project{" "}
+              {String(version.snapshot.projectName ?? "-")}
             </p>
           ) : null}
         </div>

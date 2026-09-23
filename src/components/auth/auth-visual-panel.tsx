@@ -14,7 +14,7 @@ const SLIDES = [
   },
   {
     title: "Studio Board across every active project.",
-    body: "Open cards roll up into one kanban — priority, kind, and due date stay with the work.",
+    body: "Open cards roll up into one kanban: priority, kind, and due date stay with the work.",
   },
   {
     title: "Money that stays attached to delivery.",

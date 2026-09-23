@@ -49,7 +49,7 @@ const JOURNEY_STEPS = [
   {
     key: "deliver",
     title: "Deliver",
-    body: "Run projects on the board — milestones, work, and documents in one lane.",
+    body: "Run projects on the board: milestones, work, and documents in one lane.",
     icon: FolderKanban,
   },
   {
@@ -224,7 +224,7 @@ export function JoinedStudioModal({
                 <>
                   You&apos;re in as{" "}
                   <span className="capitalize text-foreground">{role}</span>. A
-                  quick tour of the studio — then you can start where you have
+                  quick tour of the studio: then you can start where you have
                   access.
                 </>
               )}
@@ -246,7 +246,7 @@ export function JoinedStudioModal({
               </p>
               <p className="mt-2 text-[13px] leading-5 text-muted-foreground">
                 This is your studio home. Use the sidebar to move between Sell,
-                Deliver, and Money — only what you can access appears there.
+                Deliver, and Money: only what you can access appears there.
               </p>
               <ul className="mt-4 space-y-2 text-[13px] text-muted-foreground">
                 <li className="flex gap-2">

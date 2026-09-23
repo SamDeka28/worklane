@@ -648,7 +648,7 @@ export function MilestoneForm({
             entityType="project"
             entityId={projectId}
             placeholder="Context for this milestone…"
-            hint="Add checklist deliverables after create — each can become a task"
+            hint="Add checklist deliverables after create: each can become a task"
             minHeightClassName="min-h-28"
           />
           {!allowsMilestoneBilling(billingMode) ? (
@@ -696,7 +696,7 @@ export function BillMilestoneButton({
             toast.error(result.error);
             return;
           }
-          toast.success("Charge posted — collect when paid");
+          toast.success("Charge posted: collect when paid");
           if (result.chargeId && (projectId || result.projectId)) {
             router.push(
               `/${orgSlug}/projects/${projectId ?? result.projectId}?tab=charges&collect=1&charge=${result.chargeId}`,

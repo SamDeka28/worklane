@@ -297,7 +297,7 @@ function PaymentFields({
             return;
           }
           if (result.unallocatedMinor && result.unallocatedMinor !== "0") {
-            toast.success("Collected — leftover is credit");
+            toast.success("Collected: leftover is credit");
           } else {
             toast.success("Collected");
           }
@@ -460,7 +460,7 @@ export function CollectComposer({
                   return;
                 }
                 if (result.unallocatedMinor && result.unallocatedMinor !== "0") {
-                  toast.success("Recorded — leftover is payment not applied");
+                  toast.success("Recorded: leftover is payment not applied");
                 } else {
                   toast.success("Payment recorded");
                 }

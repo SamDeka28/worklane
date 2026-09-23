@@ -109,9 +109,9 @@ export default async function DocumentsPage({
             columns={
               <>
                 <span className="min-w-0 flex-1">Document</span>
-                <span className="w-24 text-right">Kind</span>
-                <span className="w-24 text-right">Status</span>
-                <span className="w-28 text-right">Updated</span>
+                <span className="hidden w-24 text-right sm:block">Kind</span>
+                <span className="hidden w-24 text-right sm:block">Status</span>
+                <span className="hidden w-28 text-right md:block">Updated</span>
               </>
             }
             footer="Open a document to draft. Accept or sign freezes a permanent copy."
@@ -131,23 +131,34 @@ export default async function DocumentsPage({
                       <p className="mt-0.5 truncate text-xs text-muted-foreground">
                         {hierarchy || "No client linked"}
                       </p>
+                      <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] capitalize text-muted-foreground sm:hidden">
+                        <span>{doc.kind}</span>
+                        <span aria-hidden>·</span>
+                        <span>{doc.status}</span>
+                        <span aria-hidden>·</span>
+                        <span>{new Date(doc.updatedAt).toLocaleDateString()}</span>
+                      </p>
                     </Link>
                   </DenseCell>
                   <DenseCell
                     align="right"
-                    width="w-24"
+                    width="hidden w-24 sm:block"
                     className="text-sm capitalize text-muted-foreground"
                   >
                     {doc.kind}
                   </DenseCell>
                   <DenseCell
                     align="right"
-                    width="w-24"
+                    width="hidden w-24 sm:block"
                     className="text-sm capitalize text-muted-foreground"
                   >
                     {doc.status}
                   </DenseCell>
-                  <DenseCell align="right" width="w-28" className="text-sm text-muted-foreground">
+                  <DenseCell
+                    align="right"
+                    width="hidden w-28 md:block"
+                    className="text-sm text-muted-foreground"
+                  >
                     {new Date(doc.updatedAt).toLocaleDateString()}
                   </DenseCell>
                 </DenseRow>

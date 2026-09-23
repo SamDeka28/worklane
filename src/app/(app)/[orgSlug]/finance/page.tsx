@@ -380,7 +380,7 @@ export default async function FinancePage({
   const ledgerHeroLabel = hasOverdue ? "Past due" : "Clients owe";
   const ledgerHeroValue = moneyLabel(hasOverdue ? overdueMinor : dueMinor, currency);
   const ledgerHeroHint = hasOverdue
-    ? "Past due — record payment first"
+    ? "Past due. Record payment first"
     : "Open charges waiting for payment";
 
   const ledgerDoNext = (() => {
@@ -418,7 +418,7 @@ export default async function FinancePage({
       return (
         <NextStepCard
           title={`Apply leftover · ${moneyLabel(finance.snapshot.unallocatedMinor, currency)}`}
-          body="Payment not applied yet — open Money in or apply it on Collect."
+          body="Payment not applied yet. Open Money in or apply it on Collect."
           action={
             <Button
               size="sm"
@@ -435,7 +435,7 @@ export default async function FinancePage({
       return (
         <NextStepCard
           title={`Bill next · ${expectedBillings.length} milestones`}
-          body="Nothing to collect — turn milestones into charges on To bill."
+          body="Nothing to collect. Turn milestones into charges on To bill."
           action={
             <Button
               size="sm"
@@ -457,7 +457,7 @@ export default async function FinancePage({
       return (
         <NextStepCard
           title={`Settle partners · ${moneyLabel(totalPayable, currencyForPay)}`}
-          body="Clients are caught up — pay out partner shares below."
+          body="Clients are caught up. Pay out partner shares below."
           action={
             <Button size="sm" nativeButton={false} render={<Link href="#partner-settle" />}>
               Settle
@@ -473,7 +473,7 @@ export default async function FinancePage({
     finance.snapshot.unallocatedMinor > BigInt(0) ? (
       <NextStepCard
         title={`Apply leftover · ${moneyLabel(finance.snapshot.unallocatedMinor, currency)}`}
-        body="Payment not applied — assign it against open charges on Collect."
+        body="Payment not applied. Assign it against open charges on Collect."
         action={
           <Button size="sm" nativeButton={false} render={<Link href={`/${orgSlug}/finance`} />}>
             Collect
@@ -907,7 +907,7 @@ export default async function FinancePage({
                 {expectedBillings.length} milestones
               </p>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto">
+            <div className="min-h-0 flex-1 overflow-x-auto">
               {expectedBillings.length === 0 ? (
                 <EmptyState
                   fill
@@ -917,21 +917,21 @@ export default async function FinancePage({
                   actionLabel={JOURNEY.finance.emptyUpcomingCta}
                 />
               ) : (
-                <table className="w-full min-w-[40rem] border-collapse text-sm">
+                <table className="w-full min-w-[44rem] border-collapse text-sm">
                   <thead className="sticky top-0 z-10 bg-card">
                     <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-                      <th className="px-4 py-3.5 font-semibold">Due</th>
-                      <th className="px-4 py-3.5 font-semibold">Client</th>
-                      <th className="px-4 py-3.5 font-semibold">Project</th>
-                      <th className="px-4 py-3.5 font-semibold">Milestone</th>
-                      <th className="px-4 py-3.5 text-right font-semibold">Expected</th>
-                      <th className="px-4 py-3.5 text-right font-semibold"> </th>
+                      <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Due</th>
+                      <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Client</th>
+                      <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Project</th>
+                      <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Milestone</th>
+                      <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Expected</th>
+                      <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5"> </th>
                     </tr>
                   </thead>
                   <tbody>
                     {expectedBillings.map((row) => (
                       <tr key={row.milestoneId} className="border-b border-border/15">
-                        <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
+                        <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
                           {formatDay(row.dueOn)}
                           {inMonth(row.dueOn, upcomingMonth) ? (
                             <span className="ml-2 text-[10px] font-medium text-sky-700 dark:text-sky-300">
@@ -939,7 +939,7 @@ export default async function FinancePage({
                             </span>
                           ) : null}
                         </td>
-                        <td className="px-4 py-4 text-muted-foreground">
+                        <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
                           <Link
                             href={`/${orgSlug}/clients/${row.clientId}`}
                             className="hover:underline"
@@ -947,7 +947,7 @@ export default async function FinancePage({
                             {row.clientName}
                           </Link>
                         </td>
-                        <td className="px-4 py-4 text-muted-foreground">
+                        <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
                           <Link
                             href={`/${orgSlug}/projects/${row.projectId}`}
                             className="hover:underline"
@@ -955,13 +955,13 @@ export default async function FinancePage({
                             {row.projectName}
                           </Link>
                         </td>
-                        <td className="max-w-[14rem] truncate px-4 py-4 text-muted-foreground">
+                        <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
                           {row.name}
                         </td>
-                        <td className="px-4 py-4 text-right text-base font-semibold tabular-nums">
+                        <td className="whitespace-nowrap px-4 py-4 text-right text-base font-semibold tabular-nums tracking-tight sm:px-5 sm:py-5">
                           {moneyLabel(row.amountMinor, row.currency)}
                         </td>
-                        <td className="px-4 py-4 text-right">
+                        <td className="whitespace-nowrap px-4 py-4 text-right sm:px-5 sm:py-5">
                           <Button
                             size="sm"
                             variant="outline"
@@ -1057,7 +1057,7 @@ export default async function FinancePage({
                     Ready to bill
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    Unbilled milestones — Bill posts them to Collect
+                    Unbilled milestones: Bill posts them to Collect
                   </p>
                 </div>
                 <p className="font-heading text-lg font-semibold tabular-nums tracking-tight">

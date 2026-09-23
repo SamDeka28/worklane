@@ -52,13 +52,13 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
             key={row.partnerId}
             className={cn(
               "overflow-hidden rounded-[1.5rem] bg-card/90 shadow-soft ring-1 transition-[box-shadow,ring-color]",
-              open ? "ring-sky-200/80" : "ring-border/30",
+              open ? "ring-emerald-500/35" : "ring-border/30",
             )}
           >
             <button
               type="button"
               className={cn(
-                "flex w-full flex-col gap-4 p-4 text-left sm:flex-row sm:items-center sm:gap-5 sm:px-5 sm:py-4",
+                "flex w-full flex-col gap-3.5 p-4 text-left sm:flex-row sm:items-start sm:gap-5 sm:px-5 sm:py-5",
                 canExpand && "hover:bg-muted/20",
                 !canExpand && "cursor-default",
               )}
@@ -70,12 +70,12 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
             >
               <div className="flex min-w-0 flex-1 items-start gap-3">
                 <AvatarMark name={row.name} size="md" />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-heading text-base font-semibold tracking-tight">
                       {row.name}
                     </p>
-                    <span className="rounded-lg bg-muted/80 px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                    <span className="rounded-lg bg-muted/80 px-2 py-0.5 text-xs font-medium text-muted-foreground">
                       {row.shareLabel}
                     </span>
                     {canExpand ? (
@@ -88,13 +88,13 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
                     ) : null}
                   </div>
                   {row.effectiveLabel ? (
-                    <p className="mt-0.5 text-xs text-muted-foreground">{row.effectiveLabel}</p>
+                    <p className="text-xs text-muted-foreground">{row.effectiveLabel}</p>
                   ) : null}
                   {progress != null ? (
-                    <div className="mt-2.5 max-w-xs">
+                    <div className="max-w-xs pt-1">
                       <div className="h-1.5 overflow-hidden rounded-full bg-muted/80">
                         <div
-                          className="h-full rounded-full bg-sky-400/90 transition-[width] duration-300"
+                          className="h-full rounded-full bg-emerald-500 transition-[width] duration-300 dark:bg-emerald-400"
                           style={{ width: `${Math.max(progress * 100, progress > 0 ? 4 : 0)}%` }}
                         />
                       </div>
@@ -106,20 +106,20 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3 sm:w-[22rem] sm:shrink-0">
+              <div className="grid w-full grid-cols-3 gap-2 border-t border-border/25 pt-3 sm:w-[22rem] sm:shrink-0 sm:gap-3 sm:border-0 sm:pt-0">
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
                     Target
                   </p>
-                  <p className="mt-0.5 truncate text-sm tabular-nums text-muted-foreground">
+                  <p className="mt-1 truncate text-sm tabular-nums text-muted-foreground">
                     {row.targetLabel}
                   </p>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[10px] font-semibold tracking-[0.08em] text-sky-800/70 uppercase">
+                  <p className="text-[10px] font-semibold tracking-[0.08em] text-emerald-700 uppercase dark:text-emerald-300">
                     Earned
                   </p>
-                  <p className="mt-0.5 truncate font-heading text-lg font-semibold tracking-tight tabular-nums text-sky-950">
+                  <p className="mt-1 truncate font-heading text-base font-semibold tracking-tight tabular-nums text-emerald-800 sm:text-lg dark:text-emerald-200">
                     {row.earnedLabel}
                   </p>
                 </div>
@@ -127,7 +127,7 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
                   <p className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
                     Still
                   </p>
-                  <p className="mt-0.5 truncate text-sm font-medium tabular-nums">
+                  <p className="mt-1 truncate text-sm font-medium tabular-nums text-foreground">
                     {row.stillLabel}
                   </p>
                 </div>
@@ -147,7 +147,7 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
             </button>
 
             {open && canExpand ? (
-              <div className="border-t border-border/30 bg-linear-to-br from-sky-50/50 via-white to-emerald-50/30 px-4 py-3 sm:px-5">
+              <div className="border-t border-border/30 bg-muted/30 px-4 py-3 sm:px-5">
                 <div className="mb-2.5 flex items-center justify-between gap-2">
                   <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
                     From charges
@@ -161,7 +161,7 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
                   {row.charges.map((charge) => (
                     <li
                       key={`${row.partnerId}-${charge.chargeId}-${charge.dateLabel}-${charge.amountLabel}`}
-                      className="flex items-center justify-between gap-3 rounded-2xl bg-white/80 px-3 py-2.5 ring-1 ring-border/25"
+                      className="flex items-center justify-between gap-3 rounded-2xl bg-card px-3 py-2.5 ring-1 ring-border/25"
                     >
                       <div className="min-w-0">
                         {charge.href ? (
@@ -179,7 +179,7 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
                           {charge.dateLabel}
                         </p>
                       </div>
-                      <span className="shrink-0 font-heading text-base font-semibold tabular-nums tracking-tight">
+                      <span className="shrink-0 font-heading text-base font-semibold tabular-nums tracking-tight text-emerald-800 dark:text-emerald-200">
                         {charge.amountLabel}
                       </span>
                     </li>

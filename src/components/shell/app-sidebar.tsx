@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useOptimistic, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import {
   ChevronsUpDown,
   Columns3,
@@ -10,12 +10,14 @@ import {
   FolderKanban,
   Handshake,
   LayoutDashboard,
+  Plus,
   Target,
   UserRound,
   Users,
   Wallet,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { CreateOrganizationDialog } from "@/components/shell/create-organization-dialog";
 import { AvatarMark } from "@/components/studio/chrome";
 import {
   DropdownMenu,
@@ -23,6 +25,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -83,11 +86,13 @@ function NavLink({
   label,
   active,
   Icon,
+  onNavigate,
 }: {
   href: string;
   label: string;
   active: boolean;
   Icon: typeof LayoutDashboard;
+  onNavigate?: () => void;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -104,9 +109,11 @@ function NavLink({
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         if (optimisticActive) {
           event.preventDefault();
+          onNavigate?.();
           return;
         }
         event.preventDefault();
+        onNavigate?.();
         start(() => {
           setOptimisticActive(true);
           router.push(href);
@@ -135,6 +142,7 @@ export function AppSidebar({
   role,
   user,
   expanded = false,
+  onNavigate,
   className,
 }: {
   org: Organization;
@@ -143,6 +151,8 @@ export function AppSidebar({
   role: OrgRole;
   user: { email: string | null; displayName: string | null; avatarUrl?: string | null };
   expanded?: boolean;
+  /** Called when a nav item is chosen (e.g. close mobile sheet). */
+  onNavigate?: () => void;
   className?: string;
 }) {
   const pathname = usePathname();
@@ -150,11 +160,16 @@ export function AppSidebar({
   const base = `/${org.slug}`;
   const display =
     user.displayName?.trim() || user.email?.split("@")[0] || "You";
+  const [createOrgOpen, setCreateOrgOpen] = useState(false);
 
   function switchTo(slug: string) {
-    if (slug === org.slug) return;
+    if (slug === org.slug) {
+      onNavigate?.();
+      return;
+    }
     document.cookie = `worklane_last_org=${encodeURIComponent(slug)};path=/;max-age=31536000;samesite=lax`;
     const next = switchOrgPath(pathname, org.slug, slug);
+    onNavigate?.();
     router.push(next);
     router.refresh();
   }
@@ -163,7 +178,8 @@ export function AppSidebar({
     <aside
       data-expanded={expanded ? "true" : undefined}
       className={cn(
-        "group/rail hidden h-full min-h-0 w-[4.75rem] shrink-0 flex-col self-stretch lane-panel py-3 lg:flex xl:w-56",
+        "group/rail h-full min-h-0 w-[4.75rem] shrink-0 flex-col self-stretch lane-panel py-3 xl:w-56",
+        expanded ? "flex w-full" : "hidden lg:flex",
         className,
       )}
     >
@@ -178,13 +194,11 @@ export function AppSidebar({
                 {org.name}
               </span>
             </span>
-            {orgs.length > 0 ? (
-              <ChevronsUpDown className="hidden size-3.5 shrink-0 text-muted-foreground group-data-[expanded=true]/rail:inline xl:inline" />
-            ) : null}
+            <ChevronsUpDown className="hidden size-3.5 shrink-0 text-muted-foreground group-data-[expanded=true]/rail:inline xl:inline" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuContent align="start" className="min-w-56 p-2">
             <DropdownMenuGroup>
-              <DropdownMenuLabel>Studios</DropdownMenuLabel>
+              <DropdownMenuLabel className="px-2.5 py-2">Studios</DropdownMenuLabel>
               {(orgs.length > 0 ? orgs : [org]).map((item) => (
                 <DropdownMenuItem
                   key={item.id}
@@ -195,8 +209,22 @@ export function AppSidebar({
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                // Defer so the menu can close before the dialog opens.
+                queueMicrotask(() => setCreateOrgOpen(true));
+              }}
+            >
+              <Plus className="size-3.5" />
+              Add organization
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <CreateOrganizationDialog
+          open={createOrgOpen}
+          onOpenChange={setCreateOrgOpen}
+        />
       </div>
       <nav className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-2 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
         {SECTIONS.map((section) => {
@@ -224,6 +252,7 @@ export function AppSidebar({
                     label={item.label}
                     active={active}
                     Icon={item.icon}
+                    onNavigate={onNavigate}
                   />
                 );
               })}
@@ -249,12 +278,12 @@ export function AppSidebar({
             </span>
             <ChevronsUpDown className="hidden size-3.5 shrink-0 text-muted-foreground group-data-[expanded=true]/rail:inline xl:inline" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" side="top" className="w-56">
+          <DropdownMenuContent align="end" side="top" className="min-w-52 p-2" sideOffset={8}>
             <DropdownMenuGroup>
-              <DropdownMenuLabel className="font-normal">
+              <DropdownMenuLabel className="px-2.5 py-2.5 font-normal">
                 <p className="truncate text-sm font-medium">{display}</p>
                 {user.email ? (
-                  <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</p>
                 ) : null}
               </DropdownMenuLabel>
               <DropdownMenuItem

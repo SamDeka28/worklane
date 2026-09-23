@@ -259,8 +259,8 @@ export default async function PartnersPage({
               />
             ) : (
               <SoftCard className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <div className="min-h-0 flex-1 overflow-auto">
-                  <table className="w-full border-collapse text-sm">
+                <div className="min-h-0 flex-1 overflow-x-auto">
+                  <table className="w-full min-w-[32rem] border-collapse text-sm">
                     <thead className="sticky top-0 z-10 bg-card">
                       <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
                         <th className="px-5 py-3.5 font-semibold">Partner</th>
@@ -316,8 +316,8 @@ export default async function PartnersPage({
             />
           ) : (
             <SoftCard className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="min-h-0 flex-1 overflow-auto">
-                <table className="w-full border-collapse text-sm">
+              <div className="min-h-0 flex-1 overflow-x-auto">
+                <table className="w-full min-w-[32rem] border-collapse text-sm">
                   <thead className="sticky top-0 z-10 bg-card">
                     <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
                       <th className="px-5 py-3.5 font-semibold">Payout</th>

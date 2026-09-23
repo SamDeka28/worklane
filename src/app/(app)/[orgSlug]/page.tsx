@@ -253,7 +253,7 @@ export default async function DashboardPage({
   return (
     <WorkSurface>
       <StudioToolbar purpose={JOURNEY.home.purpose} />
-      <PageShell className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pb-6 pt-1">
+      <PageShell className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-5 pt-1 sm:gap-5 sm:px-5 sm:pb-6">
       {emptyStudio ? (
         <EmptyState
           fill
@@ -262,7 +262,7 @@ export default async function DashboardPage({
           }
           body={
             seeCrm
-              ? "Start with a lead. Win it, become a client, then deliver and collect — without retyping."
+              ? "Start with a lead. Win it, become a client, then deliver and collect without retyping."
               : "Money, delivery, and pipeline roll up here once work starts."
           }
           actionHref={
@@ -285,7 +285,7 @@ export default async function DashboardPage({
           {doNext ? (
             <NextStepCard
               title={`Do next · ${doNext.title}`}
-              body={`${doNext.subtitle} — ${doNext.why}`}
+              body={`${doNext.subtitle}. ${doNext.why}`}
               action={
                 <Button
                   size="lg"
@@ -301,7 +301,7 @@ export default async function DashboardPage({
             />
           ) : null}
           {seeMoney ? (
-            <div className="lane-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="lane-stagger grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
               <Link href={`/${orgSlug}/finance`} className="block">
                 <SoftStatCard
                   label="Outstanding"
@@ -426,7 +426,7 @@ export default async function DashboardPage({
           </div>
           ) : null}
 
-          <div className="lane-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="lane-stagger grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
             <Link href={`/${orgSlug}/clients`} className="block">
               <SoftStatCard
                 label="Clients"
@@ -578,7 +578,7 @@ export default async function DashboardPage({
                 <div>
                   <p className="text-base font-semibold tracking-tight">Lead pipeline</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Open stages — not including won or lost
+                    Open stages: not including won or lost
                   </p>
                 </div>
                 <Button

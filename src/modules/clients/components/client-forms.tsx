@@ -98,7 +98,7 @@ export function CreateClientDialog({
           label="Internal notes"
           name="notes"
           orgSlug={orgSlug}
-          placeholder="Private — never shown on the portal"
+          placeholder="Private, never shown on the portal"
         />
         <p className="text-xs text-muted-foreground">Primary contact (optional)</p>
         <Field label="Contact name" htmlFor="contact_name">
@@ -174,7 +174,7 @@ export function EditClientForm({
         orgSlug={orgSlug}
         initialDoc={notesDoc}
         initialPlain={notes}
-        placeholder="Private — never shown on the portal"
+        placeholder="Private, never shown on the portal"
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       <Button type="submit" disabled={pending} variant="outline">

@@ -101,7 +101,7 @@ export default async function SettingsPage({
             {ctx.org.modules.portal && ctx.canWrite ? (
               <FormSection
                 title="Portal"
-                hint="Hashed share links — tokens shown once"
+                hint="Hashed share links: tokens shown once"
               >
                 <CreateShareGrantForm
                   orgSlug={orgSlug}

@@ -1,8 +1,8 @@
-/** Journey copy — purpose lines, empties, and CTAs that teach the Lead→Client→Project→Money loop. */
+/** Journey copy: purpose lines, empties, and CTAs that teach the Lead→Client→Project→Money loop. */
 
 export const JOURNEY = {
   home: {
-    purpose: "Studio health — money, delivery, and pipeline",
+    purpose: "Studio health: money, delivery, and pipeline",
   },
   leads: {
     purpose: "Opportunities before they become clients",
@@ -18,7 +18,7 @@ export const JOURNEY = {
     emptyFromLeadHref: (orgSlug: string) => `/${orgSlug}/crm`,
   },
   projects: {
-    purpose: "Active delivery — log work, bill milestones, run the board",
+    purpose: "Active delivery: log work, bill milestones, run the board",
     primaryCta: "New project",
     emptyTitle: "Start a project",
     emptyBody: "Projects hang off a client. Log hours, bill milestones, then collect in Finance.",
@@ -32,23 +32,23 @@ export const JOURNEY = {
     emptyBody: "Draft freely. Accept or sign freezes a permanent copy.",
   },
   finance: {
-    purpose: "Get paid — bill work, record what clients send, then see partner shares",
+    purpose: "Get paid: bill work, record what clients send, then see partner shares",
     primaryCta: "Collect",
     emptyCollectTitle: "Nothing to collect",
     emptyCollectBody: "Bill a milestone or add a charge, then record payment here.",
     emptyUpcomingTitle: "Nothing ready to bill",
     emptyUpcomingBody:
-      "Add due dates and amounts on unbilled milestones — Bill posts a charge to Collect.",
+      "Add due dates and amounts on unbilled milestones. Bill posts a charge to Collect.",
     emptyUpcomingCta: "Open projects",
     emptyReceiptsTitle: "No money in yet",
-    emptyReceiptsBody: "Record a payment on Collect — receipts and partner shares land here.",
+    emptyReceiptsBody: "Record a payment on Collect. Receipts and partner shares land here.",
     emptyReceiptsCta: "Go to Collect",
   },
   partners: {
     purpose: "What partners earned versus settled",
     primaryCta: "Add partner",
     emptyTitle: "Add a partner",
-    emptyBody: "Splits and settlements stay internal — never on the client portal.",
+    emptyBody: "Splits and settlements stay internal, never on the client portal.",
     emptyRegisterTitle: "No partner activity this month",
     emptyRegisterBody: "Post charges with a project split, or record a settlement.",
   },

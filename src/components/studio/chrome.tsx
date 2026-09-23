@@ -102,19 +102,21 @@ export function Stat({
     <div
       className={cn(
         "h-full bg-card",
-        variant === "tile" ? "rounded-none p-5 sm:p-6" : "lane-surface px-5 py-4",
+        variant === "tile"
+          ? "rounded-2xl p-3 ring-1 ring-border/40 sm:rounded-none sm:p-5 sm:ring-0 md:p-6"
+          : "lane-surface px-3 py-2.5 sm:px-5 sm:py-4",
         variant === "strip" && "lane-surface-hover",
         className,
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+        <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase sm:text-[11px]">
           {label}
         </p>
         {badge ? (
           <span
             className={cn(
-              "rounded-lg px-2.5 py-1 text-xs font-bold tabular-nums",
+              "rounded-lg px-2 py-0.5 text-[10px] font-bold tabular-nums sm:px-2.5 sm:py-1 sm:text-xs",
               STAT_BADGE[tone],
             )}
           >
@@ -123,7 +125,7 @@ export function Stat({
         ) : icon ? (
           <span
             className={cn(
-              "flex size-7 items-center justify-center rounded-lg",
+              "flex size-6 items-center justify-center rounded-lg sm:size-7",
               STAT_BADGE[tone],
             )}
           >
@@ -133,15 +135,21 @@ export function Stat({
       </div>
       <p
         className={cn(
-          "mt-2 font-semibold tracking-tight tabular-nums text-foreground",
-          variant === "tile" ? "text-2xl" : "text-xl sm:text-2xl",
+          "mt-1 font-semibold tracking-tight tabular-nums text-foreground sm:mt-2",
+          variant === "tile"
+            ? "text-lg sm:text-2xl"
+            : "text-base sm:text-xl md:text-2xl",
         )}
       >
         {value}
       </p>
-      {hint ? <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-0.5 truncate text-[11px] text-muted-foreground sm:mt-1 sm:text-xs">
+          {hint}
+        </p>
+      ) : null}
       {width ? (
-        <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted">
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted sm:mt-3">
           <div className={cn("h-full rounded-full", STAT_BAR[tone])} style={{ width }} />
         </div>
       ) : null}
@@ -196,7 +204,7 @@ export function StudioToolbar({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center gap-4 border-b border-border/40 px-6 py-3.5",
+        "flex shrink-0 flex-col gap-3 border-b border-border/40 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5",
         className,
       )}
     >
@@ -209,7 +217,7 @@ export function StudioToolbar({
         {purpose ? (
           <p
             className={cn(
-              "truncate",
+              "line-clamp-2 sm:truncate",
               title
                 ? "text-sm text-muted-foreground"
                 : "text-sm font-medium tracking-tight text-foreground",
@@ -225,7 +233,9 @@ export function StudioToolbar({
           <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
         ) : null}
       </div>
-      {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
+      ) : null}
     </div>
   );
 }
@@ -249,28 +259,38 @@ export function EntityChrome({
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-col gap-3 border-b border-border/50 px-6 py-5",
+        "flex shrink-0 flex-col gap-3 border-b border-border/50 px-4 py-4 sm:px-6 sm:py-5",
         className,
       )}
     >
-      <div className="flex items-start gap-4">
+      <div className="flex items-start gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[1.75rem] font-bold leading-tight tracking-tight sm:text-[2rem]">
+          <div className="text-[1.5rem] font-bold leading-tight tracking-tight sm:truncate sm:text-[2rem]">
             {title}
           </div>
           {meta ? (
-            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground sm:mt-2">
               {meta}
             </div>
           ) : null}
+          {primaryAction || overflow ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2 sm:hidden">
+              {primaryAction}
+              {overflow}
+            </div>
+          ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {primaryAction}
-          {overflow}
-        </div>
+        {primaryAction || overflow ? (
+          <div className="hidden shrink-0 items-center gap-2 sm:flex">
+            {primaryAction}
+            {overflow}
+          </div>
+        ) : null}
       </div>
       {viewToggle ? (
-        <div className="flex items-center gap-2">{viewToggle}</div>
+        <div className="-mx-1 flex items-center gap-2 overflow-x-auto px-1 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {viewToggle}
+        </div>
       ) : null}
     </div>
   );
@@ -285,7 +305,7 @@ export function FilterChips({
   className?: string;
 }) {
   return (
-    <div className={cn("flex shrink-0 flex-wrap gap-2 px-6 py-3", className)}>
+    <div className={cn("flex shrink-0 flex-wrap gap-2 px-4 py-2.5 sm:px-6 sm:py-3", className)}>
       {children}
     </div>
   );
@@ -302,7 +322,7 @@ export function HubBody({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-6 py-6",
+        "flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-4 py-4 sm:gap-8 sm:px-6 sm:py-6",
         className,
       )}
     >
@@ -331,11 +351,15 @@ export function HubSection({
     return (
       <section id={id} className={cn("scroll-mt-4", className)}>
         <SoftCard className="overflow-hidden">
-          <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted/25 px-4 py-3">
+          <div className="flex flex-col gap-2 border-b border-border/50 bg-muted/25 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <h2 className="text-[12px] font-bold tracking-[0.12em] text-foreground/70 uppercase">
               {title}
             </h2>
-            {action}
+            {action ? (
+              <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:justify-end">
+                {action}
+              </div>
+            ) : null}
           </div>
           <div className="p-0">{children}</div>
         </SoftCard>
@@ -345,11 +369,15 @@ export function HubSection({
 
   return (
     <section id={id} className={cn("scroll-mt-4", className)}>
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3 flex flex-col gap-2 sm:mb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <h2 className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
           {title}
         </h2>
-        {action}
+        {action ? (
+          <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:justify-end">
+            {action}
+          </div>
+        ) : null}
       </div>
       {children}
     </section>

@@ -94,7 +94,7 @@ export function MoneyDonut({
   return (
     <div
       className={cn(
-        "flex items-center gap-4",
+        "flex flex-col items-center gap-4 sm:flex-row sm:items-center",
         showLegend ? "" : "justify-center",
         className,
       )}

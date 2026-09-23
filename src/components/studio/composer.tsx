@@ -27,10 +27,29 @@ export function ComposerBar({
   return (
     <div
       className={cn(
-        "flex items-center overflow-hidden rounded-3xl px-2",
+        "flex flex-wrap items-center overflow-hidden rounded-3xl px-2",
         prominent
-          ? "min-h-16 gap-1 bg-card py-2 shadow-soft ring-1 ring-border/40"
-          : "min-h-12 bg-muted/80 shadow-inner",
+          ? "min-h-12 gap-1 bg-card py-2 shadow-soft ring-1 ring-border/40 sm:min-h-16"
+          : "min-h-11 bg-muted/80 shadow-inner sm:min-h-12",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function PageShell({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "min-h-0 flex-1 overflow-auto px-4 pb-6 pt-4 sm:px-6 sm:pb-8 sm:pt-6",
         className,
       )}
     >
@@ -47,23 +66,9 @@ export function Workbench({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-h-0 flex-1 gap-4 overflow-hidden", className)}>
-      {children}
-    </div>
-  );
-}
-
-export function PageShell({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
     <div
       className={cn(
-        "min-h-0 flex-1 overflow-auto px-6 pb-8 pt-6",
+        "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden md:flex-row md:gap-4",
         className,
       )}
     >

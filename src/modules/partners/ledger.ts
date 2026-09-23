@@ -89,7 +89,7 @@ export function compilePoolRemainderDistribution(
 
   if (projectTotalMinor <= BigInt(0)) {
     throw new Error(
-      "Add milestone prices (or a contracted total) before setting a split — after fee there must be a distributable amount",
+      "Add milestone prices (or a contracted total) before setting a split: after fee there must be a distributable amount",
     );
   }
   if (poolAmountMinor <= BigInt(0)) {
@@ -127,7 +127,7 @@ export function compilePoolRemainderDistribution(
 
   if (remainderAmount <= BigInt(0)) {
     throw new Error(
-      "Pool uses the full project total — remove the remainder partner or lower the pool",
+      "Pool uses the full project total: remove the remainder partner or lower the pool",
     );
   }
 

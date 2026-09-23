@@ -28,6 +28,7 @@ import {
   boardCollisionDetection,
 } from "@/components/studio/board";
 import { AvatarFilterStack } from "@/components/studio/avatar-mark";
+import { MobileFilters } from "@/components/studio/mobile-filters";
 import type { MentionItem } from "@/components/editor/rich-editor";
 import { Button } from "@/components/ui/button";
 import {
@@ -372,33 +373,74 @@ export function KanbanBoard({
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col overflow-hidden", className)}>
       {orgMode ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/40 px-4 py-2.5 sm:px-5">
-          <NativeSelect
-            value={filterProject}
-            onChange={(event) => setFilterProject(event.target.value)}
-            className="h-9 w-48 rounded-xl bg-muted text-sm"
-          >
-            <option value="">All projects (by status)</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </NativeSelect>
-          <NativeSelect
-            value={filterClient}
-            onChange={(event) => setFilterClient(event.target.value)}
-            className="h-9 w-44 rounded-xl bg-muted text-sm"
-          >
-            <option value="">All clients</option>
-            {clientOptions.map((client) => (
-              <option key={client.id} value={client.id}>
-                {client.name}
-              </option>
-            ))}
-          </NativeSelect>
+        <div className="flex shrink-0 flex-col gap-2.5 border-b border-border/40 px-3 py-2.5 sm:px-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <MobileFilters
+              title="Board filters"
+              description="Narrow cards by project or client."
+              activeCount={[filterProject, filterClient].filter(Boolean).length}
+            >
+              <div className="space-y-3">
+                <NativeSelect
+                  value={filterProject}
+                  onChange={(event) => setFilterProject(event.target.value)}
+                  className="h-9 w-full rounded-xl bg-muted text-sm"
+                >
+                  <option value="">All projects (by status)</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+                <NativeSelect
+                  value={filterClient}
+                  onChange={(event) => setFilterClient(event.target.value)}
+                  className="h-9 w-full rounded-xl bg-muted text-sm"
+                >
+                  <option value="">All clients</option>
+                  {clientOptions.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+            </MobileFilters>
 
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+            <div className="hidden min-w-0 flex-1 flex-wrap items-center gap-2 md:flex">
+              <NativeSelect
+                value={filterProject}
+                onChange={(event) => setFilterProject(event.target.value)}
+                className="h-9 w-48 rounded-xl bg-muted text-sm"
+              >
+                <option value="">All projects (by status)</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                value={filterClient}
+                onChange={(event) => setFilterClient(event.target.value)}
+                className="h-9 w-44 rounded-xl bg-muted text-sm"
+              >
+                <option value="">All clients</option>
+                {clientOptions.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+
+            <p className="ml-auto text-sm font-bold tabular-nums text-muted-foreground md:hidden">
+              {filteredTasks.length}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
             {assignees.length > 0 ? (
               <AvatarFilterStack
                 people={assignees.map((member) => ({
@@ -409,6 +451,7 @@ export function KanbanBoard({
                 selectedIds={filterAssignees}
                 onToggle={toggleAssigneeFilter}
                 size="sm"
+                className="pr-1"
               />
             ) : null}
 
@@ -448,7 +491,7 @@ export function KanbanBoard({
               })}
             </div>
 
-            <p className="text-sm font-bold tabular-nums text-muted-foreground">
+            <p className="ml-auto hidden text-sm font-bold tabular-nums text-muted-foreground md:block">
               {filteredTasks.length}
             </p>
           </div>

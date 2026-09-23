@@ -59,9 +59,9 @@ export function InvoicePdfDocument({
             </View>
             <View style={{ flex: 1 }}>
               <Text style={minimal.label}>Issued</Text>
-              <Text style={minimal.value}>{invoice.issuedOn ?? "—"}</Text>
+              <Text style={minimal.value}>{invoice.issuedOn ?? "-"}</Text>
               <Text style={[minimal.label, { marginTop: 8 }]}>Due</Text>
-              <Text style={minimal.value}>{invoice.dueOn ?? "—"}</Text>
+              <Text style={minimal.value}>{invoice.dueOn ?? "-"}</Text>
             </View>
           </View>
           <View style={minimal.table}>
@@ -118,8 +118,8 @@ export function InvoicePdfDocument({
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={bold.label}>Dates</Text>
-                <Text style={bold.value}>Issued {invoice.issuedOn ?? "—"}</Text>
-                <Text style={bold.value}>Due {invoice.dueOn ?? "—"}</Text>
+                <Text style={bold.value}>Issued {invoice.issuedOn ?? "-"}</Text>
+                <Text style={bold.value}>Due {invoice.dueOn ?? "-"}</Text>
               </View>
             </View>
             <View style={bold.table}>
@@ -169,8 +169,8 @@ export function InvoicePdfDocument({
           </View>
           <View style={{ alignItems: "flex-end" }}>
             <Text style={classic.number}>{invoice.number}</Text>
-            <Text style={classic.meta}>Issued {invoice.issuedOn ?? "—"}</Text>
-            <Text style={classic.meta}>Due {invoice.dueOn ?? "—"}</Text>
+            <Text style={classic.meta}>Issued {invoice.issuedOn ?? "-"}</Text>
+            <Text style={classic.meta}>Due {invoice.dueOn ?? "-"}</Text>
           </View>
         </View>
         <View style={classic.parties}>

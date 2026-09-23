@@ -151,14 +151,14 @@ export default async function ClientsPage({
                     <>
                       <span className="min-w-0 flex-1">Client</span>
                       <span className="hidden w-24 text-right sm:block">Projects</span>
-                      <span className="w-28 text-right">Due</span>
-                      <span className="w-28 text-right">Next</span>
+                      <span className="hidden w-28 text-right sm:block">Due</span>
+                      <span className="w-20 text-right sm:w-28">Next</span>
                     </>
                   ) : (
                     <>
                       <span className="min-w-0 flex-1">Client</span>
                       <span className="hidden w-24 text-right sm:block">Projects</span>
-                      <span className="w-28 text-right">Next</span>
+                      <span className="w-20 text-right sm:w-28">Next</span>
                     </>
                   )
                 }
@@ -166,7 +166,7 @@ export default async function ClientsPage({
                   seeMoney
                     ? owingCount
                       ? "Collect from a row, or open a client to see projects and contacts."
-                      : "Everyone is settled — start a project or post the next charge."
+                      : "Everyone is settled: start a project or post the next charge."
                     : "Open a client to see projects and contacts."
                 }
               >
@@ -178,7 +178,7 @@ export default async function ClientsPage({
                       <DenseCell className="min-w-0 flex-1">
                         <Link
                           href={`/${orgSlug}/clients/${client.id}`}
-                          className="flex min-w-0 items-center gap-3"
+                          className="flex min-w-0 items-start gap-3"
                         >
                           <AvatarMark name={client.name} size="sm" />
                           <div className="min-w-0">
@@ -192,7 +192,9 @@ export default async function ClientsPage({
                             </span>
                             {seeMoney ? (
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {owing ? "Open on ledger" : "Nothing outstanding"}
+                                {owing
+                                  ? `${moneyLabel(snapshot.outstandingMinor, client.currency)} open`
+                                  : "Nothing outstanding"}
                               </p>
                             ) : (
                               <p className="mt-0.5 truncate text-xs text-muted-foreground capitalize">
@@ -210,11 +212,15 @@ export default async function ClientsPage({
                         {projects}
                       </DenseCell>
                       {seeMoney ? (
-                        <DenseCell align="right" width="w-28" className="text-sm font-medium">
+                        <DenseCell
+                          align="right"
+                          width="hidden w-28 sm:block"
+                          className="text-sm font-medium"
+                        >
                           {moneyLabel(snapshot.outstandingMinor, client.currency)}
                         </DenseCell>
                       ) : null}
-                      <DenseCell align="right" width="w-28" className="text-xs">
+                      <DenseCell align="right" width="w-20 sm:w-28" className="text-xs">
                         <div className="flex flex-col items-end gap-1">
                           <Link
                             href={`/${orgSlug}/projects?client=${client.id}`}
@@ -298,7 +304,7 @@ export default async function ClientsPage({
                             remaining={0}
                             collectedLabel="Collected"
                             dueLabel="Due"
-                            remainingLabel="—"
+                            remainingLabel="-"
                             centerValue={moneyLabel(snapshot.outstandingMinor, client.currency)}
                             centerLabel="Due"
                           />

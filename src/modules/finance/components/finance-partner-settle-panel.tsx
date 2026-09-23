@@ -20,6 +20,25 @@ function settleAmount(amountMinor: bigint, currency: FinancePartnerPayable["curr
   return formatMoney({ amountMinor, currency }).replace(/[^\d.]/g, "");
 }
 
+function MoneyMeta({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span className="text-[10px] font-semibold tracking-[0.1em] text-muted-foreground uppercase">
+        {label}
+      </span>
+      <span className="text-xs font-semibold tabular-nums tracking-tight text-foreground/85">
+        {value}
+      </span>
+    </span>
+  );
+}
+
 export function FinancePartnerSettlePanel({
   orgSlug,
   partners,
@@ -66,15 +85,15 @@ export function FinancePartnerSettlePanel({
   return (
     <div id="partner-settle" className="scroll-mt-4">
       <SoftCard>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/20 px-5 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/20 px-4 py-4 sm:px-5">
           <div className="min-w-0">
             <p className="font-heading text-base font-semibold tracking-tight">
               Partner shares
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {month
-                ? "Earned this month · settle what you still owe"
-                : "Client money is collected — settle partner shares from here"}
+                ? "Earned this month. Settle what you still owe."
+                : "Client money is collected. Settle partner shares from here."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -97,28 +116,28 @@ export function FinancePartnerSettlePanel({
         </div>
 
         {month ? (
-          <div className="grid divide-y divide-border/20 border-b border-border/20 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-            <div className="px-5 py-4">
-              <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
-                Partners earned
+          <div className="grid grid-cols-3 divide-x divide-border/20 border-b border-border/20">
+            <div className="px-3 py-3 sm:px-5 sm:py-4">
+              <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase sm:text-[11px]">
+                Earned
               </p>
-              <p className="mt-2 font-heading text-xl leading-none font-semibold tabular-nums tracking-tight">
+              <p className="mt-1.5 font-heading text-sm leading-none font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-xl">
                 {moneyLabel(month.earnedMinor, month.currency)}
               </p>
             </div>
-            <div className="px-5 py-4">
-              <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+            <div className="px-3 py-3 sm:px-5 sm:py-4">
+              <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase sm:text-[11px]">
                 Settled
               </p>
-              <p className="mt-2 font-heading text-xl leading-none font-semibold tabular-nums tracking-tight">
+              <p className="mt-1.5 font-heading text-sm leading-none font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-xl">
                 {moneyLabel(month.settledMinor, month.currency)}
               </p>
             </div>
-            <div className="px-5 py-4">
-              <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
-                Still to pay
+            <div className="px-3 py-3 sm:px-5 sm:py-4">
+              <p className="text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase sm:text-[11px]">
+                To pay
               </p>
-              <p className="mt-2 font-heading text-xl leading-none font-semibold tabular-nums tracking-tight">
+              <p className="mt-1.5 font-heading text-sm leading-none font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-xl">
                 {moneyLabel(month.payableMinor, month.currency)}
               </p>
             </div>
@@ -126,7 +145,7 @@ export function FinancePartnerSettlePanel({
         ) : null}
 
         {payables.length === 0 ? (
-          <p className="px-5 py-6 text-sm text-muted-foreground">
+          <p className="px-4 py-6 text-sm text-muted-foreground sm:px-5">
             No partner balances waiting to settle.
           </p>
         ) : (
@@ -134,35 +153,62 @@ export function FinancePartnerSettlePanel({
             {payables.map((row) => (
               <li
                 key={row.partnerId}
-                className="grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 px-5 py-4"
+                className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-3 px-4 py-4 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:gap-4 sm:px-5 sm:py-5"
               >
                 <AvatarMark name={row.partnerName} size="sm" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{row.partnerName}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    Earned {moneyLabel(row.earnedMinor, row.currency)} · settled{" "}
-                    {moneyLabel(row.settledMinor, row.currency)}
+                <div className="min-w-0 space-y-2">
+                  <p className="truncate text-sm font-semibold tracking-tight">
+                    {row.partnerName}
                   </p>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1.5">
+                    <MoneyMeta
+                      label="Earned"
+                      value={moneyLabel(row.earnedMinor, row.currency)}
+                    />
+                    <MoneyMeta
+                      label="Settled"
+                      value={moneyLabel(row.settledMinor, row.currency)}
+                    />
+                  </div>
+                  {canWrite ? (
+                    <div className="pt-0.5 sm:hidden">
+                      <RecordSettlementDialog
+                        orgSlug={orgSlug}
+                        partners={partners}
+                        defaultCurrency={row.currency}
+                        defaultPartnerId={row.partnerId}
+                        defaultAmount={settleAmount(row.payableMinor, row.currency)}
+                        triggerLabel="Settle"
+                        triggerVariant="default"
+                        triggerSize="sm"
+                        triggerIcon={null}
+                        triggerIconOnly={false}
+                        triggerAriaLabel={`Settle ${row.partnerName}`}
+                      />
+                    </div>
+                  ) : null}
                 </div>
-                <p className="text-sm font-semibold tabular-nums">
+                <p className="pt-0.5 text-base font-semibold tabular-nums tracking-tight">
                   {moneyLabel(row.payableMinor, row.currency)}
                 </p>
                 {canWrite ? (
-                  <RecordSettlementDialog
-                    orgSlug={orgSlug}
-                    partners={partners}
-                    defaultCurrency={row.currency}
-                    defaultPartnerId={row.partnerId}
-                    defaultAmount={settleAmount(row.payableMinor, row.currency)}
-                    triggerLabel="Settle"
-                    triggerVariant="default"
-                    triggerSize="sm"
-                    triggerIcon={null}
-                    triggerIconOnly={false}
-                    triggerAriaLabel={`Settle ${row.partnerName}`}
-                  />
+                  <div className="hidden pt-0.5 sm:block">
+                    <RecordSettlementDialog
+                      orgSlug={orgSlug}
+                      partners={partners}
+                      defaultCurrency={row.currency}
+                      defaultPartnerId={row.partnerId}
+                      defaultAmount={settleAmount(row.payableMinor, row.currency)}
+                      triggerLabel="Settle"
+                      triggerVariant="default"
+                      triggerSize="sm"
+                      triggerIcon={null}
+                      triggerIconOnly={false}
+                      triggerAriaLabel={`Settle ${row.partnerName}`}
+                    />
+                  </div>
                 ) : (
-                  <span />
+                  <span className="hidden sm:block" />
                 )}
               </li>
             ))}

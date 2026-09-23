@@ -1655,7 +1655,7 @@ export async function reorderColumnsAction(
 
   const allowed = new Set((columns ?? []).map((row) => row.id as string));
   if (orderedIds.some((id) => !allowed.has(id)) || orderedIds.length !== allowed.size) {
-    return { error: "Column order is out of date — refresh and try again" };
+    return { error: "Column order is out of date: refresh and try again" };
   }
 
   for (const [index, id] of orderedIds.entries()) {

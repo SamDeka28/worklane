@@ -114,15 +114,15 @@ export function PaymentSheet({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[36rem] border-collapse text-sm">
+      <table className="w-full min-w-[40rem] border-collapse text-sm">
         <thead>
           <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-            <th className="px-4 py-3.5 font-semibold">Date</th>
-            <th className="px-4 py-3.5 font-semibold">Client</th>
-            <th className="px-4 py-3.5 font-semibold">Kind</th>
-            <th className="px-4 py-3.5 font-semibold">Applied to</th>
-            <th className="px-4 py-3.5 text-right font-semibold">Amount</th>
-            <th className="px-4 py-3.5 text-right font-semibold"> </th>
+            <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Date</th>
+            <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Client</th>
+            <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Kind</th>
+            <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Applied to</th>
+            <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Amount</th>
+            <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5"> </th>
           </tr>
         </thead>
         <tbody>
@@ -134,10 +134,10 @@ export function PaymentSheet({
                 key={payment.id}
                 className={cn("border-b border-border/15", cancelled && "opacity-50")}
               >
-                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
                   {formatDay(payment.paidOn)}
                 </td>
-                <td className="px-4 py-4 text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
                   <Link
                     href={`/${orgSlug}/clients/${payment.clientId}`}
                     className="hover:underline"
@@ -145,7 +145,7 @@ export function PaymentSheet({
                     {names.get(payment.clientId) ?? "Client"}
                   </Link>
                 </td>
-                <td className="px-4 py-4">
+                <td className="whitespace-nowrap px-4 py-4 sm:px-5 sm:py-5">
                   <StatusChip tone={cancelled ? "cancelled" : "paid"}>
                     {cancelled
                       ? "Cancelled"
@@ -154,13 +154,13 @@ export function PaymentSheet({
                         : paymentLabel(payment)}
                   </StatusChip>
                 </td>
-                <td className="max-w-[16rem] truncate px-4 py-4 text-muted-foreground">
-                  {applied.length > 0 ? applied.join(" · ") : "—"}
+                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
+                  {applied.length > 0 ? applied.join(" · ") : "-"}
                 </td>
-                <td className="px-4 py-4 text-right text-base font-semibold tabular-nums">
+                <td className="whitespace-nowrap px-4 py-4 text-right text-base font-semibold tabular-nums tracking-tight sm:px-5 sm:py-5">
                   {moneyLabel(payment.amountMinor, payment.currency)}
                 </td>
-                <td className="px-4 py-4 text-right">
+                <td className="whitespace-nowrap px-4 py-4 text-right sm:px-5 sm:py-5">
                   {canWrite && payment.status === "posted" ? (
                     <LedgerMenu
                       label={payment.kind === "refund" ? "Cancel refund" : "Undo receipt"}

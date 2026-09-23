@@ -40,7 +40,7 @@ export function CreateShareGrantForm({
             }
             if (result.token) {
               setTokenOnce(result.token);
-              toast.success("Share link created — copy the token now");
+              toast.success("Share link created. Copy the token now");
             }
             router.refresh();
           });
@@ -105,7 +105,7 @@ export function CreateShareGrantForm({
 
       {tokenOnce ? (
         <div className="rounded-2xl bg-muted/60 p-4 text-sm">
-          <p className="mb-2 font-medium">Copy once — not shown again</p>
+          <p className="mb-2 font-medium">Copy once. Not shown again</p>
           <code className="break-all text-xs">{typeof window !== "undefined" ? `${window.location.origin}/portal/${tokenOnce}` : `/portal/${tokenOnce}`}</code>
           <Button
             type="button"

@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { LayoutGrid, List } from "lucide-react";
+import {
+  DesktopFilters,
+  MobileFilters,
+} from "@/components/studio/mobile-filters";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -44,6 +48,7 @@ export function ClientToolbar({
 }) {
   const router = useRouter();
   const base = `/${orgSlug}/clients`;
+  const activeCount = [q, filter, kind].filter(Boolean).length;
 
   function href(next: Record<string, string | number | undefined>) {
     const params = new URLSearchParams();
@@ -63,105 +68,116 @@ export function ClientToolbar({
     return query ? `${base}?${query}` : base;
   }
 
-  return (
-    <SoftToolbar>
-      <form
-        className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          router.push(
-            href({
-              q: String(data.get("q") ?? ""),
-              filter: String(data.get("filter") ?? ""),
-              kind: String(data.get("kind") ?? ""),
-              page: 1,
-            }),
-          );
-        }}
-      >
-        <Input
-          name="q"
-          defaultValue={q}
-          placeholder="Search clients"
-          className="h-9 w-44 rounded-full bg-muted/80"
-        />
-        {seeMoney ? (
-          <NativeSelect name="filter" defaultValue={filter} className="h-9 w-32 rounded-full bg-muted/80">
-            {FILTERS.map((item) => (
-              <option key={item.value || "all"} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </NativeSelect>
-        ) : null}
-        <NativeSelect name="kind" defaultValue={kind} className="h-9 w-32 rounded-full bg-muted/80">
-          {KINDS.map((item) => (
-            <option key={item.value || "all-kinds"} value={item.value}>
+  function applyFilters(form: HTMLFormElement) {
+    const data = new FormData(form);
+    router.push(
+      href({
+        q: String(data.get("q") ?? ""),
+        filter: String(data.get("filter") ?? ""),
+        kind: String(data.get("kind") ?? ""),
+        page: 1,
+      }),
+    );
+  }
+
+  const filterFields = (
+    <>
+      <Input
+        name="q"
+        defaultValue={q}
+        placeholder="Search clients"
+        className="h-9 w-full rounded-xl bg-muted/80 md:w-44 md:rounded-full"
+      />
+      {seeMoney ? (
+        <NativeSelect
+          name="filter"
+          defaultValue={filter}
+          className="h-9 w-full rounded-xl bg-muted/80 md:w-32 md:rounded-full"
+        >
+          {FILTERS.map((item) => (
+            <option key={item.value || "all"} value={item.value}>
               {item.label}
             </option>
           ))}
         </NativeSelect>
-        <Button type="submit" variant="outline" size="sm">
-          Filter
-        </Button>
-      </form>
-      <div className="flex items-center gap-1 rounded-full bg-muted p-1">
-        <Link
-          href={href({ view: "cards", page: 1 })}
-          className={cn(
-            "inline-flex size-8 items-center justify-center rounded-full",
-            view === "cards" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
-          )}
-          aria-label="Card view"
+      ) : null}
+      <NativeSelect
+        name="kind"
+        defaultValue={kind}
+        className="h-9 w-full rounded-xl bg-muted/80 md:w-32 md:rounded-full"
+      >
+        {KINDS.map((item) => (
+          <option key={item.value || "all-kinds"} value={item.value}>
+            {item.label}
+          </option>
+        ))}
+      </NativeSelect>
+    </>
+  );
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/40 px-3 py-2.5 sm:px-5">
+      <MobileFilters
+        title="Filter clients"
+        description="Search and narrow by balance or kind."
+        activeCount={activeCount}
+      >
+        <form
+          className="space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            applyFilters(event.currentTarget);
+          }}
         >
-          <LayoutGrid className="size-3.5" />
-        </Link>
-        <Link
-          href={href({ view: "list", page: 1 })}
-          className={cn(
-            "inline-flex size-8 items-center justify-center rounded-full",
-            view === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
-          )}
-          aria-label="List view"
+          {filterFields}
+          <Button type="submit" className="w-full">
+            Apply filters
+          </Button>
+        </form>
+      </MobileFilters>
+
+      <DesktopFilters>
+        <form
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            applyFilters(event.currentTarget);
+          }}
         >
-          <List className="size-3.5" />
-        </Link>
-      </div>
-      {pageCount > 1 ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>
-            {total} client{total === 1 ? "" : "s"}
-          </span>
+          {filterFields}
+          <Button type="submit" variant="outline" size="sm">
+            Filter
+          </Button>
+        </form>
+      </DesktopFilters>
+
+      <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-1 rounded-full bg-muted p-1">
           <Link
-            href={href({ page: Math.max(1, page - 1) })}
-            className={page <= 1 ? "pointer-events-none opacity-40" : "hover:text-foreground"}
+            href={href({ view: "cards", page: 1 })}
+            className={cn(
+              "inline-flex size-8 items-center justify-center rounded-full",
+              view === "cards" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+            )}
+            aria-label="Card view"
           >
-            Prev
+            <LayoutGrid className="size-3.5" />
           </Link>
-          <span>
-            {page} / {pageCount}
-          </span>
           <Link
-            href={href({ page: Math.min(pageCount, page + 1) })}
-            className={page >= pageCount ? "pointer-events-none opacity-40" : "hover:text-foreground"}
+            href={href({ view: "list", page: 1 })}
+            className={cn(
+              "inline-flex size-8 items-center justify-center rounded-full",
+              view === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
+            )}
+            aria-label="List view"
           >
-            Next
+            <List className="size-3.5" />
           </Link>
         </div>
-      ) : (
         <p className="text-xs text-muted-foreground">
-          {total} client{total === 1 ? "" : "s"}
+          {total}
         </p>
-      )}
-    </SoftToolbar>
-  );
-}
-
-function SoftToolbar({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/40 px-5 py-2.5">
-      {children}
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useOptimistic, useTransition } from "react";
+import { useEffect, useOptimistic, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
@@ -16,11 +16,18 @@ export function SoftTab({
   children: ReactNode;
 }) {
   const router = useRouter();
+  const ref = useRef<HTMLButtonElement>(null);
   const [pending, start] = useTransition();
   const [optimisticActive, setOptimisticActive] = useOptimistic(Boolean(active));
 
+  useEffect(() => {
+    if (!optimisticActive) return;
+    ref.current?.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "smooth" });
+  }, [optimisticActive]);
+
   return (
     <button
+      ref={ref}
       type="button"
       aria-current={optimisticActive ? "page" : undefined}
       onMouseEnter={() => router.prefetch(href)}
@@ -33,7 +40,7 @@ export function SoftTab({
         });
       }}
       className={cn(
-        "rounded-lg px-3.5 py-2 text-sm font-medium tracking-tight transition-[background-color,color,box-shadow,opacity] duration-150",
+        "shrink-0 rounded-lg px-3 py-2 text-sm font-medium tracking-tight whitespace-nowrap transition-[background-color,color,box-shadow,opacity] duration-150",
         optimisticActive
           ? "bg-nav-active text-nav-active-foreground shadow-sm"
           : "text-muted-foreground hover:bg-muted hover:text-foreground",

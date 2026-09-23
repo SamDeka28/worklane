@@ -327,7 +327,7 @@ export function LeadDetailSheet({
             {!lead.clientId ? (
               <div className="rounded-2xl bg-muted/50 p-3">
                 <p className="text-sm font-medium">
-                  {won ? "Won — become a client" : "Ready to convert?"}
+                  {won ? "Won: become a client" : "Ready to convert?"}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Creates the client, contact, and a project from this lead. Lands you in delivery.

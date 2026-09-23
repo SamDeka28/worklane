@@ -224,7 +224,7 @@ export function BoardProductFrame({ className }: { className?: string }) {
     <Shell
       active="board"
       title="Board"
-      purpose="Studio board — every open card across active projects"
+      purpose="Studio board: every open card across active projects"
       className={className}
     >
       <div className="flex h-full gap-3 overflow-x-auto p-3 sm:p-4">
@@ -367,7 +367,7 @@ export function ProjectsProductFrame({ className }: { className?: string }) {
     <Shell
       active="projects"
       title="Projects"
-      purpose="Active delivery — log work, bill milestones, run the board"
+      purpose="Active delivery: log work, bill milestones, run the board"
       className={className}
     >
       <div className="space-y-2 p-3 sm:p-4">
@@ -507,7 +507,7 @@ export function FinanceProductFrame({ className }: { className?: string }) {
     <Shell
       active="finance"
       title="Finance"
-      purpose="Get paid — bill work, record what clients send"
+      purpose="Get paid: bill work, record what clients send"
       className={className}
     >
       <div className="space-y-4 p-4 sm:p-5">

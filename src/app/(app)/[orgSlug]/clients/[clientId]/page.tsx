@@ -368,7 +368,7 @@ export default async function ClientProfilePage({
                       <span className="truncate">{primary.name || "Unnamed"}</span>
                     </span>
                   ) : (
-                    "—"
+                    "-"
                   )}
                 </MetaRow>
               </dl>

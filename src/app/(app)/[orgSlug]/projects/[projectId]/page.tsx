@@ -13,6 +13,7 @@ import {
   WorkSurface,
 } from "@/components/studio/chrome";
 import { StatusChip } from "@/components/studio/status-chip";
+import { cn } from "@/lib/utils";
 import { BILLING_MODE_LABEL, isOpenBoardColumn, projectMoneyStats } from "@/modules/delivery/board";
 import {
   MilestoneForm,
@@ -401,7 +402,7 @@ export default async function ProjectDetailPage({
             ? `${(line.poolShareBps / 100).toFixed(0)}% of pool`
             : line
               ? `${(line.shareBps / 100).toFixed(1)}%`
-              : "—";
+              : "-";
       const effectiveLabel =
         line != null ? `${(line.shareBps / 100).toFixed(1)}% effective` : null;
       const chargeRows = [...(chargesByPartnerId.get(partnerId)?.values() ?? [])]
@@ -449,11 +450,11 @@ export default async function ProjectDetailPage({
       billingMode={project.billingMode}
       defaultOpen={query.new === "milestone"}
       returnHref={tabHref("milestones")}
-      triggerSize="lg"
+      triggerSize="default"
       triggerLabel="Add milestone"
     />
   ) : (
-    <Button size="lg" nativeButton={false} render={<Link href={nextHref} />}>
+    <Button size="default" nativeButton={false} render={<Link href={nextHref} />}>
       {next.cta}
     </Button>
   );
@@ -521,7 +522,7 @@ export default async function ProjectDetailPage({
         }
       />
 
-      <div className="flex shrink-0 flex-wrap gap-1 border-b border-border/30 px-5 py-2">
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border/30 px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-5 [&::-webkit-scrollbar]:hidden">
         {canAccessProjectTab(ctx.permissions, "overview") ? (
           <SoftTab href={tabHref("overview")} active={tab === "overview"}>
             Overview
@@ -545,17 +546,21 @@ export default async function ProjectDetailPage({
         {canAccessProjectTab(ctx.permissions, "charges") ? (
           <SoftTab href={tabHref("charges")} active={tab === "charges"}>
             Charges
-            {money.outstandingMinor > BigInt(0)
-              ? ` · ${moneyLabel(money.outstandingMinor, project.currency)}`
-              : ""}
+            {money.outstandingMinor > BigInt(0) ? (
+              <span className="hidden sm:inline">
+                {` · ${moneyLabel(money.outstandingMinor, project.currency)}`}
+              </span>
+            ) : null}
           </SoftTab>
         ) : null}
         {canAccessProjectTab(ctx.permissions, "split") ? (
           <SoftTab href={tabHref("split")} active={tab === "split"}>
             Split
-            {totalEarnedMinor > BigInt(0)
-              ? ` · ${moneyLabel(totalEarnedMinor, project.currency)}`
-              : ""}
+            {totalEarnedMinor > BigInt(0) ? (
+              <span className="hidden sm:inline">
+                {` · ${moneyLabel(totalEarnedMinor, project.currency)}`}
+              </span>
+            ) : null}
           </SoftTab>
         ) : null}
         {canAccessProjectTab(ctx.permissions, "documents") ? (
@@ -718,7 +723,7 @@ export default async function ProjectDetailPage({
                                 <p className="shrink-0 text-sm font-semibold tabular-nums tracking-tight">
                                   {item.amountMinor != null
                                     ? moneyLabel(item.amountMinor, project.currency)
-                                    : "—"}
+                                    : "-"}
                                 </p>
                               ) : null}
                             </Link>
@@ -768,7 +773,7 @@ export default async function ProjectDetailPage({
             {milestones.length === 0 ? (
               <EmptyState
                 title="No milestones yet"
-                body="Name a billable slice — amount optional until you’re ready to charge."
+                body="Name a billable slice: amount optional until you’re ready to charge."
               />
             ) : (
               <MilestoneStudioList
@@ -841,7 +846,7 @@ export default async function ProjectDetailPage({
             ) : logs.length === 0 ? (
               <EmptyState
                 title="Log the first day"
-                body="Date, hours, rate or a fixed amount — one row replaces the spreadsheet."
+                body="Date, hours, rate or a fixed amount: one row replaces the spreadsheet."
               />
             ) : (
               <ol className="space-y-2">
@@ -866,7 +871,7 @@ export default async function ProjectDetailPage({
                                 ? ` × ${moneyLabel(log.hourlyRateMinor, project.currency)}`
                                 : ""
                             }`
-                          : "—"}
+                          : "-"}
                     </p>
                   </li>
                 ))}
@@ -947,7 +952,14 @@ export default async function ProjectDetailPage({
               title="Economics"
               action={
                 ctx.canWrite ? (
-                  <div className="flex flex-wrap items-center gap-1.5">
+                  <div
+                    className={cn(
+                      "grid w-full gap-1.5 sm:flex sm:w-auto sm:flex-wrap [&_button]:h-8 [&_button]:w-full [&_button]:px-2 [&_button]:text-xs sm:[&_button]:w-auto sm:[&_button]:px-3 sm:[&_button]:text-sm",
+                      projectPartners.some((partner) => partner.active)
+                        ? "grid-cols-3"
+                        : "grid-cols-2",
+                    )}
+                  >
                     <ManageProjectTeamDialog
                       orgSlug={orgSlug}
                       projectId={project.id}
@@ -974,25 +986,27 @@ export default async function ProjectDetailPage({
                         defaultProjectId={project.id}
                         triggerLabel={needsSplit ? "Set split" : "Edit split"}
                         triggerVariant={needsSplit ? "default" : "outline"}
+                        triggerSize="sm"
+                        triggerIcon={null}
                       />
                     ) : null}
                   </div>
                 ) : null
               }
             >
-              <div className="grid gap-3 lg:grid-cols-[1.35fr_1fr]">
-                <div className="rounded-[1.5rem] bg-linear-to-br from-sky-50/90 via-white to-emerald-50/40 px-5 py-4 shadow-soft ring-1 ring-sky-200/50">
-                  <div className="flex flex-wrap items-end justify-between gap-4">
-                    <div>
-                      <p className="text-[11px] font-semibold tracking-[0.08em] text-sky-800/70 uppercase">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+                <div className="col-span-2 rounded-2xl bg-muted/40 px-4 py-3 ring-1 ring-border/30 sm:rounded-[1.5rem] sm:px-5 sm:py-4 lg:col-span-2">
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase sm:text-[11px]">
                         Distributable
                       </p>
-                      <p className="mt-1 font-heading text-3xl font-semibold tracking-tight tabular-nums">
+                      <p className="mt-1 font-heading text-2xl font-semibold tracking-tight tabular-nums sm:text-3xl">
                         {netTotalMinor > BigInt(0)
                           ? moneyLabel(netTotalMinor, project.currency)
-                          : "—"}
+                          : "-"}
                       </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
+                      <p className="mt-1 text-[11px] text-muted-foreground sm:text-xs">
                         After{" "}
                         {feeBps > 0
                           ? `${(feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2)}% `
@@ -1004,44 +1018,41 @@ export default async function ProjectDetailPage({
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                      <p className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase sm:text-[11px]">
                         Client total
                       </p>
-                      <p className="mt-1 text-lg font-semibold tabular-nums">
+                      <p className="mt-1 text-base font-semibold tabular-nums sm:text-lg">
                         {money.totalPriceMinor > BigInt(0)
                           ? moneyLabel(money.totalPriceMinor, project.currency)
-                          : "—"}
+                          : "-"}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="lane-panel px-5 py-4">
-                  <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-                    Earned to date
+                <div className="rounded-2xl bg-card px-3.5 py-3 ring-1 ring-border/30 sm:rounded-[1.35rem] sm:px-4">
+                  <p className="text-[10px] font-semibold tracking-[0.08em] text-emerald-700 uppercase dark:text-emerald-300">
+                    Earned
                   </p>
-                  <p className="mt-1 font-heading text-3xl font-semibold tracking-tight tabular-nums">
+                  <p className="mt-1 font-heading text-lg font-semibold tracking-tight tabular-nums text-emerald-800 sm:text-xl dark:text-emerald-200">
                     {moneyLabel(totalEarnedMinor, project.currency)}
                   </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Collected {moneyLabel(money.collectedMinor, project.currency)} · Remaining{" "}
-                    {moneyLabel(money.remainingMinor, project.currency)}
+                  <p className="mt-1 truncate text-[10px] text-muted-foreground sm:text-[11px]">
+                    Collected {moneyLabel(money.collectedMinor, project.currency)}
                   </p>
                 </div>
-              </div>
 
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[1.35rem] bg-muted/35 px-4 py-3 ring-1 ring-border/25">
-                  <p className="text-[11px] text-muted-foreground">Target pool</p>
-                  <p className="mt-1 text-base font-semibold tabular-nums">
+                <div className="rounded-2xl bg-card px-3.5 py-3 ring-1 ring-border/30 sm:rounded-[1.35rem] sm:px-4">
+                  <p className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                    Target pool
+                  </p>
+                  <p className="mt-1 text-lg font-semibold tabular-nums sm:text-xl">
                     {poolAmountMinor != null
                       ? moneyLabel(poolAmountMinor, project.currency)
-                      : "—"}
+                      : "-"}
                   </p>
-                </div>
-                <div className="rounded-[1.35rem] bg-muted/35 px-4 py-3 ring-1 ring-border/25">
-                  <p className="text-[11px] text-muted-foreground">Remainder</p>
-                  <p className="mt-1 text-base font-semibold tabular-nums">
+                  <p className="mt-1 truncate text-[10px] text-muted-foreground sm:text-[11px]">
+                    Remainder{" "}
                     {poolAmountMinor != null && netTotalMinor > BigInt(0)
                       ? moneyLabel(
                           netTotalMinor > poolAmountMinor
@@ -1049,7 +1060,7 @@ export default async function ProjectDetailPage({
                             : BigInt(0),
                           project.currency,
                         )
-                      : "—"}
+                      : "-"}
                   </p>
                 </div>
               </div>

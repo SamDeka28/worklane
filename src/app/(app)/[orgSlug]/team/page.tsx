@@ -53,8 +53,8 @@ export default async function TeamPage({
 
   return (
     <WorkSurface>
-      <StudioToolbar purpose="Studio team — invite people and manage access" />
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 md:px-6">
+      <StudioToolbar purpose="Studio team: invite people and manage access" />
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5 md:px-6">
         <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           <span>
             {members.length} member{members.length === 1 ? "" : "s"}
@@ -63,16 +63,16 @@ export default async function TeamPage({
           <span>Email {isEmailConfigured() ? "connected" : "not configured"}</span>
         </div>
 
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-          <SoftCard className="p-5">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:gap-5">
+          <SoftCard className="p-4 sm:p-5">
             <p className="mb-1 text-sm font-semibold tracking-tight">Members</p>
             <p className="mb-4 text-xs text-muted-foreground">
-              People with studio access — edit role and module permissions
+              People with studio access. Edit role and module permissions.
             </p>
             {members.length === 0 ? (
               <EmptyState title="No members yet" body="Invite a teammate to get started." />
             ) : (
-              <ul className="space-y-1">
+              <ul className="space-y-2">
                 {members.map((member) => {
                   const effective = resolveMemberPermissions({
                     role: member.role,
@@ -93,7 +93,7 @@ export default async function TeamPage({
                   return (
                     <li
                       key={member.id}
-                      className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm hover:bg-muted/60"
+                      className="flex flex-col gap-3 rounded-2xl bg-muted/30 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:bg-transparent sm:py-2.5 sm:hover:bg-muted/60"
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <AvatarMark
@@ -120,12 +120,12 @@ export default async function TeamPage({
                           ) : null}
                         </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
                         <StatusChip tone="paid">Active</StatusChip>
                         <Badge variant="secondary" className="capitalize">
                           {member.role}
                         </Badge>
-                        <span className="hidden text-[11px] text-muted-foreground sm:inline">
+                        <span className="text-[11px] text-muted-foreground">
                           {accessHint}
                         </span>
                         {canManage ? (
@@ -154,9 +154,9 @@ export default async function TeamPage({
             )}
           </SoftCard>
 
-          <div className="space-y-5">
+          <div className="space-y-4 sm:space-y-5">
             {canManage ? (
-              <SoftCard className="p-5">
+              <SoftCard className="p-4 sm:p-5">
                 <p className="mb-1 text-sm font-semibold tracking-tight">Invite</p>
                 <p className="mb-4 text-xs text-muted-foreground">
                   Email a teammate and set what they can see
@@ -164,7 +164,7 @@ export default async function TeamPage({
                 <InviteMemberForm orgSlug={orgSlug} projects={projects} />
               </SoftCard>
             ) : (
-              <SoftCard className="p-5">
+              <SoftCard className="p-4 sm:p-5">
                 <p className="text-sm text-muted-foreground">
                   Only owners and admins can invite teammates.
                 </p>
@@ -172,12 +172,12 @@ export default async function TeamPage({
             )}
 
             {canManage ? (
-              <SoftCard className="p-5">
+              <SoftCard className="p-4 sm:p-5">
                 <p className="mb-1 text-sm font-semibold tracking-tight">
                   Pending invites
                 </p>
                 <p className="mb-4 text-xs text-muted-foreground">
-                  Not accepted yet — resend or revoke
+                  Not accepted yet. Resend or revoke.
                 </p>
                 <PendingInvitesList orgSlug={orgSlug} invitations={pendingInvites} />
               </SoftCard>

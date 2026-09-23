@@ -195,8 +195,8 @@ export function DocumentEditor({
     const table = buildMilestoneTableDoc(
       milestones.map((m) => ({
         name: m.name,
-        amount: m.amountMinor != null ? moneyLabel(m.amountMinor, currency) : "—",
-        due: m.dueOn ? formatDay(m.dueOn) : "—",
+        amount: m.amountMinor != null ? moneyLabel(m.amountMinor, currency) : "-",
+        due: m.dueOn ? formatDay(m.dueOn) : "-",
         status: MILESTONE_STATUS_LABEL[m.status],
       })),
     );
@@ -212,7 +212,7 @@ export function DocumentEditor({
       tasks.map((t) => ({
         title: t.title,
         status: t.status,
-        due: t.dueOn ? formatDay(t.dueOn) : "—",
+        due: t.dueOn ? formatDay(t.dueOn) : "-",
       })),
     );
     editor.chain().focus().insertContent(table).run();
@@ -231,7 +231,7 @@ export function DocumentEditor({
     setDoc(next);
     setPlain("");
     editor?.commands.setContent(next, { emitUpdate: false });
-    toast.success("Designed template applied — save when ready");
+    toast.success("Designed template applied. Save when ready");
   }
 
   const displayClient =
@@ -252,7 +252,7 @@ export function DocumentEditor({
     : refs;
 
   return (
-    <div className="flex min-h-0 flex-1 gap-4 lg:flex-row">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
       <DocumentCreateSheets
         key={`${createType}-${createOpen}`}
         orgSlug={orgSlug}
@@ -285,7 +285,7 @@ export function DocumentEditor({
                 toast.error(result.error);
                 return;
               }
-              toast.success("Draft saved — tags indexed");
+              toast.success("Draft saved: tags indexed");
               router.refresh();
             });
           }}
@@ -443,7 +443,7 @@ export function DocumentEditor({
             </p>
           ) : mode === "preview" && canWrite ? (
             <p className="border-t border-border/40 px-4 py-2 text-center text-xs text-muted-foreground">
-              Preview expands @ tags into live data — switch to Edit to change the draft.
+              Preview expands @ tags into live data: switch to Edit to change the draft.
             </p>
           ) : null}
         </form>
@@ -668,7 +668,7 @@ export function DocumentEditor({
                       );
                       if (result.error) toast.error(result.error);
                       else {
-                        toast.success("Accepted — snapshot frozen");
+                        toast.success("Accepted: snapshot frozen");
                         router.refresh();
                       }
                     });
@@ -782,7 +782,7 @@ function SignForm({
           );
           if (result.error) toast.error(result.error);
           else {
-            toast.success("Signed — PDF copy stored");
+            toast.success("Signed: PDF copy stored");
             router.refresh();
           }
         });

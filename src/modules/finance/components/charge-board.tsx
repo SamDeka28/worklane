@@ -134,18 +134,18 @@ export function ChargeSheet({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[40rem] border-collapse text-sm">
+      <table className="w-full min-w-[42rem] border-collapse text-sm">
         <thead>
           <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-            {clientName ? <th className="px-4 py-3.5 font-semibold">Client</th> : null}
-            <th className="px-4 py-3.5 font-semibold">Charge</th>
-            <th className="px-4 py-3.5 font-semibold">Charged</th>
-            <th className="px-4 py-3.5 font-semibold">Due</th>
-            <th className="px-4 py-3.5 text-right font-semibold">Gross</th>
-            <th className="px-4 py-3.5 text-right font-semibold">Paid</th>
-            <th className="px-4 py-3.5 text-right font-semibold">Left</th>
-            <th className="px-4 py-3.5 font-semibold">Status</th>
-            <th className="px-4 py-3.5 text-right font-semibold"> </th>
+            {clientName ? <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Client</th> : null}
+            <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Charge</th>
+            <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Charged</th>
+            <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Due</th>
+            <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Gross</th>
+            <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Paid</th>
+            <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Left</th>
+            <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Status</th>
+            <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5"> </th>
           </tr>
         </thead>
         <tbody>
@@ -165,7 +165,7 @@ export function ChargeSheet({
                 )}
               >
                 {clientName ? (
-                  <td className="px-4 py-4">
+                  <td className="whitespace-nowrap px-4 py-4 sm:px-5 sm:py-5">
                     <Link
                       href={`/${orgSlug}/clients/${charge.clientId}`}
                       className="font-medium hover:underline"
@@ -174,32 +174,32 @@ export function ChargeSheet({
                     </Link>
                   </td>
                 ) : null}
-                <td className="max-w-[18rem] truncate px-4 py-4 font-medium">
+                <td className="whitespace-nowrap px-4 py-4 font-medium sm:px-5 sm:py-5">
                   {charge.memo || "Untitled charge"}
                 </td>
-                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
                   {formatDay(charge.chargedOn)}
                 </td>
-                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
-                  {charge.dueOn ? formatDay(charge.dueOn) : "—"}
+                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
+                  {charge.dueOn ? formatDay(charge.dueOn) : "-"}
                 </td>
-                <td className="px-4 py-4 text-right tabular-nums text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums text-muted-foreground sm:px-5 sm:py-5">
                   {moneyLabel(charge.grossMinor, charge.currency)}
                 </td>
-                <td className="px-4 py-4 text-right tabular-nums text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums text-muted-foreground sm:px-5 sm:py-5">
                   {moneyLabel(charge.allocatedMinor, charge.currency)}
                 </td>
-                <td className="px-4 py-4 text-right font-semibold tabular-nums">
+                <td className="whitespace-nowrap px-4 py-4 text-right text-base font-semibold tabular-nums tracking-tight sm:px-5 sm:py-5">
                   {life === "cancelled"
-                    ? "—"
+                    ? "-"
                     : stillDue
                       ? moneyLabel(charge.outstandingMinor, charge.currency)
                       : moneyLabel(BigInt(0), charge.currency)}
                 </td>
-                <td className="px-4 py-4">
+                <td className="whitespace-nowrap px-4 py-4 sm:px-5 sm:py-5">
                   <StatusChip tone={life}>{chargeLifeLabel(life)}</StatusChip>
                 </td>
-                <td className="px-4 py-4 text-right">
+                <td className="whitespace-nowrap px-4 py-4 text-right sm:px-5 sm:py-5">
                   <div className="inline-flex items-center justify-end gap-0.5">
                     {canWrite && stillDue && collectHref ? (
                       <Button

@@ -50,9 +50,9 @@ export function InvoicePreview({
           </div>
           <div>
             <p className="text-[11px] text-muted-foreground uppercase">Issued</p>
-            <p className="mt-1">{invoice.issuedOn ?? "—"}</p>
+            <p className="mt-1">{invoice.issuedOn ?? "-"}</p>
             <p className="mt-3 text-[11px] text-muted-foreground uppercase">Due</p>
-            <p className="mt-1">{invoice.dueOn ?? "—"}</p>
+            <p className="mt-1">{invoice.dueOn ?? "-"}</p>
           </div>
         </div>
         <LineTable invoice={invoice} headClassName="border-border/50" />
@@ -99,8 +99,8 @@ export function InvoicePreview({
             </div>
             <div>
               <p className="text-[11px] text-muted-foreground uppercase">Dates</p>
-              <p className="mt-1 text-sm">Issued {invoice.issuedOn ?? "—"}</p>
-              <p className="text-sm">Due {invoice.dueOn ?? "—"}</p>
+              <p className="mt-1 text-sm">Issued {invoice.issuedOn ?? "-"}</p>
+              <p className="text-sm">Due {invoice.dueOn ?? "-"}</p>
             </div>
           </div>
           <LineTable invoice={invoice} headClassName="border-b-2" headStyle={{ borderColor: accent }} />
@@ -141,8 +141,8 @@ export function InvoicePreview({
         </div>
         <div className="text-right">
           <p className="font-semibold">{invoice.number}</p>
-          <p className="mt-1 text-sm text-muted-foreground">Issued {invoice.issuedOn ?? "—"}</p>
-          <p className="text-sm text-muted-foreground">Due {invoice.dueOn ?? "—"}</p>
+          <p className="mt-1 text-sm text-muted-foreground">Issued {invoice.issuedOn ?? "-"}</p>
+          <p className="text-sm text-muted-foreground">Due {invoice.dueOn ?? "-"}</p>
         </div>
       </header>
       <div className="mb-8 grid gap-6 sm:grid-cols-2">

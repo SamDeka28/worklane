@@ -62,7 +62,7 @@ export function InviteMemberForm({
             return;
           }
           if (result.alreadyMember) {
-            toast.success("Already a member — added to project");
+            toast.success("Already a member: added to project");
           } else if (result.emailed) {
             toast.success("Invite emailed");
           } else if (result.acceptUrl) {
@@ -298,7 +298,7 @@ function toastInviteResult(result: {
   successLabel?: string;
 }) {
   if (result.alreadyMember) {
-    toast.success("Already a member — linked");
+    toast.success("Already a member: linked");
     return;
   }
   if (result.emailed) {
