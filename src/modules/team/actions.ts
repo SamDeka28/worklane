@@ -337,9 +337,71 @@ export async function updateMemberAccessAction(
     .eq("organization_id", ctx.org.id);
   if (error) return { error: error.message };
 
+  const projectIds = [
+    ...new Set(
+      formData
+        .getAll("project_ids")
+        .map((value) => String(value).trim())
+        .filter(Boolean),
+    ),
+  ];
+  const projectRole =
+    String(formData.get("project_role") ?? "member") === "lead" ? "lead" : "member";
+
+  if (projectIds.length > 0) {
+    const { data: validProjects, error: projectError } = await ctx.supabase
+      .from("projects")
+      .select("id")
+      .eq("organization_id", ctx.org.id)
+      .in("id", projectIds);
+    if (projectError) return { error: projectError.message };
+    if ((validProjects ?? []).length !== projectIds.length) {
+      return { error: "One or more projects were not found" };
+    }
+  }
+
+  const { data: existingProjectRows, error: existingError } = await ctx.supabase
+    .from("project_members")
+    .select("project_id")
+    .eq("organization_id", ctx.org.id)
+    .eq("user_id", member.user_id);
+  if (existingError) return { error: existingError.message };
+
+  const existingIds = new Set(
+    (existingProjectRows ?? []).map((row) => row.project_id as string),
+  );
+  const nextIds = new Set(projectIds);
+  const toRemove = [...existingIds].filter((id) => !nextIds.has(id));
+
+  if (toRemove.length > 0) {
+    const { error: removeError } = await ctx.supabase
+      .from("project_members")
+      .delete()
+      .eq("organization_id", ctx.org.id)
+      .eq("user_id", member.user_id)
+      .in("project_id", toRemove);
+    if (removeError) return { error: removeError.message };
+  }
+
+  if (projectIds.length > 0) {
+    const { error: upsertError } = await ctx.supabase.from("project_members").upsert(
+      projectIds.map((projectId) => ({
+        organization_id: ctx.org.id,
+        project_id: projectId,
+        user_id: member.user_id,
+        role: projectRole,
+      })),
+      { onConflict: "project_id,user_id" },
+    );
+    if (upsertError) return { error: upsertError.message };
+  }
+
   revalidatePath(`/${orgSlug}/team`);
   revalidatePath(`/${orgSlug}`);
   revalidatePath(`/${orgSlug}/projects`);
+  for (const projectId of [...toRemove, ...projectIds]) {
+    revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  }
   return { ok: true as const };
 }
 

@@ -23,15 +23,33 @@ export default async function TeamPage({
   const { orgSlug } = await params;
   const ctx = await requireOrg(orgSlug);
   const canManage = ctx.role === "owner" || ctx.role === "admin";
-  const [members, board, pendingInvites] = await Promise.all([
+  const [members, board, pendingInvites, projectMembershipRows] = await Promise.all([
     listOrgMembers(orgSlug),
     listProjectBoard(orgSlug).catch(() => []),
     canManage ? listPendingInvitations(orgSlug) : Promise.resolve([]),
+    canManage
+      ? ctx.supabase
+          .from("project_members")
+          .select("user_id, project_id, role")
+          .eq("organization_id", ctx.org.id)
+          .then(({ data }) => data ?? [])
+      : Promise.resolve([] as { user_id: string; project_id: string; role: string }[]),
   ]);
   const projects = board.map((row) => ({
     id: row.project.id,
     name: row.project.name,
   }));
+  const projectsByUser = new Map<string, { projectIds: string[]; projectRole: "member" | "lead" }>();
+  for (const row of projectMembershipRows) {
+    const userId = row.user_id as string;
+    const current = projectsByUser.get(userId) ?? {
+      projectIds: [],
+      projectRole: "member" as const,
+    };
+    current.projectIds.push(row.project_id as string);
+    if ((row.role as string) === "lead") current.projectRole = "lead";
+    projectsByUser.set(userId, current);
+  }
 
   return (
     <WorkSurface>
@@ -103,8 +121,12 @@ export default async function TeamPage({
                           <EditMemberAccessSheet
                             orgSlug={orgSlug}
                             actorRole={ctx.role}
+                            projects={projects}
                             member={{
                               ...member,
+                              projectIds: projectsByUser.get(member.userId)?.projectIds ?? [],
+                              projectRole:
+                                projectsByUser.get(member.userId)?.projectRole ?? "member",
                               permissions:
                                 member.permissions ??
                                 (member.role === "partner"

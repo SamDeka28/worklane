@@ -14,11 +14,13 @@ import {
   AccessPermissionsFields,
   useAccessPermissionsState,
 } from "@/modules/team/components/access-permissions-fields";
+import { ProjectMultiSelect } from "@/modules/team/components/project-multi-select";
 
 export function EditMemberAccessSheet({
   orgSlug,
   member,
   actorRole,
+  projects = [],
 }: {
   orgSlug: string;
   member: {
@@ -29,13 +31,22 @@ export function EditMemberAccessSheet({
     displayName: string | null;
     permissions: MemberPermissions | null;
     isYou: boolean;
+    projectIds?: string[];
+    projectRole?: "member" | "lead" | null;
   };
   actorRole: OrgRole;
+  projects?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [role, setRole] = useState(member.role === "owner" ? "admin" : member.role);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
+    member.projectIds ?? [],
+  );
+  const [projectRole, setProjectRole] = useState<"member" | "lead">(
+    member.projectRole === "lead" ? "lead" : "member",
+  );
   const access = useAccessPermissionsState(member.permissions, member.role);
 
   const label =
@@ -48,11 +59,18 @@ export function EditMemberAccessSheet({
   return (
     <ActionSheet
       title="Edit access"
-      description={`Change role and module access for ${label}.`}
+      description={`Change role, projects, and module access for ${label}.`}
       triggerLabel="Access"
       triggerVariant="outline"
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          setSelectedProjectIds(member.projectIds ?? []);
+          setProjectRole(member.projectRole === "lead" ? "lead" : "member");
+          setRole(member.role === "owner" ? "admin" : member.role);
+        }
+      }}
     >
       <form
         className="grid gap-4"
@@ -60,6 +78,10 @@ export function EditMemberAccessSheet({
           formData.set("role", role);
           formData.set("permissions_preset", access.preset);
           formData.set("permissions", JSON.stringify(access.shownPermissions));
+          formData.set("project_role", projectRole);
+          for (const pid of selectedProjectIds) {
+            formData.append("project_ids", pid);
+          }
           start(async () => {
             const result = await updateMemberAccessAction(orgSlug, member.id, formData);
             if (result.error) {
@@ -88,6 +110,37 @@ export function EditMemberAccessSheet({
             <option value="partner">Partner</option>
           </NativeSelect>
         </Field>
+
+        {projects.length > 0 ? (
+          <div className="grid gap-3">
+            <Field
+              label="Projects"
+              htmlFor={`member_projects_${member.id}`}
+              hint="Studio access stays. Choose which projects they can open."
+            >
+              <ProjectMultiSelect
+                id={`member_projects_${member.id}`}
+                projects={projects}
+                selectedIds={selectedProjectIds}
+                onChange={setSelectedProjectIds}
+              />
+            </Field>
+            {selectedProjectIds.length > 0 ? (
+              <Field label="Project role" htmlFor={`member_project_role_${member.id}`}>
+                <NativeSelect
+                  id={`member_project_role_${member.id}`}
+                  value={projectRole}
+                  onChange={(event) =>
+                    setProjectRole(event.target.value === "lead" ? "lead" : "member")
+                  }
+                >
+                  <option value="member">Member</option>
+                  <option value="lead">Lead</option>
+                </NativeSelect>
+              </Field>
+            ) : null}
+          </div>
+        ) : null}
 
         <AccessPermissionsFields
           idPrefix={`member_${member.id}`}
