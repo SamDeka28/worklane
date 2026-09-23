@@ -189,7 +189,7 @@ function FileAttachControl({
                   className="size-11 shrink-0 rounded-xl object-cover ring-1 ring-border/40"
                 />
               ) : (
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-800 ring-1 ring-sky-100">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-status-due text-status-due-fg ring-1 ring-foreground/6">
                   {fileKindLabel(row.file) === "Image" ? (
                     <FileImage className="size-5" />
                   ) : (

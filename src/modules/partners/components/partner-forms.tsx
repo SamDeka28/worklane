@@ -1,8 +1,8 @@
 "use client";
 
-import { Lock, LockOpen } from "lucide-react";
+import { Lock, LockOpen, Pencil, Percent, UserPlus, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";
@@ -31,6 +31,25 @@ import type {
 } from "@/modules/partners/types";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { formatMajorInput, netFromGross, parseMajorToMinor } from "@/shared/money";
+
+type TriggerSize =
+  | "default"
+  | "xs"
+  | "sm"
+  | "lg"
+  | "icon"
+  | "icon-xs"
+  | "icon-sm"
+  | "icon-lg";
+
+type SheetTriggerProps = {
+  triggerLabel?: string;
+  triggerVariant?: "default" | "outline" | "ghost" | "destructive";
+  triggerSize?: TriggerSize;
+  triggerIcon?: ReactNode;
+  triggerIconOnly?: boolean;
+  triggerAriaLabel?: string;
+};
 
 export type SplitDialogSeed = {
   poolAmountMinor: string;
@@ -116,12 +135,14 @@ export function CreatePartnerDialog({
   defaultOpen = false,
   triggerVariant = "default",
   triggerLabel = "Invite partner",
+  triggerSize = "default",
+  triggerIcon = <UserPlus className="size-4" />,
+  triggerIconOnly = false,
+  triggerAriaLabel,
 }: {
   orgSlug: string;
   defaultOpen?: boolean;
-  triggerVariant?: "default" | "outline" | "ghost";
-  triggerLabel?: string;
-}) {
+} & SheetTriggerProps) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
   const [pending, start] = useTransition();
@@ -132,6 +153,10 @@ export function CreatePartnerDialog({
       description="Email an invite so they can create an account and log in as a partner."
       triggerLabel={triggerLabel}
       triggerVariant={triggerVariant}
+      triggerSize={triggerSize}
+      triggerIcon={triggerIcon}
+      triggerIconOnly={triggerIconOnly}
+      triggerAriaLabel={triggerAriaLabel}
       open={open}
       onOpenChange={setOpen}
     >
@@ -203,13 +228,15 @@ export function EditPartnerDialog({
   orgSlug,
   partner,
   triggerLabel = "Edit",
-  triggerVariant = "outline",
+  triggerVariant = "ghost",
+  triggerSize = "icon-sm",
+  triggerIcon = <Pencil className="size-3.5" />,
+  triggerIconOnly = true,
+  triggerAriaLabel,
 }: {
   orgSlug: string;
   partner: PartnerRecord;
-  triggerLabel?: string;
-  triggerVariant?: "default" | "outline" | "ghost";
-}) {
+} & SheetTriggerProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -220,6 +247,10 @@ export function EditPartnerDialog({
       description="Updates the studio partner record — not project splits."
       triggerLabel={triggerLabel}
       triggerVariant={triggerVariant}
+      triggerSize={triggerSize}
+      triggerIcon={triggerIcon}
+      triggerIconOnly={triggerIconOnly}
+      triggerAriaLabel={triggerAriaLabel ?? `Edit ${partner.name}`}
       open={open}
       onOpenChange={setOpen}
     >
@@ -299,6 +330,10 @@ export function RecordSettlementDialog({
   defaultAmount,
   triggerLabel = "Settle",
   triggerVariant = "default",
+  triggerSize = "default",
+  triggerIcon = <Wallet className="size-4" />,
+  triggerIconOnly = false,
+  triggerAriaLabel,
   defaultOpen = false,
 }: {
   orgSlug: string;
@@ -306,10 +341,8 @@ export function RecordSettlementDialog({
   defaultCurrency: string;
   defaultPartnerId?: string;
   defaultAmount?: string;
-  triggerLabel?: string;
-  triggerVariant?: "default" | "outline" | "ghost";
   defaultOpen?: boolean;
-}) {
+} & SheetTriggerProps) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
   const [pending, start] = useTransition();
@@ -322,6 +355,10 @@ export function RecordSettlementDialog({
       description="Pays what they earned. Does not touch client receipts."
       triggerLabel={triggerLabel}
       triggerVariant={triggerVariant}
+      triggerSize={triggerSize}
+      triggerIcon={triggerIcon}
+      triggerIconOnly={triggerIconOnly}
+      triggerAriaLabel={triggerAriaLabel}
       triggerDisabled={partners.length === 0}
       open={open}
       onOpenChange={setOpen}
@@ -397,6 +434,10 @@ export function ProjectSplitDialog({
   initialSplit,
   initialSplitsByProjectId,
   triggerVariant = "outline",
+  triggerSize = "default",
+  triggerIcon = <Percent className="size-4" />,
+  triggerIconOnly = false,
+  triggerAriaLabel,
   defaultProjectId,
   defaultOpen = false,
   triggerLabel = "Set split",
@@ -409,11 +450,9 @@ export function ProjectSplitDialog({
   /** Latest saved split for the default project (reopen Edit split with real values). */
   initialSplit?: SplitDialogSeed | null;
   initialSplitsByProjectId?: Record<string, SplitDialogSeed>;
-  triggerVariant?: "default" | "outline" | "ghost";
   defaultProjectId?: string;
   defaultOpen?: boolean;
-  triggerLabel?: string;
-}) {
+} & SheetTriggerProps) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
   const [pending, start] = useTransition();
@@ -649,6 +688,10 @@ export function ProjectSplitDialog({
       description="Set a build/target pool of the distributable amount (after platform fee). Whoever takes the remainder gets the rest."
       triggerLabel={triggerLabel}
       triggerVariant={triggerVariant}
+      triggerSize={triggerSize}
+      triggerIcon={triggerIcon}
+      triggerIconOnly={triggerIconOnly}
+      triggerAriaLabel={triggerAriaLabel}
       triggerDisabled={!canOpen}
       open={open}
       onOpenChange={setOpen}

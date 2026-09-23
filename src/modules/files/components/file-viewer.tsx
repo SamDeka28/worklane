@@ -24,9 +24,13 @@ function isPdf(mime: string | null, name: string) {
   return mime === "application/pdf" || name.toLowerCase().endsWith(".pdf");
 }
 
-function isImage(mime: string | null, name: string) {
+export function isImageFile(mime: string | null, name: string) {
   if (mime?.startsWith("image/")) return true;
   return /\.(png|jpe?g|webp|gif)$/i.test(name);
+}
+
+function isImage(mime: string | null, name: string) {
+  return isImageFile(mime, name);
 }
 
 function isText(mime: string | null, name: string) {
@@ -159,7 +163,7 @@ export function FileViewerSheet({
             </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 rounded-[1.5rem] bg-card/80 px-6 text-center ring-1 ring-border/30">
-              <span className="flex size-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-800">
+              <span className="flex size-12 items-center justify-center rounded-2xl bg-status-due text-status-due-fg">
                 <FileKindIcon mime={file.mime} name={file.name} />
               </span>
               <p className="max-w-sm text-sm text-muted-foreground">
@@ -204,6 +208,13 @@ export function FileViewerSheet({
   );
 }
 
+function formatFileSize(sizeBytes: number | null | undefined) {
+  if (sizeBytes == null) return null;
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function ProjectFileListItem({
   file,
   trailing,
@@ -214,11 +225,12 @@ export function ProjectFileListItem({
   const [open, setOpen] = useState(false);
   const previewable = canPreviewInApp(file);
   const hasUrl = Boolean(file.url);
+  const sizeLabel = formatFileSize(file.sizeBytes);
 
   return (
     <li className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-800">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-status-due text-status-due-fg">
           <FileKindIcon mime={file.mime} name={file.name} />
         </span>
         <div className="min-w-0">
@@ -236,19 +248,88 @@ export function ProjectFileListItem({
           <p className="mt-0.5 text-xs text-muted-foreground">
             {previewable ? "Click to preview" : "Uploaded file"}
             {file.mime ? ` · ${file.mime.split("/").pop()}` : ""}
-            {file.sizeBytes != null
-              ? ` · ${
-                  file.sizeBytes < 1024
-                    ? `${file.sizeBytes} B`
-                    : file.sizeBytes < 1024 * 1024
-                      ? `${(file.sizeBytes / 1024).toFixed(1)} KB`
-                      : `${(file.sizeBytes / (1024 * 1024)).toFixed(1)} MB`
-                }`
-              : ""}
+            {sizeLabel ? ` · ${sizeLabel}` : ""}
           </p>
         </div>
       </div>
       {trailing}
+      <FileViewerSheet file={file} open={open} onOpenChange={setOpen} />
+    </li>
+  );
+}
+
+/** Thumbnail (images) or file chip with in-app preview sheet. */
+export function FileAttachmentPreview({
+  file,
+  trailing,
+}: {
+  file: ViewableFile;
+  trailing?: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const image = isImageFile(file.mime, file.name);
+  const previewable = canPreviewInApp(file);
+  const hasUrl = Boolean(file.url);
+  const sizeLabel = formatFileSize(file.sizeBytes);
+
+  return (
+    <li className="relative overflow-hidden rounded-2xl bg-muted/50 ring-1 ring-foreground/6">
+      {image && hasUrl ? (
+        <button
+          type="button"
+          className="group block w-full text-left"
+          onClick={() => setOpen(true)}
+          aria-label={`Preview ${file.name}`}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={file.url!}
+            alt={file.name}
+            className="aspect-16/10 w-full object-cover transition-[opacity,transform] duration-150 group-hover:opacity-95"
+          />
+          <span className="flex items-center justify-between gap-2 px-3.5 py-2.5">
+            <span className="min-w-0 truncate text-[13px] font-medium">{file.name}</span>
+            {sizeLabel ? (
+              <span className="shrink-0 text-[11px] text-muted-foreground">{sizeLabel}</span>
+            ) : null}
+          </span>
+        </button>
+      ) : (
+        <div className="flex items-center gap-3 px-3.5 py-2.5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-card text-muted-foreground ring-1 ring-foreground/6">
+            <FileKindIcon mime={file.mime} name={file.name} />
+          </span>
+          <div className="min-w-0 flex-1">
+            {hasUrl && previewable ? (
+              <button
+                type="button"
+                className="block max-w-full truncate text-left text-[13px] font-medium hover:underline"
+                onClick={() => setOpen(true)}
+              >
+                {file.name}
+              </button>
+            ) : hasUrl ? (
+              <a
+                href={file.url!}
+                target="_blank"
+                rel="noreferrer"
+                className="block max-w-full truncate text-[13px] font-medium hover:underline"
+              >
+                {file.name}
+              </a>
+            ) : (
+              <span className="truncate text-[13px] font-medium">{file.name}</span>
+            )}
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {previewable ? "Click to preview" : "Open to download"}
+              {sizeLabel ? ` · ${sizeLabel}` : ""}
+            </p>
+          </div>
+        </div>
+      )}
+      {trailing ? (
+        <div className="absolute top-2 right-2 z-10">{trailing}</div>
+      ) : null}
       <FileViewerSheet file={file} open={open} onOpenChange={setOpen} />
     </li>
   );

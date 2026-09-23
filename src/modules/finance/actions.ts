@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireWritableOrg } from "@/modules/identity/org";
+import { requireModuleWrite } from "@/modules/identity/org";
 import {
   allocatePartnersForReceipt,
   voidPartnerAllocationsForCharge,
@@ -15,7 +15,7 @@ function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
 }
 
 export async function createChargeAction(orgSlug: string, formData: FormData) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "finance");
   const clientId = String(formData.get("client_id") ?? "");
   const memo = String(formData.get("memo") ?? "").trim() || null;
   const chargedOn = String(formData.get("charged_on") ?? "") || new Date().toISOString().slice(0, 10);
@@ -87,7 +87,7 @@ export async function createChargeAction(orgSlug: string, formData: FormData) {
 }
 
 export async function recordPaymentAction(orgSlug: string, formData: FormData) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "finance");
   const clientId = String(formData.get("client_id") ?? "");
   const method = String(formData.get("method") ?? "other");
   const kind = String(formData.get("kind") ?? "receipt") === "refund" ? "refund" : "receipt";
@@ -218,7 +218,7 @@ export async function recordPaymentAction(orgSlug: string, formData: FormData) {
 }
 
 export async function voidChargeAction(orgSlug: string, chargeId: string) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "finance");
   const { data: charge } = await ctx.supabase
     .from("charges")
     .select("id, client_id, status")
@@ -261,7 +261,7 @@ export async function voidChargeAction(orgSlug: string, chargeId: string) {
 }
 
 export async function voidPaymentAction(orgSlug: string, paymentId: string) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "finance");
   const { data: payment } = await ctx.supabase
     .from("payments")
     .select("id, client_id")

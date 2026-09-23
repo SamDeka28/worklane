@@ -45,21 +45,25 @@ export function EditorPageRuler({
   });
   const [width, setWidth] = useState(0);
 
-  const refreshIndent = useCallback(() => {
-    if (!editor) return;
-    setIndent(getBlockIndent(editor));
-  }, [editor]);
-
   useEffect(() => {
     if (!editor) return;
+    const refreshIndent = () => setIndent(getBlockIndent(editor));
+    const onTransaction = ({
+      transaction,
+    }: {
+      transaction: { docChanged: boolean; selectionSet: boolean };
+    }) => {
+      if (!transaction.docChanged && !transaction.selectionSet) return;
+      refreshIndent();
+    };
     refreshIndent();
     editor.on("selectionUpdate", refreshIndent);
-    editor.on("transaction", refreshIndent);
+    editor.on("transaction", onTransaction);
     return () => {
       editor.off("selectionUpdate", refreshIndent);
-      editor.off("transaction", refreshIndent);
+      editor.off("transaction", onTransaction);
     };
-  }, [editor, refreshIndent]);
+  }, [editor]);
 
   useEffect(() => {
     const el = trackRef.current;

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { cache } from "react";
 import {
   canAccessModule,
   canWriteModule,
@@ -29,6 +30,7 @@ export type OrgContext = {
   user: {
     email: string | null;
     displayName: string | null;
+    avatarUrl: string | null;
   };
 };
 
@@ -52,7 +54,10 @@ export function mapOrganization(row: OrgRow): Organization {
   };
 }
 
-export async function listMyOrgs(): Promise<{ org: Organization; role: OrgRole }[]> {
+/** Membership list once per request. */
+export const listMyOrgs = cache(async (): Promise<
+  { org: Organization; role: OrgRole }[]
+> => {
   const { supabase, user } = await requireUser();
   const { data, error } = await supabase
     .from("organization_members")
@@ -78,9 +83,10 @@ export async function listMyOrgs(): Promise<{ org: Organization; role: OrgRole }
       };
     })
     .filter((row): row is { org: Organization; role: OrgRole } => Boolean(row));
-}
+});
 
-export async function requireOrg(slug: string): Promise<OrgContext> {
+/** Org + membership + profile once per slug per request. */
+export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
   const { supabase, user } = await requireUser();
   const { data: orgRow, error } = await supabase
     .from("organizations")
@@ -95,13 +101,20 @@ export async function requireOrg(slug: string): Promise<OrgContext> {
     notFound();
   }
 
-  const { data: membership } = await supabase
-    .from("organization_members")
-    .select("role, status, permissions")
-    .eq("organization_id", orgRow.id)
-    .eq("user_id", user.id)
-    .eq("status", "active")
-    .maybeSingle();
+  const [{ data: membership }, { data: profile }] = await Promise.all([
+    supabase
+      .from("organization_members")
+      .select("role, status, permissions")
+      .eq("organization_id", orgRow.id)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("email, display_name, avatar_url")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ]);
 
   if (!membership) {
     notFound();
@@ -123,12 +136,6 @@ export async function requireOrg(slug: string): Promise<OrgContext> {
     canWriteModule(permissions, "documents") ||
     canWriteModule(permissions, "partners");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("email, display_name")
-    .eq("id", user.id)
-    .maybeSingle();
-
   return {
     org,
     role,
@@ -142,9 +149,14 @@ export async function requireOrg(slug: string): Promise<OrgContext> {
         (profile?.display_name as string | null) ??
         (user.user_metadata?.full_name as string | undefined) ??
         null,
+      avatarUrl:
+        (profile?.avatar_url as string | null) ??
+        (user.user_metadata?.avatar_url as string | undefined) ??
+        (user.user_metadata?.picture as string | undefined) ??
+        null,
     },
   };
-}
+});
 
 export function requireModuleAccess(ctx: OrgContext, module: ModuleKey) {
   if (!canAccessModule(ctx.permissions, module)) {
@@ -156,6 +168,18 @@ export async function requireWritableOrg(slug: string): Promise<OrgContext> {
   const ctx = await requireOrg(slug);
   if (!ctx.canWrite) {
     throw new Error("You do not have permission to change this organization");
+  }
+  return ctx;
+}
+
+/** Writable org membership plus write access to a specific module. */
+export async function requireModuleWrite(
+  slug: string,
+  module: ModuleKey,
+): Promise<OrgContext> {
+  const ctx = await requireWritableOrg(slug);
+  if (!canWriteModule(ctx.permissions, module)) {
+    throw new Error(`You do not have permission to change ${module}`);
   }
   return ctx;
 }
@@ -191,16 +215,20 @@ export async function listOrgMembers(slug: string) {
   if (error) throw new Error(error.message);
 
   const userIds = (data ?? []).map((row) => row.user_id as string);
-  const profileMap = new Map<string, { email: string; displayName: string | null }>();
+  const profileMap = new Map<
+    string,
+    { email: string; displayName: string | null; avatarUrl: string | null }
+  >();
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, email, display_name")
+      .select("id, email, display_name, avatar_url")
       .in("id", userIds);
     for (const profile of profiles ?? []) {
       profileMap.set(profile.id as string, {
         email: profile.email as string,
         displayName: (profile.display_name as string | null) ?? null,
+        avatarUrl: (profile.avatar_url as string | null) ?? null,
       });
     }
   }
@@ -214,6 +242,7 @@ export async function listOrgMembers(slug: string) {
       userId: row.user_id as string,
       email: profile?.email ?? null,
       displayName: profile?.displayName ?? null,
+      avatarUrl: profile?.avatarUrl ?? null,
       createdAt: row.created_at as string,
       isYou: row.user_id === userId,
       permissions: parseMemberPermissions(row.permissions),

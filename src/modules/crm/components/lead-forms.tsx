@@ -19,21 +19,25 @@ import {
   updateLeadAction,
 } from "@/modules/crm/actions";
 import {
-  LEAD_STAGES,
-  LEAD_STAGE_LABELS,
+  isWonStage,
   type LeadRecord,
+  type LeadStageRecord,
 } from "@/modules/crm/types";
 import { formatMajorInput } from "@/shared/money";
 import type { JSONContent } from "@tiptap/react";
 
 export function CreateLeadDialog({
   orgSlug,
+  stages,
   defaultOpen = false,
   defaultCurrency = "USD",
+  showMoney = true,
 }: {
   orgSlug: string;
+  stages: LeadStageRecord[];
   defaultOpen?: boolean;
   defaultCurrency?: "USD" | "INR";
+  showMoney?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
@@ -41,6 +45,7 @@ export function CreateLeadDialog({
   const [error, setError] = useState<string | null>(null);
   const [notesDoc, setNotesDoc] = useState<JSONContent | null>(null);
   const [notesPlain, setNotesPlain] = useState("");
+  const defaultStage = stages[0]?.slug ?? "new";
 
   useEffect(() => {
     setOpen(defaultOpen);
@@ -87,10 +92,10 @@ export function CreateLeadDialog({
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Stage" htmlFor="stage">
-            <NativeSelect id="stage" name="stage" defaultValue="new">
-              {LEAD_STAGES.map((stage) => (
-                <option key={stage} value={stage}>
-                  {LEAD_STAGE_LABELS[stage]}
+            <NativeSelect id="stage" name="stage" defaultValue={defaultStage}>
+              {stages.map((stage) => (
+                <option key={stage.id} value={stage.slug}>
+                  {stage.name}
                 </option>
               ))}
             </NativeSelect>
@@ -102,9 +107,11 @@ export function CreateLeadDialog({
             </NativeSelect>
           </Field>
         </div>
-        <Field label="Estimated value" htmlFor="estimated_value">
-          <Input id="estimated_value" name="estimated_value" inputMode="decimal" placeholder="0.00" />
-        </Field>
+        {showMoney ? (
+          <Field label="Estimated value" htmlFor="estimated_value">
+            <Input id="estimated_value" name="estimated_value" inputMode="decimal" placeholder="0.00" />
+          </Field>
+        ) : null}
         <Field label="Close on" htmlFor="close_on">
           <Input id="close_on" name="close_on" type="date" />
         </Field>
@@ -151,15 +158,19 @@ export function CreateLeadDialog({
 export function LeadDetailSheet({
   orgSlug,
   lead,
+  stages,
   open,
   onOpenChange,
   canWrite,
+  showMoney = true,
 }: {
   orgSlug: string;
   lead: LeadRecord | null;
+  stages: LeadStageRecord[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canWrite: boolean;
+  showMoney?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -174,6 +185,8 @@ export function LeadDetailSheet({
   }, [lead]);
 
   if (!lead) return null;
+
+  const won = isWonStage(lead.stage, stages);
 
   return (
     <ActionSheet
@@ -214,9 +227,9 @@ export function LeadDetailSheet({
               defaultValue={lead.stage}
               disabled={!canWrite}
             >
-              {LEAD_STAGES.map((stage) => (
-                <option key={stage} value={stage}>
-                  {LEAD_STAGE_LABELS[stage]}
+              {stages.map((stage) => (
+                <option key={stage.id} value={stage.slug}>
+                  {stage.name}
                 </option>
               ))}
             </NativeSelect>
@@ -233,19 +246,21 @@ export function LeadDetailSheet({
             </NativeSelect>
           </Field>
         </div>
-        <Field label="Estimated value" htmlFor="edit_estimated_value">
-          <Input
-            id="edit_estimated_value"
-            name="estimated_value"
-            inputMode="decimal"
-            defaultValue={
-              lead.estimatedValueMinor != null
-                ? formatMajorInput(lead.estimatedValueMinor, lead.currency)
-                : ""
-            }
-            disabled={!canWrite}
-          />
-        </Field>
+        {showMoney ? (
+          <Field label="Estimated value" htmlFor="edit_estimated_value">
+            <Input
+              id="edit_estimated_value"
+              name="estimated_value"
+              inputMode="decimal"
+              defaultValue={
+                lead.estimatedValueMinor != null
+                  ? formatMajorInput(lead.estimatedValueMinor, lead.currency)
+                  : ""
+              }
+              disabled={!canWrite}
+            />
+          </Field>
+        ) : null}
         <Field label="Close on" htmlFor="edit_close_on">
           <Input
             id="edit_close_on"
@@ -312,7 +327,7 @@ export function LeadDetailSheet({
             {!lead.clientId ? (
               <div className="rounded-2xl bg-muted/50 p-3">
                 <p className="text-sm font-medium">
-                  {lead.stage === "won" ? "Won — become a client" : "Ready to convert?"}
+                  {won ? "Won — become a client" : "Ready to convert?"}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Creates the client, contact, and a project from this lead. Lands you in delivery.

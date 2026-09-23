@@ -2,29 +2,33 @@ import Link from "next/link";
 import { PageShell } from "@/components/studio/composer";
 import {
   NextStepCard,
-  SoftCard,
   StudioToolbar,
   WorkSurface,
   moneyFill,
 } from "@/components/studio/chrome";
 import {
   DotStackChart,
-  HorizonBars,
   PillTrack,
+  ProjectMoneyCurves,
   SoftStatCard,
 } from "@/components/studio/charts";
 import { MoneyDonut, MONEY_COLORS } from "@/components/studio/money-donut";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
-import { listClients } from "@/modules/clients/queries";
-import { listLeads } from "@/modules/crm/queries";
-import { LEAD_STAGE_LABELS, type LeadStage } from "@/modules/crm/types";
+import { listClients, listOrgActivity } from "@/modules/clients/queries";
+import { listLeads, listLeadStages } from "@/modules/crm/queries";
+import {
+  isClosedStage,
+  openPipelineStages,
+  stagesOrDefault,
+} from "@/modules/crm/types";
 import { projectMoneyStats } from "@/modules/delivery/board";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { dueThisMonthMinor, groupChargesByClient } from "@/modules/finance/presentation";
-import { loadMonthlyStatement, loadOrgDashboard, loadOrgFinance } from "@/modules/finance/queries";
+import { loadMonthlyStatements, loadOrgDashboard, loadOrgFinance } from "@/modules/finance/queries";
 import { requireOrg } from "@/modules/identity/org";
+import { canAccessModule, canSeeMoney } from "@/modules/identity/permissions";
 import { loadOpsQueue } from "@/modules/ops/queries";
 import { loadPartnerBalances } from "@/modules/partners/queries";
 import { JOURNEY } from "@/shared/journey-copy";
@@ -95,49 +99,103 @@ export default async function DashboardPage({
 }: PageProps<"/[orgSlug]">) {
   const { orgSlug } = await params;
   const ctx = await requireOrg(orgSlug);
+  const seeMoney = canSeeMoney(ctx.permissions);
+  const seePartners = canAccessModule(ctx.permissions, "partners");
+  const seeCrm = ctx.org.modules.crm && canAccessModule(ctx.permissions, "crm");
   const months = monthKeys(6);
 
-  const [dash, finance, board, clients, balances, leads, opsQueue, ...statements] = await Promise.all([
-    loadOrgDashboard(orgSlug),
-    loadOrgFinance(orgSlug),
+  const [
+    dashLoaded,
+    finance,
+    board,
+    clients,
+    balances,
+    leads,
+    leadStages,
+    opsQueueRaw,
+    statements,
+    activityRows,
+  ] = await Promise.all([
+    seeMoney ? loadOrgDashboard(orgSlug) : Promise.resolve(null),
+    seeMoney ? loadOrgFinance(orgSlug) : Promise.resolve(null),
     listProjectBoard(orgSlug),
     listClients(orgSlug),
-    loadPartnerBalances(orgSlug).catch(() => []),
-    ctx.org.modules.crm ? listLeads(orgSlug).catch(() => []) : Promise.resolve([]),
+    seeMoney && seePartners
+      ? loadPartnerBalances(orgSlug).catch(() => [])
+      : Promise.resolve([]),
+    seeCrm ? listLeads(orgSlug).catch(() => []) : Promise.resolve([]),
+    seeCrm ? listLeadStages(orgSlug).catch(() => []) : Promise.resolve([]),
     loadOpsQueue(orgSlug).catch(() => []),
-    ...months.map((month) => loadMonthlyStatement(orgSlug, month)),
+    seeMoney ? loadMonthlyStatements(orgSlug, months) : Promise.resolve([]),
+    seeMoney ? Promise.resolve([]) : listOrgActivity(orgSlug, 30).catch(() => []),
   ]);
 
-  const emptyStudio = dash.clientCount === 0;
-  const doNext = opsQueue[0] ?? null;
-  const currency = dash.currency;
   const names = new Map(clients.map((client) => [client.id, client.name]));
-  const monthDueMinor = dueThisMonthMinor(
-    finance.charges.filter((charge) => charge.status !== "void"),
-  );
+  const dash = dashLoaded ?? {
+    currency: ctx.org.defaultCurrency,
+    outstandingMinor: BigInt(0),
+    overdueMinor: BigInt(0),
+    billedMinor: BigInt(0),
+    collectedMinor: BigInt(0),
+    clientCount: clients.length,
+    projectCount: 0,
+    openChargeCount: 0,
+    paymentCount: 0,
+    recentClients: [],
+    activities: activityRows.map((row) => ({
+      ...row,
+      clientName: row.entityId ? (names.get(row.entityId) ?? null) : null,
+    })),
+  };
 
-  const projectRows = board
-    .map((row) => {
-      const projectCharges = finance.charges.filter(
-        (charge) => charge.projectId === row.project.id,
-      );
-      const money = projectMoneyStats(row.project, projectCharges);
-      return { project: row.project, money, openTasks: row.openTasks };
-    })
-    .filter(
-      (row) =>
-        row.money.totalPriceMinor > BigInt(0) ||
-        row.money.outstandingMinor > BigInt(0) ||
-        row.money.collectedMinor > BigInt(0),
-    )
-    .sort((a, b) => Number(b.money.remainingMinor - a.money.remainingMinor));
+  let opsQueue = opsQueueRaw;
+  if (!seeMoney) {
+    opsQueue = opsQueue.filter(
+      (item) =>
+        item.amountMinor == null &&
+        item.verb !== "collect" &&
+        item.verb !== "bill" &&
+        item.verb !== "settle",
+    );
+  } else if (!seePartners) {
+    opsQueue = opsQueue.filter((item) => item.verb !== "settle");
+  }
+
+  const stages = stagesOrDefault(leadStages);
+  const emptyStudio = clients.length === 0;
+  const doNext = opsQueue[0] ?? null;
+  const currency = seeMoney ? dash.currency : ctx.org.defaultCurrency;
+
+  const monthDueMinor =
+    finance != null
+      ? dueThisMonthMinor(finance.charges.filter((charge) => charge.status !== "void"))
+      : BigInt(0);
+
+  const projectRows =
+    finance != null
+      ? board
+          .map((row) => {
+            const projectCharges = finance.charges.filter(
+              (charge) => charge.projectId === row.project.id,
+            );
+            const money = projectMoneyStats(row.project, projectCharges);
+            return { project: row.project, money, openTasks: row.openTasks };
+          })
+          .filter(
+            (row) =>
+              row.money.totalPriceMinor > BigInt(0) ||
+              row.money.outstandingMinor > BigInt(0) ||
+              row.money.collectedMinor > BigInt(0),
+          )
+          .sort((a, b) => Number(b.money.remainingMinor - a.money.remainingMinor))
+      : [];
 
   const orgRemaining = projectRows.reduce(
     (sum, row) => sum + row.money.remainingMinor,
     BigInt(0),
   );
   const unbilledMinor =
-    orgRemaining > finance.snapshot.outstandingMinor
+    finance != null && orgRemaining > finance.snapshot.outstandingMinor
       ? orgRemaining - finance.snapshot.outstandingMinor
       : BigInt(0);
 
@@ -145,44 +203,52 @@ export default async function DashboardPage({
     (row) => row.project.status === "active" || row.project.status === "planning",
   ).length;
   const openTasks = board.reduce((sum, row) => sum + row.openTasks, 0);
-  const partnerPayable = balances
-    .filter((row) => row.active)
-    .reduce((sum, row) => sum + row.payableMinor, BigInt(0));
+  const partnerPayable =
+    seeMoney && seePartners
+      ? balances
+          .filter((row) => row.active)
+          .reduce((sum, row) => sum + row.payableMinor, BigInt(0))
+      : BigInt(0);
 
-  const owingGroups = groupChargesByClient(
-    finance.charges.filter(
-      (charge) => charge.status !== "void" && charge.outstandingMinor > BigInt(0),
-    ),
-    names,
-  ).slice(0, 6);
+  const owingGroups =
+    finance != null
+      ? groupChargesByClient(
+          finance.charges.filter(
+            (charge) => charge.status !== "void" && charge.outstandingMinor > BigInt(0),
+          ),
+          names,
+        ).slice(0, 6)
+      : [];
 
-  const pipelineStages: LeadStage[] = [
-    "new",
-    "contacted",
-    "discovery",
-    "qualified",
-    "proposal",
-    "negotiation",
-  ];
-  const openLeads = leads.filter(
-    (lead) => lead.stage !== "won" && lead.stage !== "lost",
-  );
+  const pipelineStages = openPipelineStages(stages);
+  const openLeads = leads.filter((lead) => !isClosedStage(lead.stage, stages));
   const pipelineValue = openLeads.reduce(
     (sum, lead) => sum + (lead.estimatedValueMinor ?? BigInt(0)),
     BigInt(0),
   );
   const stageCounts = pipelineStages.map((stage) => ({
-    stage,
-    label: LEAD_STAGE_LABELS[stage],
-    count: leads.filter((lead) => lead.stage === stage).length,
+    stage: stage.slug,
+    label: stage.name,
+    count: leads.filter((lead) => lead.stage === stage.slug).length,
   }));
   const maxStage = Math.max(1, ...stageCounts.map((row) => row.count));
 
-  const collectionTrend = months.map((month, index) => {
-    const statement = statements[index] as { payments?: bigint } | undefined;
+  const collectionTrend = months.map((month) => {
+    const statement = statements.find((row) => row.yearMonth === month);
     const collected = statement?.payments ?? BigInt(0);
     return { month, collected };
   });
+
+  const moneyActivityVerbs = new Set([
+    "charged",
+    "paid",
+    "refunded",
+    "voided",
+    "invoice_issued",
+  ]);
+  const recentActivities = seeMoney
+    ? dash.activities
+    : dash.activities.filter((row) => !moneyActivityVerbs.has(row.verb));
 
   return (
     <WorkSurface>
@@ -192,25 +258,23 @@ export default async function DashboardPage({
         <EmptyState
           fill
           title={
-            ctx.org.modules.crm
-              ? JOURNEY.leads.emptyTitle
-              : JOURNEY.clients.emptyTitle
+            seeCrm ? JOURNEY.leads.emptyTitle : JOURNEY.clients.emptyTitle
           }
           body={
-            ctx.org.modules.crm
+            seeCrm
               ? "Start with a lead. Win it, become a client, then deliver and collect — without retyping."
               : "Money, delivery, and pipeline roll up here once work starts."
           }
           actionHref={
             ctx.canWrite
-              ? ctx.org.modules.crm
+              ? seeCrm
                 ? `/${orgSlug}/crm?new=1`
                 : `/${orgSlug}/clients?new=1`
               : undefined
           }
           actionLabel={
             ctx.canWrite
-              ? ctx.org.modules.crm
+              ? seeCrm
                 ? JOURNEY.leads.primaryCta
                 : JOURNEY.clients.primaryCta
               : undefined
@@ -229,55 +293,58 @@ export default async function DashboardPage({
                   render={<Link href={doNext.href} />}
                 >
                   {doNext.cta}
-                  {doNext.amountMinor != null && doNext.currency
+                  {seeMoney && doNext.amountMinor != null && doNext.currency
                     ? ` · ${moneyLabel(doNext.amountMinor, doNext.currency)}`
                     : ""}
                 </Button>
               }
             />
           ) : null}
-          <div className="lane-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <Link href={`/${orgSlug}/finance`} className="block">
-              <SoftStatCard
-                label="Outstanding"
-                value={moneyLabel(dash.outstandingMinor, currency)}
-                hint="Open on the ledger"
-                tone="sky"
-                fill={moneyFill(dash.outstandingMinor, dash.billedMinor)}
-              />
-            </Link>
-            <Link href={`/${orgSlug}/finance?filter=overdue`} className="block">
-              <SoftStatCard
-                label="Overdue"
-                value={moneyLabel(dash.overdueMinor, currency)}
-                hint="Past due date"
-                tone="amber"
-                badge={dash.overdueMinor > BigInt(0) ? "Needs collect" : undefined}
-                fill={moneyFill(dash.overdueMinor, dash.outstandingMinor)}
-              />
-            </Link>
-            <Link href={`/${orgSlug}/finance?view=overview`} className="block">
-              <SoftStatCard
-                label="Collected"
-                value={moneyLabel(dash.collectedMinor, currency)}
-                hint="Receipts allocated"
-                tone="emerald"
-                fill={moneyFill(dash.collectedMinor, dash.billedMinor)}
-              />
-            </Link>
-            <Link href={`/${orgSlug}/finance`} className="block">
-              <SoftStatCard
-                label="Due this month"
-                value={moneyLabel(monthDueMinor, currency)}
-                hint="Charges with due dates this month"
-                tone="violet"
-                fill={moneyFill(monthDueMinor, dash.outstandingMinor)}
-              />
-            </Link>
-          </div>
+          {seeMoney ? (
+            <div className="lane-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <Link href={`/${orgSlug}/finance`} className="block">
+                <SoftStatCard
+                  label="Outstanding"
+                  value={moneyLabel(dash.outstandingMinor, currency)}
+                  hint="Open on the ledger"
+                  tone="sky"
+                  fill={moneyFill(dash.outstandingMinor, dash.billedMinor)}
+                />
+              </Link>
+              <Link href={`/${orgSlug}/finance?filter=overdue`} className="block">
+                <SoftStatCard
+                  label="Overdue"
+                  value={moneyLabel(dash.overdueMinor, currency)}
+                  hint="Past due date"
+                  tone="amber"
+                  badge={dash.overdueMinor > BigInt(0) ? "Needs collect" : undefined}
+                  fill={moneyFill(dash.overdueMinor, dash.outstandingMinor)}
+                />
+              </Link>
+              <Link href={`/${orgSlug}/finance?view=overview`} className="block">
+                <SoftStatCard
+                  label="Collected"
+                  value={moneyLabel(dash.collectedMinor, currency)}
+                  hint="Receipts allocated"
+                  tone="emerald"
+                  fill={moneyFill(dash.collectedMinor, dash.billedMinor)}
+                />
+              </Link>
+              <Link href={`/${orgSlug}/finance`} className="block">
+                <SoftStatCard
+                  label="Due this month"
+                  value={moneyLabel(monthDueMinor, currency)}
+                  hint="Charges with due dates this month"
+                  tone="violet"
+                  fill={moneyFill(monthDueMinor, dash.outstandingMinor)}
+                />
+              </Link>
+            </div>
+          ) : null}
 
+          {seeMoney && finance != null ? (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-            <SoftCard className="p-6" hover>
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Money mix</p>
@@ -322,12 +389,12 @@ export default async function DashboardPage({
                   },
                 ]}
               />
-              <div className="mt-5 rounded-3xl bg-sky-50/80 px-4 py-3 text-sm text-sky-900/80">
+              <div className="mt-5 rounded-xl bg-status-due px-4 py-3 text-sm text-status-due-fg">
                 Collecting on time keeps partner payables honest and projects funded.
               </div>
-            </SoftCard>
+            </div>
 
-            <SoftCard className="flex flex-col p-6" hover>
+            <div className="flex flex-col rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
               <div className="mb-1 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Collections</p>
@@ -355,14 +422,15 @@ export default async function DashboardPage({
                   }))}
                 />
               </div>
-            </SoftCard>
+            </div>
           </div>
+          ) : null}
 
           <div className="lane-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Link href={`/${orgSlug}/clients`} className="block">
               <SoftStatCard
                 label="Clients"
-                value={String(dash.clientCount)}
+                value={String(clients.length)}
                 hint="Who you bill"
                 tone="slate"
               />
@@ -376,26 +444,38 @@ export default async function DashboardPage({
                 badge={openTasks > 0 ? `${openTasks} tasks` : undefined}
               />
             </Link>
-            <Link href={`/${orgSlug}/partners`} className="block">
-              <SoftStatCard
-                label="Partner payable"
-                value={moneyLabel(partnerPayable, currency)}
-                hint="Earned minus settled"
-                tone="amber"
-                fill={moneyFill(partnerPayable, partnerPayable + dash.collectedMinor)}
-              />
-            </Link>
-            {ctx.org.modules.crm ? (
+            {seeMoney && seePartners ? (
+              <Link href={`/${orgSlug}/partners`} className="block">
+                <SoftStatCard
+                  label="Partner payable"
+                  value={moneyLabel(partnerPayable, currency)}
+                  hint="Earned minus settled"
+                  tone="amber"
+                  fill={moneyFill(partnerPayable, partnerPayable + dash.collectedMinor)}
+                />
+              </Link>
+            ) : null}
+            {seeCrm ? (
               <Link href={`/${orgSlug}/crm`} className="block">
                 <SoftStatCard
                   label="Pipeline"
-                  value={moneyLabel(pipelineValue, currency)}
-                  hint={`${openLeads.length} open leads`}
+                  value={
+                    seeMoney
+                      ? moneyLabel(pipelineValue, currency)
+                      : String(openLeads.length)
+                  }
+                  hint={
+                    seeMoney
+                      ? `${openLeads.length} open leads`
+                      : openLeads.length === 1
+                        ? "Open lead"
+                        : "Open leads"
+                  }
                   tone="violet"
                   badge={openLeads.length ? `${openLeads.length} open` : undefined}
                 />
               </Link>
-            ) : (
+            ) : seeMoney ? (
               <Link href={`/${orgSlug}/finance`} className="block">
                 <SoftStatCard
                   label="Open charges"
@@ -404,16 +484,17 @@ export default async function DashboardPage({
                   tone="violet"
                 />
               </Link>
-            )}
+            ) : null}
           </div>
 
+          {seeMoney && finance != null ? (
           <div className="grid gap-4 lg:grid-cols-2">
-            <SoftCard className="p-6" hover>
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Projects</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Collected · due · unbilled remaining
+                    Collected, due, and unbilled by project
                   </p>
                 </div>
                 <Button
@@ -428,25 +509,30 @@ export default async function DashboardPage({
               {projectRows.length === 0 ? (
                 <p className="py-10 text-sm text-muted-foreground">No project money yet.</p>
               ) : (
-                <HorizonBars
-                  rows={projectRows.slice(0, 8).map(({ project, money }) => ({
-                    id: project.id,
-                    label: project.name,
-                    href: `/${orgSlug}/projects/${project.id}`,
-                    meta: moneyLabel(money.outstandingMinor, project.currency),
-                    collected: Number(money.collectedMinor),
-                    due: Number(money.outstandingMinor),
-                    remaining: Number(
+                <ProjectMoneyCurves
+                  rows={projectRows.slice(0, 8).map(({ project, money }) => {
+                    const remainingMinor =
                       money.remainingMinor > money.outstandingMinor
                         ? money.remainingMinor - money.outstandingMinor
-                        : BigInt(0),
-                    ),
-                  }))}
+                        : BigInt(0);
+                    return {
+                      id: project.id,
+                      label: project.name,
+                      href: `/${orgSlug}/projects/${project.id}`,
+                      meta: moneyLabel(money.outstandingMinor, project.currency),
+                      collected: Number(money.collectedMinor),
+                      due: Number(money.outstandingMinor),
+                      remaining: Number(remainingMinor),
+                      collectedLabel: moneyLabel(money.collectedMinor, project.currency),
+                      dueLabel: moneyLabel(money.outstandingMinor, project.currency),
+                      remainingLabel: moneyLabel(remainingMinor, project.currency),
+                    };
+                  })}
                 />
               )}
-            </SoftCard>
+            </div>
 
-            <SoftCard className="flex min-h-0 flex-col p-6" hover>
+            <div className="flex min-h-0 flex-col rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Who owes</p>
@@ -471,7 +557,7 @@ export default async function DashboardPage({
                     <li key={group.clientId}>
                       <Link
                         href={`/${orgSlug}/clients/${group.clientId}?collect=1#collect`}
-                        className="flex items-center justify-between gap-3 rounded-3xl px-3.5 py-3 text-sm transition-colors duration-200 hover:bg-sky-50/80"
+                        className="flex items-center justify-between gap-3 rounded-xl px-3.5 py-3 text-sm transition-colors duration-150 hover:bg-muted/70"
                       >
                         <span className="truncate font-medium">{group.name}</span>
                         <span className="shrink-0 tabular-nums font-medium text-foreground">
@@ -482,11 +568,12 @@ export default async function DashboardPage({
                   ))}
                 </ul>
               )}
-            </SoftCard>
+            </div>
           </div>
+          ) : null}
 
-          {ctx.org.modules.crm && openLeads.length > 0 ? (
-            <SoftCard className="p-6" hover>
+          {seeCrm && openLeads.length > 0 ? (
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
               <div className="mb-5 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-base font-semibold tracking-tight">Lead pipeline</p>
@@ -507,7 +594,7 @@ export default async function DashboardPage({
                 {stageCounts.map((row) => (
                   <li
                     key={row.stage}
-                    className="rounded-3xl bg-linear-to-br from-white to-sky-50/60 px-3.5 py-3.5 ring-1 ring-border/30 transition-transform duration-200 hover:-translate-y-0.5"
+                    className="rounded-xl bg-card px-3.5 py-3.5 ring-1 ring-foreground/6"
                   >
                     <p className="text-[11px] text-muted-foreground">{row.label}</p>
                     <p className="mt-1.5 text-2xl font-semibold tabular-nums">{row.count}</p>
@@ -520,16 +607,21 @@ export default async function DashboardPage({
                   </li>
                 ))}
               </ul>
-            </SoftCard>
+            </div>
           ) : null}
 
-          <SoftCard className="p-6" hover>
+          {(seeMoney || recentActivities.length > 0) ? (
+          <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 dark:border-white/10 dark:bg-muted/30">
             <p className="text-base font-semibold tracking-tight">Recent activity</p>
-            {dash.activities.length === 0 ? (
-              <p className="mt-4 text-sm text-muted-foreground">Charges and receipts land here.</p>
+            {recentActivities.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">
+                {seeMoney
+                  ? "Charges and receipts land here."
+                  : "Client and project updates land here."}
+              </p>
             ) : (
-              <ul className="mt-4 space-y-1">
-                {dash.activities.map((row) => (
+              <ul className="mt-4 max-h-64 space-y-1 overflow-y-auto overscroll-contain pr-1 sm:max-h-72">
+                {recentActivities.map((row) => (
                   <li
                     key={row.id}
                     className="flex items-baseline justify-between gap-3 rounded-2xl px-2.5 py-2.5 text-sm transition-colors hover:bg-muted/50"
@@ -544,7 +636,8 @@ export default async function DashboardPage({
                 ))}
               </ul>
             )}
-          </SoftCard>
+          </div>
+          ) : null}
         </>
       )}
       </PageShell>

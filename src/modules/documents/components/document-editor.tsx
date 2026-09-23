@@ -7,7 +7,8 @@ import type { Editor } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/react";
 import { Eye, Pencil } from "lucide-react";
 import { toast } from "sonner";
-import { HiddenDocFields, RichEditor, type MentionItem } from "@/components/editor/rich-editor";
+import { DocumentStudioEditor } from "@/components/editor/document-studio-editor";
+import { HiddenDocFields, type MentionItem } from "@/components/editor/rich-editor";
 import { StatusChip } from "@/components/studio/status-chip";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
@@ -69,6 +70,7 @@ export function DocumentEditor({
   orgSlug,
   document,
   version,
+  versions = [],
   canWrite,
   clients,
   projects,
@@ -82,6 +84,11 @@ export function DocumentEditor({
   orgSlug: string;
   document: DocumentRecord;
   version: DocumentVersion;
+  versions?: Array<{
+    id: string;
+    versionNumber: number;
+    status: DocumentVersion["status"];
+  }>;
   canWrite: boolean;
   clients: CatalogClient[];
   projects: CatalogProject[];
@@ -245,7 +252,7 @@ export function DocumentEditor({
     : refs;
 
   return (
-    <div className="flex min-h-0 flex-1 gap-3 lg:flex-row">
+    <div className="flex min-h-0 flex-1 gap-4 lg:flex-row">
       <DocumentCreateSheets
         key={`${createType}-${createOpen}`}
         orgSlug={orgSlug}
@@ -267,10 +274,10 @@ export function DocumentEditor({
         milestones={milestones}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[1.25rem] bg-muted/20 ring-1 ring-border/30">
         <form
           id="document-studio-form"
-          className="flex min-h-0 flex-1 flex-col gap-2"
+          className="flex min-h-0 flex-1 flex-col"
           action={(formData) => {
             start(async () => {
               const result = await saveDocumentVersionAction(orgSlug, version.id, formData);
@@ -283,16 +290,24 @@ export function DocumentEditor({
             });
           }}
         >
-          <div className="shrink-0 space-y-2 rounded-[1.25rem] bg-card/90 px-3 py-2.5 shadow-soft ring-1 ring-border/30 sm:px-4">
+          <div className="shrink-0 space-y-2 border-b border-border/40 bg-card px-4 py-3 sm:px-5">
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <input
-                name="title"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                disabled={!canWrite || locked || mode === "preview"}
-                className="min-w-0 flex-1 bg-transparent font-heading text-xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/50 disabled:opacity-90 sm:text-2xl"
-                placeholder="Untitled document"
-              />
+              <div className="min-w-0 flex-1 space-y-1">
+                <Link
+                  href={`/${orgSlug}/documents`}
+                  className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                >
+                  ← All documents
+                </Link>
+                <input
+                  name="title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  disabled={!canWrite || locked || mode === "preview"}
+                  className="block w-full min-w-0 bg-transparent font-heading text-xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/50 disabled:opacity-90 sm:text-2xl"
+                  placeholder="Untitled document"
+                />
+              </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <div
                   className="inline-flex rounded-2xl bg-muted/70 p-1 ring-1 ring-border/40"
@@ -344,7 +359,27 @@ export function DocumentEditor({
               <StatusChip tone={document.status === "draft" ? "active" : "paid"}>
                 {document.status}
               </StatusChip>
-              <span>v{version.versionNumber}</span>
+              {versions.length > 1 ? (
+                <div className="inline-flex flex-wrap items-center gap-1">
+                  {versions.map((row) => (
+                    <Link
+                      key={row.id}
+                      href={`/${orgSlug}/documents/${document.id}?version=${row.id}`}
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-xs font-medium transition-colors",
+                        row.id === version.id
+                          ? "bg-primary/15 text-primary"
+                          : "bg-muted/60 text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      v{row.versionNumber}
+                      {row.id === version.id ? ` · ${row.status}` : null}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <span>v{version.versionNumber}</span>
+              )}
               {displayClient ? (
                 <>
                   <span aria-hidden>·</span>
@@ -378,26 +413,22 @@ export function DocumentEditor({
           <HiddenDocFields name="content" doc={doc} plain={plain} />
           <input type="hidden" name="content_doc" value={JSON.stringify(doc)} />
 
-          <div className="min-h-0 flex-1">
-            <RichEditor
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <DocumentStudioEditor
               value={mode === "preview" ? previewDoc : doc}
               editable={mode === "edit" && canWrite && !locked}
-              variant="document"
               orgSlug={orgSlug}
               entityType="document_version"
               entityId={version.id}
               mentions={mentions}
               onCreateMention={onCreateMention}
               onEditorReady={setEditor}
-              enableTables
               pagePadding={margins}
               onPagePaddingChange={
                 mode === "edit" && canWrite && !locked ? setMargins : undefined
               }
               placeholder="Write or paste from Word / Docs. Type @ to tag…"
-              minHeightClassName="min-h-[36rem]"
-              maxHeightClassName="max-h-[min(85vh,56rem)]"
-              className="border-0 bg-transparent shadow-none ring-0"
+              className="h-full"
               onChange={(next, nextPlain) => {
                 if (mode === "preview") return;
                 setDoc(next);
@@ -407,180 +438,190 @@ export function DocumentEditor({
           </div>
 
           {locked ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="border-t border-border/40 px-4 py-2 text-xs text-muted-foreground">
               This version is locked. Clone to revise.
             </p>
           ) : mode === "preview" && canWrite ? (
-            <p className="text-center text-xs text-muted-foreground">
+            <p className="border-t border-border/40 px-4 py-2 text-center text-xs text-muted-foreground">
               Preview expands @ tags into live data — switch to Edit to change the draft.
             </p>
           ) : null}
         </form>
       </div>
 
-      <aside className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto lg:w-72 xl:w-80">
-        <div className="rounded-[1.75rem] bg-card/80 p-4 shadow-soft ring-1 ring-border/30">
-          <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-            Context
-          </p>
-          {canWrite && !locked ? (
-            <div className="mt-3 grid gap-3">
-              <Field label="Client" htmlFor="studio_client">
-                <NativeSelect
-                  id="studio_client"
-                  value={clientId}
-                  disabled={pending}
-                  onChange={(event) => {
-                    const next = event.target.value;
-                    setClientId(next);
-                    setProjectId("");
-                    start(async () => {
-                      const result = await updateDocumentLinksAction(orgSlug, document.id, {
-                        clientId: next || null,
-                        projectId: null,
+      <aside className="flex w-full shrink-0 flex-col gap-4 overflow-y-auto lg:w-80 xl:w-[22rem]">
+        <div className="overflow-hidden rounded-[1.25rem] bg-card/90 shadow-soft ring-1 ring-border/30">
+          <div className="border-b border-border/50 bg-muted/25 px-4 py-3">
+            <p className="text-[12px] font-bold tracking-[0.12em] text-foreground/70 uppercase">
+              Context
+            </p>
+          </div>
+          <div className="p-4">
+            {canWrite && !locked ? (
+              <div className="grid gap-3">
+                <Field label="Client" htmlFor="studio_client">
+                  <NativeSelect
+                    id="studio_client"
+                    value={clientId}
+                    disabled={pending}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setClientId(next);
+                      setProjectId("");
+                      start(async () => {
+                        const result = await updateDocumentLinksAction(orgSlug, document.id, {
+                          clientId: next || null,
+                          projectId: null,
+                        });
+                        if (result.error) toast.error(result.error);
+                        else router.refresh();
                       });
-                      if (result.error) toast.error(result.error);
-                      else router.refresh();
-                    });
-                  }}
-                >
-                  <option value="">None</option>
-                  {clients.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </Field>
-              <Field label="Project" htmlFor="studio_project">
-                <NativeSelect
-                  id="studio_project"
-                  value={projectId}
-                  disabled={pending || !clientId}
-                  onChange={(event) => {
-                    const next = event.target.value;
-                    setProjectId(next);
-                    start(async () => {
-                      const result = await updateDocumentLinksAction(orgSlug, document.id, {
-                        projectId: next || null,
+                    }}
+                  >
+                    <option value="">None</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="Project" htmlFor="studio_project">
+                  <NativeSelect
+                    id="studio_project"
+                    value={projectId}
+                    disabled={pending || !clientId}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setProjectId(next);
+                      start(async () => {
+                        const result = await updateDocumentLinksAction(orgSlug, document.id, {
+                          projectId: next || null,
+                        });
+                        if (result.error) toast.error(result.error);
+                        else {
+                          if (result.clientId) setClientId(result.clientId);
+                          router.refresh();
+                        }
                       });
-                      if (result.error) toast.error(result.error);
-                      else {
-                        if (result.clientId) setClientId(result.clientId);
-                        router.refresh();
-                      }
-                    });
-                  }}
-                >
-                  <option value="">None</option>
-                  {scopedProjects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </Field>
-            </div>
-          ) : (
-            <div className="mt-3 space-y-1 text-sm">
-              <p>{displayClient ?? "No client"}</p>
-              <p className="text-muted-foreground">{displayProject ?? "No project"}</p>
-            </div>
-          )}
+                    }}
+                  >
+                    <option value="">None</option>
+                    {scopedProjects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              </div>
+            ) : (
+              <div className="space-y-1 text-sm">
+                <p>{displayClient ?? "No client"}</p>
+                <p className="text-muted-foreground">{displayProject ?? "No project"}</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="rounded-[1.75rem] bg-card/80 p-4 shadow-soft ring-1 ring-border/30">
-          <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-            Tags & structure
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            @-tags sync on save. In Preview they expand to live client, project, milestone, and
-            task details.
-          </p>
+        <div className="overflow-hidden rounded-[1.25rem] bg-card/90 shadow-soft ring-1 ring-border/30">
+          <div className="border-b border-border/50 bg-muted/25 px-4 py-3">
+            <p className="text-[12px] font-bold tracking-[0.12em] text-foreground/70 uppercase">
+              Tags & structure
+            </p>
+          </div>
+          <div className="p-4">
+            <p className="text-xs text-muted-foreground">
+              @-tags sync on save. In Preview they expand to live client, project, milestone, and
+              task details.
+            </p>
 
-          {canWrite && !locked && mode === "edit" ? (
-            <div className="mt-3 flex flex-col gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={pending}
-                onClick={applyStarterTemplate}
-              >
-                Apply designed template
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={pending || milestones.length === 0}
-                onClick={insertMilestoneTable}
-              >
-                Insert milestones table
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={pending || tasks.length === 0}
-                onClick={insertTaskTable}
-              >
-                Insert tasks table
-              </Button>
-            </div>
-          ) : null}
-
-          <ul className="mt-4 space-y-2">
-            {railRefs.length === 0 ? (
-              <li className="text-xs text-muted-foreground">
-                No tags yet. Type @ in the editor or create from the menu.
-              </li>
-            ) : (
-              railRefs.map((ref) => (
-                <li
-                  key={`${ref.entityType}:${ref.entityId}`}
-                  className="flex items-center justify-between gap-2 rounded-xl bg-muted/40 px-3 py-2 text-sm"
+            {canWrite && !locked && mode === "edit" ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pending}
+                  onClick={applyStarterTemplate}
                 >
-                  <span className="min-w-0 truncate">
-                    <span className="mr-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                      {ref.entityType}
-                    </span>
-                    {ref.label}
-                  </span>
-                  {ref.entityType === "project" ? (
-                    <Link
-                      href={`/${orgSlug}/projects/${ref.entityId}`}
-                      className="shrink-0 text-xs text-sky-700 hover:underline"
-                    >
-                      Open
-                    </Link>
-                  ) : ref.entityType === "client" ? (
-                    <Link
-                      href={`/${orgSlug}/clients/${ref.entityId}`}
-                      className="shrink-0 text-xs text-sky-700 hover:underline"
-                    >
-                      Open
-                    </Link>
-                  ) : projectId ? (
-                    <Link
-                      href={`/${orgSlug}/projects/${projectId}?tab=${ref.entityType === "milestone" ? "milestones" : "work"}`}
-                      className="shrink-0 text-xs text-sky-700 hover:underline"
-                    >
-                      Open
-                    </Link>
-                  ) : null}
+                  Apply designed template
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pending || milestones.length === 0}
+                  onClick={insertMilestoneTable}
+                >
+                  Insert milestones table
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={pending || tasks.length === 0}
+                  onClick={insertTaskTable}
+                >
+                  Insert tasks table
+                </Button>
+              </div>
+            ) : null}
+
+            <ul className="mt-4 space-y-2">
+              {railRefs.length === 0 ? (
+                <li className="text-xs text-muted-foreground">
+                  No tags yet. Type @ in the editor or create from the menu.
                 </li>
-              ))
-            )}
-          </ul>
+              ) : (
+                railRefs.map((ref) => (
+                  <li
+                    key={`${ref.entityType}:${ref.entityId}`}
+                    className="flex items-center justify-between gap-2 rounded-xl bg-muted/40 px-3 py-2 text-sm"
+                  >
+                    <span className="min-w-0 truncate">
+                      <span className="mr-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                        {ref.entityType}
+                      </span>
+                      {ref.label}
+                    </span>
+                    {ref.entityType === "project" ? (
+                      <Link
+                        href={`/${orgSlug}/projects/${ref.entityId}`}
+                        className="shrink-0 text-xs text-sky-700 hover:underline"
+                      >
+                        Open
+                      </Link>
+                    ) : ref.entityType === "client" ? (
+                      <Link
+                        href={`/${orgSlug}/clients/${ref.entityId}`}
+                        className="shrink-0 text-xs text-sky-700 hover:underline"
+                      >
+                        Open
+                      </Link>
+                    ) : projectId ? (
+                      <Link
+                        href={`/${orgSlug}/projects/${projectId}?tab=${ref.entityType === "milestone" ? "milestones" : "work"}`}
+                        className="shrink-0 text-xs text-sky-700 hover:underline"
+                      >
+                        Open
+                      </Link>
+                    ) : null}
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
         </div>
 
         {canWrite ? (
-          <div className="rounded-[1.75rem] bg-card/80 p-4 shadow-soft ring-1 ring-border/30">
-            <p className="text-[11px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-              Share & sign
-            </p>
-            <div className="mt-3 flex flex-col gap-2">
+          <div className="overflow-hidden rounded-[1.25rem] bg-card/90 shadow-soft ring-1 ring-border/30">
+            <div className="border-b border-border/50 bg-muted/25 px-4 py-3">
+              <p className="text-[12px] font-bold tracking-[0.12em] text-foreground/70 uppercase">
+                Share & sign
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 p-4">
               <Button
                 type="button"
                 variant="outline"

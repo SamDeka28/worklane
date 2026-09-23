@@ -16,9 +16,17 @@ import { cn } from "@/lib/utils";
 import { LeadBoard } from "@/modules/crm/components/lead-board";
 import { CreateLeadDialog } from "@/modules/crm/components/lead-forms";
 import { CrmLeadSheet } from "@/modules/crm/components/crm-lead-sheet";
-import { getLead, listLeads } from "@/modules/crm/queries";
-import { LEAD_STAGE_LABELS } from "@/modules/crm/types";
+import { LeadJourneyConfig } from "@/modules/crm/components/lead-journey-config";
+import { getLead, listLeads, listLeadStages } from "@/modules/crm/queries";
+import {
+  isClosedStage,
+  isWonStage,
+  stageLabel,
+  stageTone,
+  stagesOrDefault,
+} from "@/modules/crm/types";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
+import { canSeeMoney } from "@/modules/identity/permissions";
 import { JOURNEY } from "@/shared/journey-copy";
 import { formatMoney } from "@/shared/money";
 
@@ -31,18 +39,21 @@ export default async function CrmPage({
   const ctx = await requireOrg(orgSlug);
   requireModuleAccess(ctx, "crm");
   if (!ctx.org.modules.crm) notFound();
+  const seeMoney = canSeeMoney(ctx.permissions);
 
   const view = query.view === "list" ? "list" : "board";
   const q = typeof query.q === "string" ? query.q : "";
   const leadId = typeof query.lead === "string" ? query.lead : undefined;
 
-  const [leads, selected] = await Promise.all([
+  const [leads, selected, stageRows] = await Promise.all([
     listLeads(orgSlug, { q: q || undefined }),
     leadId ? getLead(orgSlug, leadId) : Promise.resolve(null),
+    listLeadStages(orgSlug),
   ]);
+  const stages = stagesOrDefault(stageRows);
 
-  const openLeads = leads.filter((l) => l.stage !== "won" && l.stage !== "lost");
-  const won = leads.filter((l) => l.stage === "won").length;
+  const openLeads = leads.filter((l) => !isClosedStage(l.stage, stages));
+  const won = leads.filter((l) => isWonStage(l.stage, stages)).length;
   const pipelineValue = openLeads.reduce(
     (sum, lead) => sum + (lead.estimatedValueMinor ?? BigInt(0)),
     BigInt(0),
@@ -82,11 +93,20 @@ export default async function CrmPage({
               </Link>
             </div>
             {ctx.canWrite ? (
-              <CreateLeadDialog
-                orgSlug={orgSlug}
-                defaultOpen={query.new === "1"}
-                defaultCurrency={ctx.org.defaultCurrency}
-              />
+              <>
+                <LeadJourneyConfig
+                  orgSlug={orgSlug}
+                  stages={stages}
+                  canWrite={ctx.canWrite}
+                />
+                <CreateLeadDialog
+                  orgSlug={orgSlug}
+                  stages={stages}
+                  defaultOpen={query.new === "1"}
+                  defaultCurrency={ctx.org.defaultCurrency}
+                  showMoney={seeMoney}
+                />
+              </>
             ) : null}
           </div>
         }
@@ -106,7 +126,9 @@ export default async function CrmPage({
             <LeadBoard
               orgSlug={orgSlug}
               leads={leads}
+              stages={stages}
               canWrite={ctx.canWrite}
+              showMoney={seeMoney}
               activeLeadId={leadId}
             />
           )}
@@ -116,12 +138,14 @@ export default async function CrmPage({
           {leads.length > 0 ? (
             <SummaryStrip>
               <SummaryStat label="Open" value={String(openLeads.length)} tone="sky" />
-              <SummaryStat
-                label="Pipeline"
-                value={formatMoney({ amountMinor: pipelineValue, currency })}
-                hint="Estimated value"
-                tone="amber"
-              />
+              {seeMoney ? (
+                <SummaryStat
+                  label="Pipeline"
+                  value={formatMoney({ amountMinor: pipelineValue, currency })}
+                  hint="Estimated value"
+                  tone="amber"
+                />
+              ) : null}
               <SummaryStat label="Won" value={String(won)} tone="emerald" />
               <SummaryStat label="All" value={String(leads.length)} tone="slate" />
             </SummaryStrip>
@@ -149,7 +173,7 @@ export default async function CrmPage({
                 <>
                   <span className="min-w-0 flex-1">Lead</span>
                   <span className="w-28 text-right">Stage</span>
-                  <span className="w-28 text-right">Value</span>
+                  {seeMoney ? <span className="w-28 text-right">Value</span> : null}
                 </>
               }
               footer="Win a lead, then Become a client — no retyping."
@@ -170,16 +194,20 @@ export default async function CrmPage({
                     </Link>
                   </DenseCell>
                   <DenseCell align="right" width="w-28">
-                    <StatusChip>{LEAD_STAGE_LABELS[lead.stage]}</StatusChip>
+                    <StatusChip tone={stageTone(lead.stage, stages)}>
+                      {stageLabel(lead.stage, stages)}
+                    </StatusChip>
                   </DenseCell>
-                  <DenseCell align="right" width="w-28" className="text-sm font-medium">
-                    {lead.estimatedValueMinor != null
-                      ? formatMoney({
-                          amountMinor: lead.estimatedValueMinor,
-                          currency: lead.currency,
-                        })
-                      : "—"}
-                  </DenseCell>
+                  {seeMoney ? (
+                    <DenseCell align="right" width="w-28" className="text-sm font-medium">
+                      {lead.estimatedValueMinor != null
+                        ? formatMoney({
+                            amountMinor: lead.estimatedValueMinor,
+                            currency: lead.currency,
+                          })
+                        : "—"}
+                    </DenseCell>
+                  ) : null}
                 </DenseRow>
               ))}
             </DenseListPanel>
@@ -190,8 +218,10 @@ export default async function CrmPage({
       <CrmLeadSheet
         orgSlug={orgSlug}
         lead={selected}
+        stages={stages}
         canWrite={ctx.canWrite}
         view={view}
+        showMoney={seeMoney}
       />
     </WorkSurface>
   );

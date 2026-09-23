@@ -2,18 +2,17 @@ import {
   AvatarMark,
   FilterChip,
   FilterChips,
+  SoftCard,
   StudioToolbar,
   WorkSurface,
 } from "@/components/studio/chrome";
 import { EmptyState } from "@/components/studio/empty-state";
 import {
-  DenseCell,
-  DenseListPanel,
-  DenseRow,
   IndexBody,
   SummaryStat,
   SummaryStrip,
 } from "@/components/studio/index-layout";
+import { Button } from "@/components/ui/button";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
@@ -56,21 +55,28 @@ export default async function PartnersPage({
       : new Date().toISOString().slice(0, 7);
   const selectedId = typeof query.partner === "string" ? query.partner : undefined;
 
+  const needBoard = view === "balances";
   const [partners, balances, register, settlements, board, partnersByProjectId, pendingInvites] =
     await Promise.all([
       listPartners(orgSlug),
       loadPartnerBalances(orgSlug),
       view === "month"
         ? loadMonthlyPartnerRegister(orgSlug, month)
-        : Promise.resolve([]),
+        : Promise.resolve([] as Awaited<ReturnType<typeof loadMonthlyPartnerRegister>>),
       view === "history"
         ? listPartnerSettlements(orgSlug)
-        : Promise.resolve([]),
-      listProjectBoard(orgSlug),
-      listProjectPartnersByProject(orgSlug).catch(
-        () => ({}) as Record<string, PartnerRecord[]>,
-      ),
-      canInvite ? listPendingInvitations(orgSlug).catch(() => []) : Promise.resolve([]),
+        : Promise.resolve([] as Awaited<ReturnType<typeof listPartnerSettlements>>),
+      needBoard
+        ? listProjectBoard(orgSlug)
+        : Promise.resolve([] as Awaited<ReturnType<typeof listProjectBoard>>),
+      needBoard
+        ? listProjectPartnersByProject(orgSlug).catch(
+            () => ({}) as Record<string, PartnerRecord[]>,
+          )
+        : Promise.resolve({} as Record<string, PartnerRecord[]>),
+      canInvite && view === "balances"
+        ? listPendingInvitations(orgSlug).catch(() => [])
+        : Promise.resolve([] as Awaited<ReturnType<typeof listPendingInvitations>>),
     ]);
   const pendingPartnerInvites = pendingInvites.filter(
     (invite) => invite.role === "partner" || invite.partnerId,
@@ -128,6 +134,9 @@ export default async function PartnersPage({
             : undefined
         }
         defaultOpen={query.settle === "1"}
+        triggerLabel="Settle"
+        triggerVariant="default"
+        triggerSize="sm"
       />
     );
 
@@ -137,9 +146,12 @@ export default async function PartnersPage({
         purpose={JOURNEY.partners.purpose}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {primaryAction}
             {partners.length > 0 ? (
-              <CreatePartnerDialog orgSlug={orgSlug} triggerVariant="outline" />
+              <CreatePartnerDialog
+                orgSlug={orgSlug}
+                triggerVariant="outline"
+                triggerSize="sm"
+              />
             ) : null}
             {projects.length > 0 && partners.length > 0 ? (
               <ProjectSplitDialog
@@ -147,8 +159,11 @@ export default async function PartnersPage({
                 projects={projects}
                 partnersByProjectId={partnersByProjectId}
                 currency={currency}
+                triggerVariant="outline"
+                triggerSize="sm"
               />
             ) : null}
+            {primaryAction}
           </div>
         }
       />
@@ -230,14 +245,11 @@ export default async function PartnersPage({
                 type="month"
                 name="month"
                 defaultValue={month}
-                className="h-9 rounded-full bg-muted px-3.5 text-sm outline-none ring-1 ring-border/40"
+                className="h-9 rounded-xl bg-muted px-3.5 text-sm outline-none ring-1 ring-border/40"
               />
-              <button
-                type="submit"
-                className="h-9 rounded-full bg-foreground px-4 text-sm font-medium text-background"
-              >
+              <Button type="submit" size="sm" variant="outline">
                 Show
-              </button>
+              </Button>
             </form>
             {register.length === 0 ? (
               <EmptyState
@@ -246,41 +258,49 @@ export default async function PartnersPage({
                 body={JOURNEY.partners.emptyRegisterBody}
               />
             ) : (
-              <DenseListPanel
-                columns={
-                  <>
-                    <span>Partner</span>
-                    <span className="text-right">Earned</span>
-                    <span className="text-right">Settled</span>
-                    <span className="text-right">Pending</span>
-                    <span className="hidden sm:block" />
-                  </>
-                }
-              >
-                {register.map((row) => (
-                  <DenseRow key={`${row.partnerId}-${row.currency}`}>
-                    <DenseCell>
-                      <div className="flex items-center gap-3">
-                        <AvatarMark name={row.partnerName} size="sm" />
-                        <div>
-                          <p className="text-sm font-medium">{row.partnerName}</p>
-                          <p className="text-xs text-muted-foreground">{row.currency}</p>
-                        </div>
-                      </div>
-                    </DenseCell>
-                    <DenseCell align="right" className="text-sm">
-                      {moneyLabel(row.earnedMinor, row.currency)}
-                    </DenseCell>
-                    <DenseCell align="right" className="text-sm text-muted-foreground">
-                      {moneyLabel(row.settledMinor, row.currency)}
-                    </DenseCell>
-                    <DenseCell align="right" className="text-sm font-medium">
-                      {moneyLabel(row.pendingMinor, row.currency)}
-                    </DenseCell>
-                    <DenseCell className="hidden sm:block" />
-                  </DenseRow>
-                ))}
-              </DenseListPanel>
+              <SoftCard className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-auto">
+                  <table className="w-full border-collapse text-sm">
+                    <thead className="sticky top-0 z-10 bg-card">
+                      <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+                        <th className="px-5 py-3.5 font-semibold">Partner</th>
+                        <th className="px-5 py-3.5 text-right font-semibold">Earned</th>
+                        <th className="px-5 py-3.5 text-right font-semibold">Settled</th>
+                        <th className="px-5 py-3.5 text-right font-semibold">Pending</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {register.map((row) => (
+                        <tr
+                          key={`${row.partnerId}-${row.currency}`}
+                          className="border-b border-border/15"
+                        >
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <AvatarMark name={row.partnerName} size="sm" />
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium">
+                                  {row.partnerName}
+                                </p>
+                                <p className="text-xs text-muted-foreground">{row.currency}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-right tabular-nums">
+                            {moneyLabel(row.earnedMinor, row.currency)}
+                          </td>
+                          <td className="px-5 py-4 text-right tabular-nums text-muted-foreground">
+                            {moneyLabel(row.settledMinor, row.currency)}
+                          </td>
+                          <td className="px-5 py-4 text-right font-medium tabular-nums">
+                            {moneyLabel(row.pendingMinor, row.currency)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </SoftCard>
             )}
           </div>
         ) : null}
@@ -295,41 +315,46 @@ export default async function PartnersPage({
               actionLabel={ctx.canWrite ? "Settle" : undefined}
             />
           ) : (
-            <DenseListPanel
-              columns={
-                <>
-                  <span>Payout</span>
-                  <span className="text-right">Date</span>
-                  <span className="text-right">Method</span>
-                  <span className="text-right">Amount</span>
-                  <span className="hidden sm:block" />
-                </>
-              }
-            >
-              {settlements.map((row) => {
-                const partner = partners.find((item) => item.id === row.partnerId);
-                return (
-                  <DenseRow key={row.id}>
-                    <DenseCell>
-                      <p className="text-sm font-medium">{partner?.name ?? "Partner"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {row.memo || (row.status === "void" ? "Void" : "Settlement")}
-                      </p>
-                    </DenseCell>
-                    <DenseCell align="right" className="text-sm text-muted-foreground">
-                      {row.settledOn}
-                    </DenseCell>
-                    <DenseCell align="right" className="text-sm capitalize text-muted-foreground">
-                      {row.method}
-                    </DenseCell>
-                    <DenseCell align="right" className="text-sm font-medium">
-                      {moneyLabel(row.amountMinor, row.currency)}
-                    </DenseCell>
-                    <DenseCell className="hidden sm:block" />
-                  </DenseRow>
-                );
-              })}
-            </DenseListPanel>
+            <SoftCard className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="sticky top-0 z-10 bg-card">
+                    <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+                      <th className="px-5 py-3.5 font-semibold">Payout</th>
+                      <th className="w-36 px-5 py-3.5 font-semibold">Date</th>
+                      <th className="w-36 px-5 py-3.5 font-semibold">Method</th>
+                      <th className="w-40 px-5 py-3.5 text-right font-semibold">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {settlements.map((row) => {
+                      const partner = partners.find((item) => item.id === row.partnerId);
+                      return (
+                        <tr key={row.id} className="border-b border-border/15">
+                          <td className="px-5 py-4">
+                            <p className="text-sm font-medium">
+                              {partner?.name ?? "Partner"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {row.memo || (row.status === "void" ? "Void" : "Settlement")}
+                            </p>
+                          </td>
+                          <td className="px-5 py-4 whitespace-nowrap text-muted-foreground">
+                            {row.settledOn}
+                          </td>
+                          <td className="px-5 py-4 capitalize text-muted-foreground">
+                            {row.method}
+                          </td>
+                          <td className="px-5 py-4 text-right font-medium tabular-nums">
+                            {moneyLabel(row.amountMinor, row.currency)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </SoftCard>
           )
         ) : null}
       </IndexBody>

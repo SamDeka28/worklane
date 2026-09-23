@@ -34,7 +34,7 @@ export function NotificationsMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         render={
-          <Button variant="ghost" size="icon" className="relative rounded-full">
+          <Button variant="ghost" size="icon-sm" className="relative" aria-label="Notifications">
             <Bell className="size-4" />
             {unread > 0 ? (
               <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary" />

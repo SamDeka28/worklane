@@ -34,7 +34,7 @@ export function PaymentBoard({
   charges?: Pick<ChargeView, "id" | "memo" | "source" | "currency">[];
 }) {
   if (payments.length === 0) {
-    return <p className="px-4 py-8 text-sm text-muted-foreground">No receipts yet.</p>;
+    return <p className="px-4 py-8 text-sm text-muted-foreground">No money in yet.</p>;
   }
 
   return (
@@ -109,20 +109,20 @@ export function PaymentSheet({
   charges?: Pick<ChargeView, "id" | "memo" | "source" | "currency">[];
 }) {
   if (payments.length === 0) {
-    return <p className="px-4 py-8 text-sm text-muted-foreground">No receipts in this sheet.</p>;
+    return <p className="px-5 py-8 text-sm text-muted-foreground">No money in this sheet.</p>;
   }
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[36rem] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-border/40 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-            <th className="px-3 py-2.5 font-semibold">Date</th>
-            <th className="px-3 py-2.5 font-semibold">Client</th>
-            <th className="px-3 py-2.5 font-semibold">Kind</th>
-            <th className="px-3 py-2.5 font-semibold">Applied to</th>
-            <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
-            <th className="px-3 py-2.5 text-right font-semibold"> </th>
+          <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+            <th className="px-4 py-3.5 font-semibold">Date</th>
+            <th className="px-4 py-3.5 font-semibold">Client</th>
+            <th className="px-4 py-3.5 font-semibold">Kind</th>
+            <th className="px-4 py-3.5 font-semibold">Applied to</th>
+            <th className="px-4 py-3.5 text-right font-semibold">Amount</th>
+            <th className="px-4 py-3.5 text-right font-semibold"> </th>
           </tr>
         </thead>
         <tbody>
@@ -132,20 +132,20 @@ export function PaymentSheet({
             return (
               <tr
                 key={payment.id}
-                className={cn("border-b border-border/25", cancelled && "opacity-50")}
+                className={cn("border-b border-border/15", cancelled && "opacity-50")}
               >
-                <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
                   {formatDay(payment.paidOn)}
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-4 py-4 text-muted-foreground">
                   <Link
                     href={`/${orgSlug}/clients/${payment.clientId}`}
-                    className="font-medium hover:underline"
+                    className="hover:underline"
                   >
                     {names.get(payment.clientId) ?? "Client"}
                   </Link>
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-4 py-4">
                   <StatusChip tone={cancelled ? "cancelled" : "paid"}>
                     {cancelled
                       ? "Cancelled"
@@ -154,13 +154,13 @@ export function PaymentSheet({
                         : paymentLabel(payment)}
                   </StatusChip>
                 </td>
-                <td className="max-w-[16rem] truncate px-3 py-2.5 text-muted-foreground">
+                <td className="max-w-[16rem] truncate px-4 py-4 text-muted-foreground">
                   {applied.length > 0 ? applied.join(" · ") : "—"}
                 </td>
-                <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
+                <td className="px-4 py-4 text-right text-base font-semibold tabular-nums">
                   {moneyLabel(payment.amountMinor, payment.currency)}
                 </td>
-                <td className="px-3 py-2.5 text-right">
+                <td className="px-4 py-4 text-right">
                   {canWrite && payment.status === "posted" ? (
                     <LedgerMenu
                       label={payment.kind === "refund" ? "Cancel refund" : "Undo receipt"}

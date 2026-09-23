@@ -32,10 +32,17 @@ export const JOURNEY = {
     emptyBody: "Draft freely. Accept or sign freezes a permanent copy.",
   },
   finance: {
-    purpose: "Ledger sheet — what’s owed, collected, and carried forward",
+    purpose: "Get paid — bill work, record what clients send, then see partner shares",
     primaryCta: "Collect",
     emptyCollectTitle: "Nothing to collect",
-    emptyCollectBody: "Bill a milestone or post a charge, then collect here.",
+    emptyCollectBody: "Bill a milestone or add a charge, then record payment here.",
+    emptyUpcomingTitle: "Nothing ready to bill",
+    emptyUpcomingBody:
+      "Add due dates and amounts on unbilled milestones — Bill posts a charge to Collect.",
+    emptyUpcomingCta: "Open projects",
+    emptyReceiptsTitle: "No money in yet",
+    emptyReceiptsBody: "Record a payment on Collect — receipts and partner shares land here.",
+    emptyReceiptsCta: "Go to Collect",
   },
   partners: {
     purpose: "What partners earned versus settled",

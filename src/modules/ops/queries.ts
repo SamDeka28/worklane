@@ -1,8 +1,13 @@
+import { cache } from "react";
 import { listClients } from "@/modules/clients/queries";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import { chargeTitle } from "@/modules/finance/presentation";
 import { loadOrgFinance } from "@/modules/finance/queries";
 import { requireOrg } from "@/modules/identity/org";
+import {
+  canAccessModule,
+  canSeeMoney,
+} from "@/modules/identity/permissions";
 import { loadPartnerBalances } from "@/modules/partners/queries";
 import type { IsoCurrency } from "@/shared/money";
 import {
@@ -18,42 +23,49 @@ function asCurrency(value: string): IsoCurrency {
   return value === "INR" ? "INR" : "USD";
 }
 
-export async function loadOpsQueue(
+export const loadOpsQueue = cache(async (
   orgSlug: string,
   extras?: { follows?: Parameters<typeof buildOpsQueue>[0]["follows"] },
-): Promise<OpsQueueItem[]> {
+): Promise<OpsQueueItem[]> => {
   const asOf = new Date().toISOString().slice(0, 10);
   const ctx = await requireOrg(orgSlug);
+  const seeMoney = canSeeMoney(ctx.permissions);
+  const seePartners = canAccessModule(ctx.permissions, "partners");
+
   const [finance, board, clients, balances] = await Promise.all([
-    loadOrgFinance(orgSlug),
+    seeMoney ? loadOrgFinance(orgSlug) : Promise.resolve(null),
     listProjectBoard(orgSlug),
     listClients(orgSlug),
-    loadPartnerBalances(orgSlug).catch(() => []),
+    seeMoney && seePartners
+      ? loadPartnerBalances(orgSlug).catch(() => [])
+      : Promise.resolve([]),
   ]);
 
   const names = new Map(clients.map((client) => [client.id, client.name]));
   const projectById = new Map(board.map((row) => [row.project.id, row]));
 
-  const collects: CollectCandidate[] = finance.charges
-    .filter((charge) => charge.status !== "void" && charge.outstandingMinor > BigInt(0))
-    .map((charge) => ({
-      clientId: charge.clientId,
-      clientName: names.get(charge.clientId) ?? "Client",
-      chargeId: charge.id,
-      chargeLabel: chargeTitle(charge),
-      outstandingMinor: charge.outstandingMinor,
-      currency: charge.currency,
-      dueOn: charge.dueOn,
-      overdue: charge.overdue,
-      chargedOn: charge.chargedOn,
-    }));
+  const collects: CollectCandidate[] = seeMoney
+    ? (finance?.charges ?? [])
+        .filter((charge) => charge.status !== "void" && charge.outstandingMinor > BigInt(0))
+        .map((charge) => ({
+          clientId: charge.clientId,
+          clientName: names.get(charge.clientId) ?? "Client",
+          chargeId: charge.id,
+          chargeLabel: chargeTitle(charge),
+          outstandingMinor: charge.outstandingMinor,
+          currency: charge.currency,
+          dueOn: charge.dueOn,
+          overdue: charge.overdue,
+          chargedOn: charge.chargedOn,
+        }))
+    : [];
 
   const activeIds = board
     .filter((row) => row.project.status === "active" || row.project.status === "planning")
     .map((row) => row.project.id);
 
   let bills: BillCandidate[] = [];
-  if (activeIds.length > 0) {
+  if (seeMoney && activeIds.length > 0) {
     const { data, error } = await ctx.supabase
       .from("milestones")
       .select("id, name, project_id, amount_minor, status, charge_id")
@@ -93,14 +105,17 @@ export async function loadOpsQueue(
       logCount: row.logCount,
     }));
 
-  const settles: SettleCandidate[] = balances
-    .filter((row) => row.payableMinor > BigInt(0) && row.active)
-    .map((row) => ({
-      partnerId: row.partnerId,
-      partnerName: row.name,
-      payableMinor: row.payableMinor,
-      currency: row.currency,
-    }));
+  const settles: SettleCandidate[] =
+    seeMoney && seePartners
+      ? balances
+          .filter((row) => row.payableMinor > BigInt(0) && row.active)
+          .map((row) => ({
+            partnerId: row.partnerId,
+            partnerName: row.name,
+            payableMinor: row.payableMinor,
+            currency: row.currency,
+          }))
+      : [];
 
   return buildOpsQueue({
     orgSlug,
@@ -111,4 +126,4 @@ export async function loadOpsQueue(
     settles,
     follows: extras?.follows,
   });
-}
+});

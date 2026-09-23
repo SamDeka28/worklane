@@ -1,8 +1,36 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { useDroppable } from "@dnd-kit/core";
+import {
+  type CollisionDetection,
+  closestCorners,
+  pointerWithin,
+  rectIntersection,
+  useDroppable,
+} from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
+
+/**
+ * Prefer whatever is under the pointer (full column hit area), then fall back.
+ * Avoids closestCorners treating only the cluster of cards as the drop target.
+ */
+export const boardCollisionDetection: CollisionDetection = (args) => {
+  const pointerHits = pointerWithin(args);
+  if (pointerHits.length > 0) {
+    const tasks = pointerHits.filter((hit) => {
+      const container = hit.data?.droppableContainer as
+        | { data?: { current?: { type?: string } } }
+        | undefined;
+      return container?.data?.current?.type === "task";
+    });
+    if (tasks.length > 0) return tasks;
+    return pointerHits;
+  }
+
+  const rectHits = rectIntersection(args);
+  if (rectHits.length > 0) return rectHits;
+  return closestCorners(args);
+};
 
 export function BoardCanvas({
   children,
@@ -14,7 +42,7 @@ export function BoardCanvas({
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 flex-1 gap-3 overflow-x-auto px-4 pb-4",
+        "flex h-full min-h-0 flex-1 items-start gap-3 overflow-x-auto overflow-y-auto px-4 pb-4",
         className,
       )}
     >
@@ -38,17 +66,19 @@ export function BoardColumn({
   id: string;
   title?: string;
   count?: number;
-  /** Override default title/count header (e.g. editable column name). */
   header?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
   style?: CSSProperties;
-  /** When provided (e.g. sortable column), skips the built-in droppable. */
   setNodeRef?: (node: HTMLElement | null) => void;
   isOver?: boolean;
 }) {
-  const droppable = useDroppable({ id, disabled: Boolean(externalRef) });
+  const droppable = useDroppable({
+    id,
+    data: { type: "column" as const },
+    disabled: Boolean(externalRef),
+  });
   const setNodeRef = externalRef ?? droppable.setNodeRef;
   const isOver = externalIsOver ?? droppable.isOver;
 
@@ -57,27 +87,28 @@ export function BoardColumn({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "flex h-full w-72 shrink-0 flex-col overflow-hidden rounded-3xl bg-muted/55",
-        isOver && "ring-2 ring-sky-300/80",
+        "flex max-h-full w-80 shrink-0 flex-col self-start overflow-hidden rounded-2xl bg-surface-lane ring-1 ring-foreground/6 transition-[box-shadow,background-color,ring-color] duration-150 dark:ring-white/8",
+        isOver &&
+          "bg-primary/12 ring-2 ring-primary dark:bg-primary/18",
         className,
       )}
     >
       {header ?? (
-        <header className="flex shrink-0 items-center justify-between gap-2 px-3 py-3">
-          <p className="truncate text-sm font-semibold tracking-tight">{title}</p>
+        <header className="flex shrink-0 items-center justify-between gap-2 px-3.5 pt-3.5 pb-2.5">
+          <p className="truncate text-[12px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
+            {title}
+          </p>
           {count != null ? (
-            <span className="rounded-full bg-background/80 px-2 py-0.5 text-[11px] tabular-nums text-muted-foreground">
+            <span className="rounded-lg bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm ring-1 ring-foreground/6">
               {count}
             </span>
           ) : null}
         </header>
       )}
-      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+      <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto px-2.5 pb-2.5">
         {children}
       </div>
-      {footer ? (
-        <div className="shrink-0 border-t border-border/30 p-2">{footer}</div>
-      ) : null}
+      {footer ? <div className="shrink-0 p-2.5">{footer}</div> : null}
     </section>
   );
 }
@@ -97,7 +128,7 @@ export function BoardCardShell({
         type="button"
         onClick={onClick}
         className={cn(
-          "w-full rounded-2xl bg-card px-3 py-2.5 text-left shadow-sm ring-1 ring-border/40 transition-colors hover:ring-border",
+          "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-foreground/8 transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-md",
           className,
         )}
       >
@@ -108,7 +139,7 @@ export function BoardCardShell({
   return (
     <div
       className={cn(
-        "w-full rounded-2xl bg-card px-3 py-2.5 text-left shadow-sm ring-1 ring-border/40",
+        "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-foreground/8",
         className,
       )}
     >

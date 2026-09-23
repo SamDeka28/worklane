@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useOptimistic, useTransition } from "react";
 import {
   ChevronsUpDown,
+  Columns3,
   FileText,
   FolderKanban,
   Handshake,
   LayoutDashboard,
-  LogOut,
-  Settings,
   Target,
   UserRound,
   Users,
@@ -53,6 +53,7 @@ const SECTIONS: Array<{ label: string | null; items: NavItem[] }> = [
     label: "Deliver",
     items: [
       { href: "/projects", label: "Projects", icon: FolderKanban, module: "delivery" },
+      { href: "/board", label: "Board", icon: Columns3, module: "delivery" },
       { href: "/documents", label: "Documents", icon: FileText, module: "documents" },
       { href: "/team", label: "Team", icon: UserRound, module: null },
     ],
@@ -70,11 +71,61 @@ function switchOrgPath(pathname: string, fromSlug: string, toSlug: string) {
   if (!pathname.startsWith(`/${fromSlug}`)) return `/${toSlug}`;
   const rest = pathname.slice(`/${fromSlug}`.length) || "";
   const kept = rest.match(
-    /^(\/(?:crm|clients|projects|documents|team|finance|partners|settings|invoices)(?:\/[^/]+)?)/,
+    /^(\/(?:crm|clients|projects|board|documents|team|finance|partners|settings|profile|invoices)(?:\/[^/]+)?)/,
   );
   if (kept?.[1]) return `/${toSlug}${kept[1]}`;
   if (rest === "" || rest === "/") return `/${toSlug}`;
   return `/${toSlug}`;
+}
+
+function NavLink({
+  href,
+  label,
+  active,
+  Icon,
+}: {
+  href: string;
+  label: string;
+  active: boolean;
+  Icon: typeof LayoutDashboard;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [optimisticActive, setOptimisticActive] = useOptimistic(active);
+
+  return (
+    <Link
+      href={href}
+      prefetch
+      title={label}
+      onMouseEnter={() => router.prefetch(href)}
+      onFocus={() => router.prefetch(href)}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (optimisticActive) {
+          event.preventDefault();
+          return;
+        }
+        event.preventDefault();
+        start(() => {
+          setOptimisticActive(true);
+          router.push(href);
+        });
+      }}
+      className={cn(
+        "flex size-10 items-center justify-center rounded-lg text-sm font-medium tracking-tight transition-[background-color,box-shadow,color,opacity] duration-150 group-data-[expanded=true]/rail:h-10 group-data-[expanded=true]/rail:w-full group-data-[expanded=true]/rail:justify-start group-data-[expanded=true]/rail:gap-3 group-data-[expanded=true]/rail:rounded-lg group-data-[expanded=true]/rail:px-3 xl:h-10 xl:w-full xl:justify-start xl:gap-3 xl:rounded-lg xl:px-3",
+        optimisticActive
+          ? "bg-nav-active text-nav-active-foreground shadow-sm"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+        pending && !optimisticActive && "opacity-60",
+      )}
+    >
+      <Icon className="size-4 shrink-0" />
+      <span className="hidden group-data-[expanded=true]/rail:inline xl:inline">
+        {label}
+      </span>
+    </Link>
+  );
 }
 
 export function AppSidebar({
@@ -90,7 +141,7 @@ export function AppSidebar({
   orgs?: Organization[];
   permissions: MemberPermissions;
   role: OrgRole;
-  user: { email: string | null; displayName: string | null };
+  user: { email: string | null; displayName: string | null; avatarUrl?: string | null };
   expanded?: boolean;
   className?: string;
 }) {
@@ -112,18 +163,18 @@ export function AppSidebar({
     <aside
       data-expanded={expanded ? "true" : undefined}
       className={cn(
-        "group/rail hidden h-full min-h-0 w-[4.75rem] shrink-0 flex-col self-stretch rounded-4xl bg-card py-4 shadow-soft lg:flex xl:w-56",
+        "group/rail hidden h-full min-h-0 w-[4.75rem] shrink-0 flex-col self-stretch rounded-2xl bg-card py-3 shadow-soft ring-1 ring-foreground/6 dark:ring-white/8 lg:flex xl:w-56",
         className,
       )}
     >
-      <div className="flex flex-col items-center gap-2 px-3 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
+      <div className="flex flex-col items-center gap-2 px-2.5 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="flex w-full items-center justify-center gap-2 rounded-2xl px-1 py-1.5 text-left hover:bg-muted group-data-[expanded=true]/rail:justify-between xl:justify-between"
+            className="flex w-full items-center justify-center gap-2 rounded-lg px-1.5 py-1.5 text-left hover:bg-muted group-data-[expanded=true]/rail:justify-between xl:justify-between"
           >
-            <span className="flex min-w-0 items-center gap-2">
+            <span className="flex min-w-0 items-center gap-2.5">
               <BrandMark size={28} />
-              <span className="hidden min-w-0 truncate text-sm font-semibold group-data-[expanded=true]/rail:inline xl:inline">
+              <span className="hidden min-w-0 truncate text-sm font-semibold tracking-tight group-data-[expanded=true]/rail:inline xl:inline">
                 {org.name}
               </span>
             </span>
@@ -158,7 +209,7 @@ export function AppSidebar({
           return (
             <div key={section.label ?? "home"} className="flex flex-col gap-1">
               {section.label ? (
-                <p className="hidden px-3 pt-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase group-data-[expanded=true]/rail:block xl:block">
+                <p className="hidden px-3 pt-1 text-[10px] font-bold tracking-[0.12em] text-muted-foreground uppercase group-data-[expanded=true]/rail:block xl:block">
                   {section.label}
                 </p>
               ) : null}
@@ -166,25 +217,14 @@ export function AppSidebar({
                 const href = `${base}${item.href}`;
                 const active =
                   item.href === "" ? pathname === base : pathname.startsWith(href);
-                const Icon = item.icon;
                 return (
-                  <Link
+                  <NavLink
                     key={href}
                     href={href}
-                    prefetch
-                    title={item.label}
-                    className={cn(
-                      "flex size-11 items-center justify-center rounded-2xl text-sm transition-all duration-200 group-data-[expanded=true]/rail:h-11 group-data-[expanded=true]/rail:w-full group-data-[expanded=true]/rail:justify-start group-data-[expanded=true]/rail:gap-3 group-data-[expanded=true]/rail:px-3 xl:h-11 xl:w-full xl:justify-start xl:gap-3 xl:px-3",
-                      active
-                        ? "bg-[#1E2A4A] text-white shadow-sm"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-4" />
-                    <span className="hidden group-data-[expanded=true]/rail:inline xl:inline">
-                      {item.label}
-                    </span>
-                  </Link>
+                    label={item.label}
+                    active={active}
+                    Icon={item.icon}
+                  />
                 );
               })}
             </div>
@@ -192,41 +232,53 @@ export function AppSidebar({
         })}
       </nav>
       <div className="mt-auto flex flex-col gap-1 px-2 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
-        <div className="mb-1 hidden items-center gap-2 rounded-2xl px-2 py-2 group-data-[expanded=true]/rail:flex xl:flex">
-          <AvatarMark name={display} size="sm" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium">{display}</p>
-            <p className="truncate text-[10px] capitalize text-muted-foreground">
-              {role}
-              {user.email ? ` · ${user.email}` : ""}
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-col items-center gap-1 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
-          <Link
-            href={`${base}/settings`}
-            prefetch
-            title="Settings"
-            className="flex size-11 items-center justify-center rounded-2xl text-muted-foreground hover:bg-muted hover:text-foreground group-data-[expanded=true]/rail:h-11 group-data-[expanded=true]/rail:w-full group-data-[expanded=true]/rail:justify-start group-data-[expanded=true]/rail:gap-3 group-data-[expanded=true]/rail:px-3 group-data-[expanded=true]/rail:text-sm xl:h-11 xl:w-full xl:justify-start xl:gap-3 xl:px-3 xl:text-sm"
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            title={display}
+            className="flex size-10 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground group-data-[expanded=true]/rail:h-auto group-data-[expanded=true]/rail:w-full group-data-[expanded=true]/rail:justify-start group-data-[expanded=true]/rail:gap-2 group-data-[expanded=true]/rail:px-2 group-data-[expanded=true]/rail:py-2 xl:h-auto xl:w-full xl:justify-start xl:gap-2 xl:px-2 xl:py-2"
           >
-            <Settings className="size-4" />
-            <span className="hidden group-data-[expanded=true]/rail:inline xl:inline">
-              Settings
-            </span>
-          </Link>
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              title="Sign out"
-              className="flex size-11 items-center justify-center rounded-2xl text-muted-foreground hover:bg-muted hover:text-foreground group-data-[expanded=true]/rail:h-11 group-data-[expanded=true]/rail:w-full group-data-[expanded=true]/rail:justify-start group-data-[expanded=true]/rail:gap-3 group-data-[expanded=true]/rail:px-3 group-data-[expanded=true]/rail:text-sm xl:h-11 xl:w-full xl:justify-start xl:gap-3 xl:px-3 xl:text-sm"
-            >
-              <LogOut className="size-4" />
-              <span className="hidden group-data-[expanded=true]/rail:inline xl:inline">
-                Sign out
+            <AvatarMark name={display} src={user.avatarUrl} size="sm" />
+            <span className="hidden min-w-0 flex-1 text-left group-data-[expanded=true]/rail:block xl:block">
+              <span className="block truncate text-sm font-medium text-foreground">
+                {display}
               </span>
-            </button>
-          </form>
-        </div>
+              <span className="block truncate text-[11px] capitalize text-muted-foreground">
+                {role}
+                {user.email ? ` · ${user.email}` : ""}
+              </span>
+            </span>
+            <ChevronsUpDown className="hidden size-3.5 shrink-0 text-muted-foreground group-data-[expanded=true]/rail:inline xl:inline" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top" className="w-56">
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="font-normal">
+                <p className="truncate text-sm font-medium">{display}</p>
+                {user.email ? (
+                  <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                ) : null}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                onClick={() => router.push(`${base}/profile`)}
+              >
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => router.push(`${base}/settings`)}
+              >
+                Studio settings
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={() => {
+                  void signOutAction();
+                }}
+              >
+                Sign out
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   );

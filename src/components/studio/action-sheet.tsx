@@ -12,11 +12,25 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
+type TriggerSize =
+  | "default"
+  | "xs"
+  | "sm"
+  | "lg"
+  | "icon"
+  | "icon-xs"
+  | "icon-sm"
+  | "icon-lg";
+
 export function ActionSheet({
   title,
   description,
   triggerLabel,
   triggerVariant = "default",
+  triggerSize = "default",
+  triggerIcon,
+  triggerIconOnly = false,
+  triggerAriaLabel,
   triggerDisabled = false,
   hideTrigger = false,
   open,
@@ -28,7 +42,12 @@ export function ActionSheet({
   title: string;
   description?: string;
   triggerLabel?: string;
-  triggerVariant?: "default" | "outline" | "ghost";
+  triggerVariant?: "default" | "outline" | "ghost" | "destructive";
+  triggerSize?: TriggerSize;
+  triggerIcon?: ReactNode;
+  /** When true, renders an icon button (requires triggerIcon). */
+  triggerIconOnly?: boolean;
+  triggerAriaLabel?: string;
   triggerDisabled?: boolean;
   hideTrigger?: boolean;
   open?: boolean;
@@ -37,13 +56,30 @@ export function ActionSheet({
   footer?: ReactNode;
   children: ReactNode;
 }) {
+  const label = triggerLabel ?? title;
+  const size = triggerIconOnly
+    ? triggerSize.startsWith("icon")
+      ? triggerSize
+      : "icon-sm"
+    : triggerSize;
+  const ariaLabel = triggerAriaLabel ?? (triggerIconOnly ? label : undefined);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       {hideTrigger ? null : (
         <SheetTrigger
-          render={<Button variant={triggerVariant} disabled={triggerDisabled} />}
+          render={
+            <Button
+              variant={triggerVariant}
+              size={size}
+              disabled={triggerDisabled}
+              aria-label={ariaLabel}
+              title={triggerIconOnly ? label : undefined}
+            />
+          }
         >
-          {triggerLabel ?? title}
+          {triggerIcon}
+          {triggerIconOnly ? null : label}
         </SheetTrigger>
       )}
       <SheetContent

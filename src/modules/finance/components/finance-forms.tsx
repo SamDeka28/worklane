@@ -27,7 +27,7 @@ export function CreateChargeDialog({
   defaultOpen = false,
   hideTrigger = false,
   returnHref,
-  triggerLabel = "Bill",
+  triggerLabel = "Add charge",
   triggerVariant = "outline",
   open: openProp,
   onOpenChange,
@@ -93,8 +93,8 @@ export function CreateChargeDialog({
 
   return (
     <ActionSheet
-      title="Bill"
-      description="Gross in. Fee computes net on the ledger."
+      title="Add charge"
+      description="Gross in. Fee computes net on Collect."
       triggerLabel={triggerLabel}
       triggerVariant={triggerVariant}
       triggerDisabled={clients.length === 0}
@@ -436,8 +436,15 @@ export function CollectComposer({
 
   return (
     <Composer>
+      <div className="border-b border-border/40 px-3 py-2">
+        <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+          Record payment
+        </p>
+      </div>
       {disabled || !clientId ? (
-        <p className="px-1 text-sm text-muted-foreground">Select a client to collect.</p>
+        <p className="px-3 py-3 text-sm text-muted-foreground">
+          Pick someone who owes you
+        </p>
       ) : (
         <ComposerBar prominent>
           <form
@@ -453,9 +460,9 @@ export function CollectComposer({
                   return;
                 }
                 if (result.unallocatedMinor && result.unallocatedMinor !== "0") {
-                  toast.success("Collected — leftover is credit");
+                  toast.success("Recorded — leftover is payment not applied");
                 } else {
-                  toast.success("Collected");
+                  toast.success("Payment recorded");
                 }
                 formRef.current?.reset();
                 setChargeId("");
@@ -477,7 +484,7 @@ export function CollectComposer({
                 }
               }}
               className={cn(composerControlClassName, "max-w-xs min-w-48 flex-1")}
-              aria-label="Apply to"
+              aria-label="Apply to charge"
             >
               <option value="">Oldest unpaid first</option>
               {targets.map((target) => (
@@ -492,10 +499,11 @@ export function CollectComposer({
               required
               inputMode="decimal"
               placeholder="Amount"
+              aria-label="Amount"
               defaultValue={targets.find((target) => target.id === chargeId)?.amount}
               className={cn(composerControlClassName, "w-28")}
             />
-            <NativeSelect name="method" defaultValue="upwork" className={cn(composerControlClassName, "w-28")}>
+            <NativeSelect name="method" defaultValue="upwork" className={cn(composerControlClassName, "w-28")} aria-label="Method">
               <option value="upwork">Upwork</option>
               <option value="bank">Bank</option>
               <option value="stripe">Stripe</option>
@@ -506,6 +514,7 @@ export function CollectComposer({
               type="date"
               defaultValue={new Date().toISOString().slice(0, 10)}
               className={cn(composerControlClassName, "w-36")}
+              aria-label="Paid on"
             />
             <Input
               name="reference"
@@ -513,7 +522,7 @@ export function CollectComposer({
               className={cn(composerControlClassName, "min-w-32 flex-1")}
             />
             <Button type="submit" disabled={pending} className="m-1">
-              {pending ? "Collecting…" : "Collect"}
+              {pending ? "Recording…" : "Record"}
             </Button>
           </form>
         </ComposerBar>

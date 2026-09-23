@@ -1,5 +1,6 @@
 "use client";
 
+import { Ban } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -34,14 +35,16 @@ export function InviteMemberForm({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [role, setRole] = useState("member");
+  const [projectId, setProjectId] = useState(defaultProjectId ?? "");
   const access = useAccessPermissionsState(null, "member");
 
   const effectivePreset =
     role === "partner" && access.preset === "full" ? "partner" : access.preset;
+  const showProjectRole = Boolean(projectId) || Boolean(defaultProjectId && projects.length === 0);
 
   return (
     <form
-      className={compact ? "grid gap-3" : "grid gap-3"}
+      className={compact ? "grid gap-3.5" : "grid gap-3.5"}
       action={(formData) => {
         formData.set("permissions_preset", effectivePreset);
         formData.set("permissions", JSON.stringify(access.shownPermissions));
@@ -79,30 +82,34 @@ export function InviteMemberForm({
           placeholder="teammate@studio.com"
         />
       </Field>
-      <div className={`grid gap-3 ${projects.length > 0 ? "sm:grid-cols-2" : ""}`}>
-        <Field label="Studio role" htmlFor="invite_role">
-          <NativeSelect
-            id="invite_role"
-            name="role"
-            value={role}
-            onChange={(event) => {
-              const next = event.target.value;
-              setRole(next);
-              if (next === "partner") access.applyPreset("partner");
-            }}
-          >
-            <option value="admin">Admin</option>
-            <option value="member">Member</option>
-            <option value="viewer">Viewer</option>
-            <option value="partner">Partner</option>
-          </NativeSelect>
-        </Field>
-        {projects.length > 0 ? (
-          <Field label="Also add to project" htmlFor="invite_project">
+
+      <Field label="Studio role" htmlFor="invite_role">
+        <NativeSelect
+          id="invite_role"
+          name="role"
+          value={role}
+          onChange={(event) => {
+            const next = event.target.value;
+            setRole(next);
+            if (next === "partner") access.applyPreset("partner");
+            else if (access.preset === "partner") access.applyPreset("full");
+          }}
+        >
+          <option value="admin">Admin</option>
+          <option value="member">Member</option>
+          <option value="viewer">Viewer</option>
+          <option value="partner">Partner</option>
+        </NativeSelect>
+      </Field>
+
+      {projects.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Add to project" htmlFor="invite_project">
             <NativeSelect
               id="invite_project"
               name="project_id"
-              defaultValue={defaultProjectId ?? ""}
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
             >
               <option value="">Studio only</option>
               {projects.map((project) => (
@@ -112,17 +119,33 @@ export function InviteMemberForm({
               ))}
             </NativeSelect>
           </Field>
-        ) : defaultProjectId ? (
+          {showProjectRole ? (
+            <Field label="Project role" htmlFor="invite_project_role">
+              <NativeSelect
+                id="invite_project_role"
+                name="project_role"
+                defaultValue="member"
+              >
+                <option value="member">Member</option>
+                <option value="lead">Lead</option>
+              </NativeSelect>
+            </Field>
+          ) : null}
+        </div>
+      ) : defaultProjectId ? (
+        <>
           <input type="hidden" name="project_id" value={defaultProjectId} />
-        ) : null}
-      </div>
-      {defaultProjectId || projects.length > 0 ? (
-        <Field label="Project role" htmlFor="invite_project_role">
-          <NativeSelect id="invite_project_role" name="project_role" defaultValue="member">
-            <option value="member">Member</option>
-            <option value="lead">Lead</option>
-          </NativeSelect>
-        </Field>
+          <Field label="Project role" htmlFor="invite_project_role">
+            <NativeSelect
+              id="invite_project_role"
+              name="project_role"
+              defaultValue="member"
+            >
+              <option value="member">Member</option>
+              <option value="lead">Lead</option>
+            </NativeSelect>
+          </Field>
+        </>
       ) : null}
 
       <AccessPermissionsFields
@@ -133,7 +156,7 @@ export function InviteMemberForm({
         onTabToggle={access.setTab}
       />
 
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" disabled={pending} className="w-full">
         {pending ? "Sending…" : "Send invite"}
       </Button>
     </form>
@@ -331,11 +354,13 @@ export function RevokeInviteButton({
   invitationId,
   label = "Revoke",
   className,
+  iconOnly = false,
 }: {
   orgSlug: string;
   invitationId: string;
   label?: string;
   className?: string;
+  iconOnly?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -343,10 +368,12 @@ export function RevokeInviteButton({
   return (
     <Button
       type="button"
-      size="sm"
-      variant="ghost"
+      size={iconOnly ? "icon-sm" : "sm"}
+      variant="outline"
       className={className}
       disabled={pending}
+      aria-label={iconOnly ? label : undefined}
+      title={iconOnly ? label : undefined}
       onClick={(event) => {
         event.stopPropagation();
         start(async () => {
@@ -359,7 +386,17 @@ export function RevokeInviteButton({
         });
       }}
     >
-      {pending ? "…" : label}
+      {iconOnly ? (
+        pending ? (
+          <span className="text-xs">…</span>
+        ) : (
+          <Ban className="size-3.5" />
+        )
+      ) : pending ? (
+        "…"
+      ) : (
+        label
+      )}
     </Button>
   );
 }

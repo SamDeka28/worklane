@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { requireOrg } from "@/modules/identity/org";
 import type {
   DocumentKind,
@@ -24,7 +25,7 @@ function asStatus(value: string): DocumentStatus {
   return "draft";
 }
 
-export async function listDocuments(orgSlug: string): Promise<DocumentRecord[]> {
+export const listDocuments = cache(async (orgSlug: string): Promise<DocumentRecord[]> => {
   const ctx = await requireOrg(orgSlug);
   const { data, error } = await ctx.supabase
     .from("documents")
@@ -45,7 +46,7 @@ export async function listDocuments(orgSlug: string): Promise<DocumentRecord[]> 
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
-}
+});
 
 export async function getDocument(orgSlug: string, documentId: string) {
   const ctx = await requireOrg(orgSlug);

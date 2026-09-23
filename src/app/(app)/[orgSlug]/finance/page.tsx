@@ -4,15 +4,19 @@ import {
   AvatarMark,
   FilterChip,
   FilterChips,
+  NextStepCard,
   SoftCard,
+  Stat,
   StudioToolbar,
   WorkSurface,
   moneyFill,
+  type StatTone,
 } from "@/components/studio/chrome";
-import { DotStackChart, SoftStatCard } from "@/components/studio/charts";
+import { DotStackChart } from "@/components/studio/charts";
 import { MoneyDonut, MONEY_COLORS } from "@/components/studio/money-donut";
 import { EmptyState } from "@/components/studio/empty-state";
 import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
 import { listClients } from "@/modules/clients/queries";
 import { projectMoneyStats } from "@/modules/delivery/board";
 import { listExpectedBillings, listProjectBoard } from "@/modules/delivery/queries";
@@ -22,18 +26,51 @@ import {
 } from "@/modules/finance/components/finance-forms";
 import { ChargeSheet } from "@/modules/finance/components/charge-board";
 import { PaymentSheet } from "@/modules/finance/components/payment-board";
-import { moneyLabel } from "@/modules/finance/ledger";
+import { moneyLabel, type ChargeView } from "@/modules/finance/ledger";
 import {
   collectTargets,
   dueThisMonthMinor,
   formatDay,
   groupChargesByClient,
 } from "@/modules/finance/presentation";
-import { loadMonthlyStatement, loadOrgFinance } from "@/modules/finance/queries";
+import {
+  loadMonthlyStatement,
+  loadMonthlyStatements,
+  loadOrgFinance,
+} from "@/modules/finance/queries";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
+import { FinanceMonthPicker } from "@/modules/finance/components/finance-month-picker";
+import { FinancePartnerSettlePanel } from "@/modules/finance/components/finance-partner-settle-panel";
+import type { PartnerSharesChargeDetail } from "@/modules/finance/components/finance-partner-shares-dialog";
+import { formatSplitVisualLines } from "@/modules/finance/components/partner-split-hint";
+import {
+  loadFinancePartnerFlow,
+  listPartners,
+  type FinancePartnerShare,
+} from "@/modules/partners/queries";
 import { JOURNEY } from "@/shared/journey-copy";
 import { formatMoney } from "@/shared/money";
 import { cn } from "@/lib/utils";
+
+function partnerShareChargeDetailsFrom(
+  charges: ChargeView[],
+  byChargeId: Record<string, FinancePartnerShare[]>,
+  names: Map<string, string>,
+): PartnerSharesChargeDetail[] {
+  return charges.flatMap((charge) => {
+    const lines = byChargeId[charge.id] ?? [];
+    if (lines.length === 0) return [];
+    return [
+      {
+        chargeId: charge.id,
+        memo: charge.memo || "Untitled charge",
+        clientName: names.get(charge.clientId) ?? "Client",
+        grossLabel: moneyLabel(charge.grossMinor, charge.currency),
+        lines: formatSplitVisualLines(lines),
+      },
+    ];
+  });
+}
 
 function monthKeys(count: number) {
   const keys: string[] = [];
@@ -68,6 +105,74 @@ function resolveFinanceView(
   return "ledger";
 }
 
+function FinanceHero({
+  label,
+  value,
+  hint,
+  footnote,
+  doNext,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  footnote?: string;
+  doNext?: ReactNode;
+}) {
+  return (
+    <div className="shrink-0 space-y-3">
+      <SoftCard className="px-4 py-4 sm:px-5 sm:py-4">
+        <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+          {label}
+        </p>
+        <p className="mt-1.5 font-heading text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">
+          {value}
+        </p>
+        {hint ? <p className="mt-1.5 text-sm text-muted-foreground">{hint}</p> : null}
+        {footnote ? (
+          <p className="mt-1 text-xs text-muted-foreground/90">{footnote}</p>
+        ) : null}
+      </SoftCard>
+      {doNext}
+    </div>
+  );
+}
+
+function FinanceSecondary({
+  items,
+}: {
+  items: {
+    label: string;
+    value: string;
+    hint?: string;
+    tone?: StatTone;
+    fill?: number;
+    badge?: string;
+  }[];
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div
+      className={cn(
+        "grid shrink-0 gap-3",
+        items.length === 1 ? "max-w-sm" : "sm:grid-cols-2",
+      )}
+    >
+      {items.map((item) => (
+        <Stat
+          key={item.label}
+          label={item.label}
+          value={item.value}
+          hint={item.hint}
+          tone={item.tone}
+          fill={item.fill}
+          badge={item.badge}
+          variant="strip"
+        />
+      ))}
+    </div>
+  );
+}
+
 export default async function FinancePage({
   params,
   searchParams,
@@ -85,15 +190,33 @@ export default async function FinancePage({
       : new Date().toISOString().slice(0, 7);
   const trendMonths = monthKeys(6);
   const upcomingMonth = nextMonthKey();
+  const needBoard = view === "ledger";
+  const needTrends = view === "ledger";
+  const needStatement = view === "month";
+  /** Ledger insight + upcoming table + month wrap “ready to bill”. Not receipts. */
+  const needExpected = view === "ledger" || view === "upcoming" || view === "month";
+  const needPartners =
+    Boolean(ctx.org.modules.partners) &&
+    (view === "ledger" || view === "month" || view === "receipts");
 
-  const [clients, finance, statement, board, expectedBillings, ...trendStatements] =
+  const [clients, finance, board, expectedBillings, trendStatements, statement] =
     await Promise.all([
       listClients(orgSlug),
       loadOrgFinance(orgSlug),
-      loadMonthlyStatement(orgSlug, month),
-      listProjectBoard(orgSlug),
-      listExpectedBillings(orgSlug).catch(() => []),
-      ...trendMonths.map((key) => loadMonthlyStatement(orgSlug, key)),
+      needBoard
+        ? listProjectBoard(orgSlug)
+        : Promise.resolve([] as Awaited<ReturnType<typeof listProjectBoard>>),
+      needExpected
+        ? listExpectedBillings(orgSlug).catch(() => [])
+        : Promise.resolve([] as Awaited<ReturnType<typeof listExpectedBillings>>),
+      needTrends
+        ? loadMonthlyStatements(orgSlug, trendMonths)
+        : Promise.resolve(
+            [] as Awaited<ReturnType<typeof loadMonthlyStatements>>,
+          ),
+      needStatement
+        ? loadMonthlyStatement(orgSlug, month)
+        : Promise.resolve(null),
     ]);
 
   const clientName = new Map(clients.map((client) => [client.id, client.name]));
@@ -198,180 +321,183 @@ export default async function FinancePage({
   const cycleTotalMinor = cycleExpectedMinor + cyclePostedDueMinor;
   const upcomingMonthLabel = monthShort(upcomingMonth);
 
-  const thisMonthChargeRows = liveCharges
-    .filter(
-      (charge) =>
-        inMonth(charge.chargedOn, month) ||
-        (charge.dueOn != null && inMonth(charge.dueOn, month)),
-    )
-    .sort((a, b) => {
-      const aDay = a.dueOn ?? a.chargedOn;
-      const bDay = b.dueOn ?? b.chargedOn;
-      return aDay.localeCompare(bDay);
-    });
-
-  const thisMonthBreakdownRows: {
-    id: string;
-    date: string;
-    clientId: string;
-    clientName: string;
-    projectId: string | null;
-    projectName: string | null;
-    label: string;
-    kind: "charge" | "expected";
-    collectedMinor: bigint;
-    dueMinor: bigint;
-    currency: "USD" | "INR";
-    href: string;
-    actionLabel: string;
-  }[] = [];
-
-  for (const charge of thisMonthChargeRows) {
-    const projectMeta = charge.projectId
-      ? board.find((row) => row.project.id === charge.projectId)?.project
-      : null;
-    thisMonthBreakdownRows.push({
-      id: `charge-${charge.id}`,
-      date: charge.dueOn ?? charge.chargedOn,
-      clientId: charge.clientId,
-      clientName: clientName.get(charge.clientId) ?? "Client",
-      projectId: charge.projectId,
-      projectName: projectMeta?.name ?? null,
-      label: charge.memo || "Charge",
-      kind: "charge",
-      collectedMinor: charge.allocatedMinor,
-      dueMinor: charge.outstandingMinor,
-      currency: charge.currency,
-      href:
-        charge.outstandingMinor > BigInt(0)
-          ? `/${orgSlug}/finance?client=${charge.clientId}&charge=${charge.id}#collect`
-          : charge.projectId
-            ? `/${orgSlug}/projects/${charge.projectId}?tab=charges`
-            : `/${orgSlug}/clients/${charge.clientId}`,
-      actionLabel: charge.outstandingMinor > BigInt(0) ? "Collect" : "Open",
-    });
-  }
-
-  for (const row of expectedThisMonth) {
-    thisMonthBreakdownRows.push({
-      id: `expected-${row.milestoneId}`,
-      date: row.dueOn,
-      clientId: row.clientId,
-      clientName: row.clientName,
-      projectId: row.projectId,
-      projectName: row.projectName,
-      label: row.name,
-      kind: "expected",
-      collectedMinor: BigInt(0),
-      dueMinor: row.amountMinor,
-      currency: row.currency,
-      href: `/${orgSlug}/projects/${row.projectId}?tab=milestones&bill=${row.milestoneId}`,
-      actionLabel: "Bill",
-    });
-  }
-
-  thisMonthBreakdownRows.sort((a, b) => {
-    const byClient = a.clientName.localeCompare(b.clientName);
-    if (byClient !== 0) return byClient;
-    const byProject = (a.projectName ?? "").localeCompare(b.projectName ?? "");
-    if (byProject !== 0) return byProject;
-    return a.date.localeCompare(b.date);
-  });
-
-  const thisMonthBreakdownCollected = thisMonthBreakdownRows.reduce(
-    (sum, row) => sum + row.collectedMinor,
-    BigInt(0),
-  );
-  const thisMonthBreakdownDue = thisMonthBreakdownRows.reduce(
-    (sum, row) => sum + row.dueMinor,
-    BigInt(0),
-  );
-
   const tabs = [
-    { id: "ledger", href: `/${orgSlug}/finance`, label: "Ledger", active: view === "ledger" },
+    { id: "ledger", href: `/${orgSlug}/finance`, label: "Collect", active: view === "ledger" },
     {
       id: "upcoming",
       href: `/${orgSlug}/finance?view=upcoming`,
-      label: "Upcoming",
+      label: "To bill",
       active: view === "upcoming",
     },
     {
       id: "receipts",
       href: `/${orgSlug}/finance?view=receipts`,
-      label: "Receipts",
+      label: "Money in",
       active: view === "receipts",
     },
     {
       id: "month",
       href: `/${orgSlug}/finance?view=month&month=${month}`,
-      label: "Month",
+      label: "Month wrap",
       active: view === "month",
     },
   ] as const;
 
-  const insightStrip = (
-    <div className="grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-      <SoftStatCard
-        label="Due"
-        value={moneyLabel(finance.snapshot.outstandingMinor, currency)}
-        hint="Open on the ledger"
-        tone="sky"
-        fill={moneyFill(finance.snapshot.outstandingMinor, finance.snapshot.billedMinor)}
-      />
-      <SoftStatCard
-        label="Overdue"
-        value={moneyLabel(finance.snapshot.overdueMinor, currency)}
-        hint="Past due date"
-        tone="amber"
-        badge={finance.snapshot.overdueMinor > BigInt(0) ? "Needs collect" : undefined}
-        fill={moneyFill(finance.snapshot.overdueMinor, finance.snapshot.outstandingMinor)}
-      />
-      <SoftStatCard
-        label="Collected"
-        value={moneyLabel(finance.snapshot.collectedMinor, currency)}
-        hint="Allocated receipts"
-        tone="emerald"
-        fill={moneyFill(finance.snapshot.collectedMinor, finance.snapshot.billedMinor)}
-      />
-      <SoftStatCard
-        label="This cycle"
-        value={moneyLabel(cycleTotalMinor, currency)}
-        hint={`${monthLabel} + ${upcomingMonthLabel} · expected & due`}
-        tone="violet"
-        fill={moneyFill(
-          cycleTotalMinor,
-          cycleTotalMinor + finance.snapshot.outstandingMinor,
-        )}
-      />
-      <SoftStatCard
-        label="Next month"
-        value={moneyLabel(expectedNextMonthMinor, currency)}
-        hint={`${upcomingMonthLabel} unbilled milestones`}
-        tone="sky"
-        fill={moneyFill(
-          expectedNextMonthMinor,
-          expectedNextMonthMinor + finance.snapshot.outstandingMinor,
-        )}
-      />
-      <SoftStatCard
-        label="Unallocated"
-        value={moneyLabel(finance.snapshot.unallocatedMinor, currency)}
-        hint="Receipt credit not applied"
-        tone="slate"
-        fill={moneyFill(
-          finance.snapshot.unallocatedMinor,
-          finance.snapshot.collectedMinor + finance.snapshot.unallocatedMinor,
-        )}
-      />
-    </div>
+  const emptyPartnerFlow = {
+    byChargeId: {} as Record<string, FinancePartnerShare[]>,
+    byPaymentId: {} as Record<string, FinancePartnerShare[]>,
+    month: null as Awaited<ReturnType<typeof loadFinancePartnerFlow>>["month"],
+    payables: [] as Awaited<ReturnType<typeof loadFinancePartnerFlow>>["payables"],
+  };
+
+  const [partnerFlow, partnerRoster] = needPartners
+    ? await Promise.all([
+        loadFinancePartnerFlow(orgSlug, {
+          chargeIds:
+            view === "ledger" || view === "month"
+              ? (view === "month" ? monthCharges : liveCharges).map((charge) => charge.id)
+              : [],
+          paymentIds:
+            view === "receipts" || view === "month"
+              ? (view === "month" ? monthPayments : postedPayments).map((payment) => payment.id)
+              : [],
+          month: view === "month" ? month : undefined,
+          includePayables: true,
+        }).catch(() => emptyPartnerFlow),
+        listPartners(orgSlug).catch(() => []),
+      ])
+    : [emptyPartnerFlow, [] as Awaited<ReturnType<typeof listPartners>>];
+
+  const partnerShareChargeDetails = partnerShareChargeDetailsFrom(
+    view === "month" ? monthCharges : liveCharges,
+    partnerFlow.byChargeId,
+    clientName,
   );
+
+  const overdueMinor = finance.snapshot.overdueMinor;
+  const dueMinor = finance.snapshot.outstandingMinor;
+  const hasOverdue = overdueMinor > BigInt(0);
+  const ledgerHeroLabel = hasOverdue ? "Past due" : "Clients owe";
+  const ledgerHeroValue = moneyLabel(hasOverdue ? overdueMinor : dueMinor, currency);
+  const ledgerHeroHint = hasOverdue
+    ? "Past due — record payment first"
+    : "Open charges waiting for payment";
+
+  const ledgerDoNext = (() => {
+    if (hasOverdue) {
+      return (
+        <NextStepCard
+          title={`Collect past due · ${moneyLabel(overdueMinor, currency)}`}
+          body="Past-due charges need attention before anything else."
+          action={
+            <Button
+              size="sm"
+              nativeButton={false}
+              render={<Link href={`/${orgSlug}/finance?filter=overdue`} />}
+            >
+              Collect
+            </Button>
+          }
+        />
+      );
+    }
+    if (dueMinor > BigInt(0)) {
+      return (
+        <NextStepCard
+          title={`Collect · ${moneyLabel(dueMinor, currency)}`}
+          body="Pick someone who owes you and record a payment."
+          action={
+            <Button size="sm" nativeButton={false} render={<Link href={`/${orgSlug}/finance`} />}>
+              Collect
+            </Button>
+          }
+        />
+      );
+    }
+    if (finance.snapshot.unallocatedMinor > BigInt(0)) {
+      return (
+        <NextStepCard
+          title={`Apply leftover · ${moneyLabel(finance.snapshot.unallocatedMinor, currency)}`}
+          body="Payment not applied yet — open Money in or apply it on Collect."
+          action={
+            <Button
+              size="sm"
+              nativeButton={false}
+              render={<Link href={`/${orgSlug}/finance?view=receipts`} />}
+            >
+              Money in
+            </Button>
+          }
+        />
+      );
+    }
+    if (expectedBillings.length > 0) {
+      return (
+        <NextStepCard
+          title={`Bill next · ${expectedBillings.length} milestones`}
+          body="Nothing to collect — turn milestones into charges on To bill."
+          action={
+            <Button
+              size="sm"
+              nativeButton={false}
+              render={<Link href={`/${orgSlug}/finance?view=upcoming`} />}
+            >
+              To bill
+            </Button>
+          }
+        />
+      );
+    }
+    if (partnerFlow.payables.length > 0) {
+      const totalPayable = partnerFlow.payables.reduce(
+        (sum, row) => sum + row.payableMinor,
+        BigInt(0),
+      );
+      const currencyForPay = partnerFlow.payables[0]?.currency ?? currency;
+      return (
+        <NextStepCard
+          title={`Settle partners · ${moneyLabel(totalPayable, currencyForPay)}`}
+          body="Clients are caught up — pay out partner shares below."
+          action={
+            <Button size="sm" nativeButton={false} render={<Link href="#partner-settle" />}>
+              Settle
+            </Button>
+          }
+        />
+      );
+    }
+    return null;
+  })();
+
+  const receiptsDoNext =
+    finance.snapshot.unallocatedMinor > BigInt(0) ? (
+      <NextStepCard
+        title={`Apply leftover · ${moneyLabel(finance.snapshot.unallocatedMinor, currency)}`}
+        body="Payment not applied — assign it against open charges on Collect."
+        action={
+          <Button size="sm" nativeButton={false} render={<Link href={`/${orgSlug}/finance`} />}>
+            Collect
+          </Button>
+        }
+      />
+    ) : dueMinor > BigInt(0) ? (
+      <NextStepCard
+        title={`Collect · ${moneyLabel(dueMinor, currency)}`}
+        body="Open charges still need a payment."
+        action={
+          <Button size="sm" nativeButton={false} render={<Link href={`/${orgSlug}/finance`} />}>
+            Collect
+          </Button>
+        }
+      />
+    ) : null;
 
   const insightBand = (
     <div className="grid shrink-0 gap-4 lg:grid-cols-2">
       <SoftCard className="p-5">
         <p className="text-sm font-semibold tracking-tight">Money mix</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Collected vs due vs still unbilled on contracts
+          Paid to you vs clients owe vs still unbilled on contracts
         </p>
         <div className="mt-4">
           <MoneyDonut
@@ -384,13 +510,13 @@ export default async function FinancePage({
             slices={[
               {
                 key: "collected",
-                label: `Collected · ${moneyLabel(finance.snapshot.collectedMinor, currency)}`,
+                label: `Paid to you · ${moneyLabel(finance.snapshot.collectedMinor, currency)}`,
                 value: Number(finance.snapshot.collectedMinor),
                 color: MONEY_COLORS.collected,
               },
               {
                 key: "due",
-                label: `Due · ${moneyLabel(finance.snapshot.outstandingMinor, currency)}`,
+                label: `Clients owe · ${moneyLabel(finance.snapshot.outstandingMinor, currency)}`,
                 value: Number(finance.snapshot.outstandingMinor),
                 color: MONEY_COLORS.due,
               },
@@ -409,8 +535,8 @@ export default async function FinancePage({
         <p className="mt-0.5 text-xs text-muted-foreground">Net receipts by month</p>
         <div className="mt-4 flex-1">
           <DotStackChart
-            rows={trendMonths.map((key, index) => {
-              const row = trendStatements[index];
+            rows={trendMonths.map((key) => {
+              const row = trendStatements.find((item) => item.yearMonth === key);
               const collected = row?.payments ?? BigInt(0);
               return {
                 id: key,
@@ -431,7 +557,7 @@ export default async function FinancePage({
   return (
     <WorkSurface>
       <StudioToolbar
-        purpose="Ledger sheet — what’s owed, collected, and carried forward"
+        purpose={JOURNEY.finance.purpose}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -450,7 +576,8 @@ export default async function FinancePage({
                 defaultClientId={selectedId}
                 defaultOpen={query.new === "charge"}
                 returnHref={returnHref}
-                triggerVariant="outline"
+                triggerLabel="Add charge"
+                triggerVariant="default"
               />
             ) : null}
           </div>
@@ -465,145 +592,63 @@ export default async function FinancePage({
         ))}
       </FilterChips>
 
+      <p className="shrink-0 border-b border-border/30 px-5 py-2.5 text-xs text-muted-foreground">
+        <Link href={`/${orgSlug}/finance?view=upcoming`} className="hover:text-foreground hover:underline">
+          Bill work
+        </Link>
+        {" → "}
+        <Link href={`/${orgSlug}/finance`} className="hover:text-foreground hover:underline">
+          Record payment
+        </Link>
+        {ctx.org.modules.partners ? (
+          <>
+            {" → "}
+            <Link href={`/${orgSlug}/partners`} className="hover:text-foreground hover:underline">
+              Partners share
+            </Link>
+          </>
+        ) : null}
+        {" → Done"}
+      </p>
+
       {view === "ledger" ? (
-        <PageShell className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4 pt-4">
-          {insightStrip}
+        <PageShell className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+          <FinanceHero
+            label={ledgerHeroLabel}
+            value={ledgerHeroValue}
+            hint={ledgerHeroHint}
+            doNext={ledgerDoNext}
+          />
+          <FinanceSecondary
+            items={[
+              {
+                label: "Paid to you",
+                value: moneyLabel(finance.snapshot.collectedMinor, currency),
+                hint: "Payments applied to charges",
+                tone: "emerald",
+                fill: moneyFill(
+                  finance.snapshot.collectedMinor,
+                  finance.snapshot.billedMinor,
+                ),
+              },
+              {
+                label: "Payment not applied",
+                value: moneyLabel(finance.snapshot.unallocatedMinor, currency),
+                hint: "Leftover credit waiting to apply",
+                tone: "slate",
+                fill: moneyFill(
+                  finance.snapshot.unallocatedMinor,
+                  finance.snapshot.collectedMinor + finance.snapshot.unallocatedMinor,
+                ),
+              },
+            ]}
+          />
 
-          <SoftCard className="overflow-hidden">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/40 px-4 py-3">
-              <div>
-                <p className="font-heading text-lg font-semibold tracking-tight">
-                  This month · {monthLabel}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Posted charges and expected milestones — collected vs still due
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-heading text-xl font-semibold tabular-nums tracking-tight">
-                  {moneyLabel(thisMonthBreakdownDue, currency)}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {moneyLabel(thisMonthBreakdownCollected, currency)} collected ·{" "}
-                  {moneyLabel(thisMonthBreakdownDue, currency)} due
-                </p>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              {thisMonthBreakdownRows.length === 0 ? (
-                <div className="px-4 py-10 text-center">
-                  <p className="text-sm font-medium">Nothing for {monthLabel}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Charges charged or due this month, plus unbilled milestones due now, show
-                    here.
-                  </p>
-                  <div className="mt-4 flex flex-wrap justify-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      nativeButton={false}
-                      render={<Link href={`/${orgSlug}/finance?view=upcoming`} />}
-                    >
-                      All upcoming
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <table className="w-full min-w-[48rem] border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-border/40 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-                      <th className="px-3 py-2.5 font-semibold">Date</th>
-                      <th className="px-3 py-2.5 font-semibold">Client</th>
-                      <th className="px-3 py-2.5 font-semibold">Project</th>
-                      <th className="px-3 py-2.5 font-semibold">Item</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Collected</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Due</th>
-                      <th className="px-3 py-2.5 text-right font-semibold"> </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {thisMonthBreakdownRows.map((row) => (
-                      <tr key={row.id} className="border-b border-border/25">
-                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
-                          {formatDay(row.date)}
-                          {row.kind === "expected" ? (
-                            <span className="ml-2 text-[10px] font-medium text-amber-800">
-                              expected
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <Link
-                            href={`/${orgSlug}/clients/${row.clientId}`}
-                            className="font-medium hover:underline"
-                          >
-                            {row.clientName}
-                          </Link>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          {row.projectId && row.projectName ? (
-                            <Link
-                              href={`/${orgSlug}/projects/${row.projectId}`}
-                              className="hover:underline"
-                            >
-                              {row.projectName}
-                            </Link>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="max-w-[14rem] truncate px-3 py-2.5 font-medium">
-                          {row.label}
-                        </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
-                          {row.collectedMinor > BigInt(0)
-                            ? moneyLabel(row.collectedMinor, row.currency)
-                            : "—"}
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
-                          {row.dueMinor > BigInt(0)
-                            ? moneyLabel(row.dueMinor, row.currency)
-                            : "—"}
-                        </td>
-                        <td className="px-3 py-2.5 text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            nativeButton={false}
-                            render={<Link href={row.href} />}
-                          >
-                            {row.actionLabel}
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-border/40 text-sm font-semibold">
-                      <td className="px-3 py-2.5" colSpan={4}>
-                        Total
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">
-                        {moneyLabel(thisMonthBreakdownCollected, currency)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">
-                        {moneyLabel(thisMonthBreakdownDue, currency)}
-                      </td>
-                      <td className="px-3 py-2.5" />
-                    </tr>
-                  </tfoot>
-                </table>
-              )}
-            </div>
-          </SoftCard>
-
-          {insightBand}
-
-          <Workbench className="min-h-[22rem] flex-col gap-3 md:flex-row">
+          <Workbench className="min-h-[min(70vh,42rem)] flex-col gap-3 md:flex-row">
             <SoftCard className="flex max-h-52 w-full shrink-0 flex-col md:max-h-none md:w-72">
               <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-2">
                 <div>
-                  <p className="text-sm font-semibold tracking-tight">Clients owing</p>
+                  <p className="text-sm font-semibold tracking-tight">Who owes you</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {owingGroups.length} open
                   </p>
@@ -613,14 +658,14 @@ export default async function FinancePage({
                     All
                   </FilterChip>
                   <FilterChip href={`/${orgSlug}/finance?filter=overdue`} active={overdueOnly}>
-                    Overdue
+                    Past due
                   </FilterChip>
                 </div>
               </div>
               <ul className="min-h-0 flex-1 overflow-y-auto p-2">
                 {owingGroups.length === 0 ? (
                   <li className="px-3 py-8 text-sm text-muted-foreground">
-                    {overdueOnly ? "Nothing overdue." : "Caught up."}
+                    {overdueOnly ? "Nothing past due." : "Caught up."}
                   </li>
                 ) : (
                   owingGroups.map((group) => {
@@ -639,7 +684,7 @@ export default async function FinancePage({
                         >
                           <AvatarMark name={group.name} size="sm" />
                           <span className="min-w-0 flex-1 truncate font-medium">{group.name}</span>
-                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          <span className="shrink-0 text-sm font-semibold tabular-nums">
                             {moneyLabel(group.outstandingMinor, group.currency)}
                           </span>
                         </Link>
@@ -654,12 +699,12 @@ export default async function FinancePage({
               <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border/40 px-4 py-3">
                 <div className="min-w-0">
                   <p className="truncate font-heading text-lg font-semibold tracking-tight">
-                    {selectedGroup?.name ?? selectedClient?.name ?? "Select a client"}
+                    {selectedGroup?.name ?? selectedClient?.name ?? "Pick someone who owes you"}
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {selectedGroup
-                      ? `${moneyLabel(selectedGroup.outstandingMinor, selectedGroup.currency)} due on the sheet`
-                      : "Pick a client to collect against open charges"}
+                      ? `${moneyLabel(selectedGroup.outstandingMinor, selectedGroup.currency)} still to collect`
+                      : "Pick someone who owes you, then record a payment"}
                   </p>
                 </div>
                 <Link
@@ -681,9 +726,25 @@ export default async function FinancePage({
                   <EmptyState
                     fill
                     title={JOURNEY.finance.emptyCollectTitle}
-                    body={JOURNEY.finance.emptyCollectBody}
-                    actionHref={ctx.canWrite ? `/${orgSlug}/finance?new=charge` : undefined}
-                    actionLabel={ctx.canWrite ? "New charge" : undefined}
+                    body={
+                      expectedBillings.length > 0
+                        ? "Nothing to collect. Bill upcoming milestones when ready."
+                        : JOURNEY.finance.emptyCollectBody
+                    }
+                    actionHref={
+                      expectedBillings.length > 0
+                        ? `/${orgSlug}/finance?view=upcoming`
+                        : ctx.canWrite
+                          ? `/${orgSlug}/finance?new=charge`
+                          : undefined
+                    }
+                    actionLabel={
+                      expectedBillings.length > 0
+                        ? "To bill"
+                        : ctx.canWrite
+                          ? "Add charge"
+                          : undefined
+                    }
                   />
                 ) : (
                   <ChargeSheet
@@ -719,226 +780,319 @@ export default async function FinancePage({
               ) : null}
             </SoftCard>
           </Workbench>
+
+          {partnerFlow.payables.length > 0 ? (
+            <FinancePartnerSettlePanel
+              orgSlug={orgSlug}
+              partners={partnerRoster}
+              payables={partnerFlow.payables}
+              canWrite={ctx.canWrite}
+              shareCharges={partnerShareChargeDetails}
+            />
+          ) : null}
+
+          {insightBand}
         </PageShell>
       ) : null}
 
       {view === "receipts" ? (
-        <PageShell className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-5 pb-4 pt-4">
-          {insightStrip}
-          <SoftCard className="min-h-0 flex-1 overflow-hidden">
-            <div className="border-b border-border/40 px-4 py-3">
-              <p className="font-heading text-lg font-semibold tracking-tight">Receipt sheet</p>
+        <PageShell className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
+          <FinanceHero
+            label="Paid to you"
+            value={moneyLabel(finance.snapshot.collectedMinor, currency)}
+            hint="Payments applied to charges"
+            doNext={receiptsDoNext}
+          />
+          <FinanceSecondary
+            items={[
+              {
+                label: "Payment not applied",
+                value: moneyLabel(finance.snapshot.unallocatedMinor, currency),
+                hint: "Leftover credit waiting to apply",
+                tone: "slate",
+                fill: moneyFill(
+                  finance.snapshot.unallocatedMinor,
+                  finance.snapshot.collectedMinor + finance.snapshot.unallocatedMinor,
+                ),
+              },
+            ]}
+          />
+          <SoftCard className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="shrink-0 border-b border-border/20 px-5 py-3.5">
+              <p className="font-heading text-lg font-semibold tracking-tight">Money in</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Posted receipts and refunds · {postedPayments.length} rows
+                Payments and refunds · {postedPayments.length} rows
+                {finance.snapshot.unallocatedMinor > BigInt(0)
+                  ? ` · ${moneyLabel(finance.snapshot.unallocatedMinor, currency)} not applied`
+                  : ""}
               </p>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              <PaymentSheet
-                orgSlug={orgSlug}
-                payments={finance.payments}
-                names={clientName}
-                canWrite={ctx.canWrite}
-                allocations={finance.allocations}
-                charges={finance.charges}
-              />
-            </div>
-          </SoftCard>
-        </PageShell>
-      ) : null}
-
-      {view === "upcoming" ? (
-        <PageShell className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-5 pb-4 pt-4">
-          {insightStrip}
-          <SoftCard className="min-h-0 flex-1 overflow-hidden">
-            <div className="border-b border-border/40 px-4 py-3">
-              <p className="font-heading text-lg font-semibold tracking-tight">
-                Upcoming billings
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Unbilled milestones by due date — expected cash, not posted charges yet. Bill from
-                the project when ready.
-              </p>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {expectedBillings.length === 0 ? (
+            <div className="min-h-0 flex-1 overflow-auto">
+              {postedPayments.length === 0 ? (
                 <EmptyState
                   fill
-                  title="No upcoming milestones"
-                  body="Add due dates and amounts on unbilled milestones to forecast the next cycle."
+                  title={JOURNEY.finance.emptyReceiptsTitle}
+                  body={JOURNEY.finance.emptyReceiptsBody}
+                  actionHref={`/${orgSlug}/finance`}
+                  actionLabel={JOURNEY.finance.emptyReceiptsCta}
                 />
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[40rem] border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b border-border/40 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-                        <th className="px-3 py-2.5 font-semibold">Due</th>
-                        <th className="px-3 py-2.5 font-semibold">Client</th>
-                        <th className="px-3 py-2.5 font-semibold">Project</th>
-                        <th className="px-3 py-2.5 font-semibold">Milestone</th>
-                        <th className="px-3 py-2.5 text-right font-semibold">Expected</th>
-                        <th className="px-3 py-2.5 text-right font-semibold"> </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {expectedBillings.map((row) => (
-                        <tr key={row.milestoneId} className="border-b border-border/25">
-                          <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
-                            {formatDay(row.dueOn)}
-                            {inMonth(row.dueOn, upcomingMonth) ? (
-                              <span className="ml-2 text-[10px] font-medium text-sky-800">
-                                next month
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <Link
-                              href={`/${orgSlug}/clients/${row.clientId}`}
-                              className="font-medium hover:underline"
-                            >
-                              {row.clientName}
-                            </Link>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <Link
-                              href={`/${orgSlug}/projects/${row.projectId}`}
-                              className="hover:underline"
-                            >
-                              {row.projectName}
-                            </Link>
-                          </td>
-                          <td className="max-w-[14rem] truncate px-3 py-2.5 font-medium">
-                            {row.name}
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
-                            {moneyLabel(row.amountMinor, row.currency)}
-                          </td>
-                          <td className="px-3 py-2.5 text-right">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              nativeButton={false}
-                              render={
-                                <Link
-                                  href={`/${orgSlug}/projects/${row.projectId}?tab=milestones&bill=${row.milestoneId}`}
-                                />
-                              }
-                            >
-                              Bill
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <PaymentSheet
+                  orgSlug={orgSlug}
+                  payments={finance.payments}
+                  names={clientName}
+                  canWrite={ctx.canWrite}
+                  allocations={finance.allocations}
+                  charges={finance.charges}
+                />
               )}
             </div>
           </SoftCard>
         </PageShell>
       ) : null}
 
-      {view === "month" ? (
-        <PageShell className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 pb-4 pt-4">
-          <SoftCard className="shrink-0 p-5">
-            <form className="mb-5 flex flex-wrap items-end gap-3">
-              <input type="hidden" name="view" value="month" />
-              <label className="text-sm text-muted-foreground">
-                Month
-                <input
-                  type="month"
-                  name="month"
-                  defaultValue={month}
-                  className="ml-2 h-9 rounded-full border border-input bg-transparent px-3 text-sm"
+      {view === "upcoming" ? (
+        <PageShell className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+          <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-stretch">
+            <SoftCard className="flex min-w-0 flex-1 items-center gap-4 px-5 py-3.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                  Ready to bill · {upcomingMonthLabel}
+                </p>
+                <p className="mt-1 font-heading text-2xl leading-none font-semibold tracking-tight tabular-nums">
+                  {moneyLabel(expectedNextMonthMinor, currency)}
+                </p>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Unbilled milestones due next month · {expectedBillings.length} rows
+                </p>
+              </div>
+              <div className="hidden h-10 w-px bg-border/40 sm:block" />
+              <div className="hidden min-w-38 sm:block">
+                <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                  Next 2 months
+                </p>
+                <p className="mt-1 font-heading text-lg leading-none font-semibold tabular-nums tracking-tight">
+                  {moneyLabel(cycleTotalMinor, currency)}
+                </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {monthLabel} + {upcomingMonthLabel}
+                </p>
+              </div>
+              {expectedBillings.length > 0 ? (
+                <Button
+                  size="sm"
+                  className="shrink-0"
+                  nativeButton={false}
+                  render={
+                    <Link
+                      href={`/${orgSlug}/projects/${expectedBillings[0].projectId}?tab=milestones&bill=${expectedBillings[0].milestoneId}`}
+                    />
+                  }
+                >
+                  Bill next
+                </Button>
+              ) : null}
+            </SoftCard>
+          </div>
+
+          <SoftCard className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex shrink-0 flex-wrap items-baseline justify-between gap-2 border-b border-border/20 px-5 py-3">
+              <div className="min-w-0">
+                <p className="font-heading text-base font-semibold tracking-tight">To bill</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Bill posts a charge to Collect · then record payment
+                </p>
+              </div>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {expectedBillings.length} milestones
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto">
+              {expectedBillings.length === 0 ? (
+                <EmptyState
+                  fill
+                  title={JOURNEY.finance.emptyUpcomingTitle}
+                  body={JOURNEY.finance.emptyUpcomingBody}
+                  actionHref={`/${orgSlug}/projects`}
+                  actionLabel={JOURNEY.finance.emptyUpcomingCta}
                 />
-              </label>
-              <button
-                type="submit"
-                className="rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-              >
-                Show
-              </button>
-              <p className="text-sm text-muted-foreground">{monthLabel} carry-forward</p>
-            </form>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <SoftStatCard
-                label="Opening"
-                value={moneyLabel(statement.opening, statement.currency)}
-                hint="Carried in"
-                tone="slate"
-              />
-              <SoftStatCard
-                label="Charged"
-                value={moneyLabel(statement.newCharges, statement.currency)}
-                hint="Posted this month"
-                tone="sky"
-              />
-              <SoftStatCard
-                label="Expected"
-                value={moneyLabel(expectedThisMonthMinor, currency)}
-                hint="Unbilled milestones due"
-                tone="amber"
-              />
-              <SoftStatCard
-                label="Collected"
-                value={moneyLabel(statement.payments, statement.currency)}
-                hint="Net receipts"
-                tone="emerald"
-              />
-              <SoftStatCard
-                label="Closing"
-                value={moneyLabel(statement.closing, statement.currency)}
-                hint="Ends the month"
-                tone="violet"
-              />
+              ) : (
+                <table className="w-full min-w-[40rem] border-collapse text-sm">
+                  <thead className="sticky top-0 z-10 bg-card">
+                    <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+                      <th className="px-4 py-3.5 font-semibold">Due</th>
+                      <th className="px-4 py-3.5 font-semibold">Client</th>
+                      <th className="px-4 py-3.5 font-semibold">Project</th>
+                      <th className="px-4 py-3.5 font-semibold">Milestone</th>
+                      <th className="px-4 py-3.5 text-right font-semibold">Expected</th>
+                      <th className="px-4 py-3.5 text-right font-semibold"> </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expectedBillings.map((row) => (
+                      <tr key={row.milestoneId} className="border-b border-border/15">
+                        <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
+                          {formatDay(row.dueOn)}
+                          {inMonth(row.dueOn, upcomingMonth) ? (
+                            <span className="ml-2 text-[10px] font-medium text-sky-700 dark:text-sky-300">
+                              next month
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-4 text-muted-foreground">
+                          <Link
+                            href={`/${orgSlug}/clients/${row.clientId}`}
+                            className="hover:underline"
+                          >
+                            {row.clientName}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-4 text-muted-foreground">
+                          <Link
+                            href={`/${orgSlug}/projects/${row.projectId}`}
+                            className="hover:underline"
+                          >
+                            {row.projectName}
+                          </Link>
+                        </td>
+                        <td className="max-w-[14rem] truncate px-4 py-4 text-muted-foreground">
+                          {row.name}
+                        </td>
+                        <td className="px-4 py-4 text-right text-base font-semibold tabular-nums">
+                          {moneyLabel(row.amountMinor, row.currency)}
+                        </td>
+                        <td className="px-4 py-4 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            nativeButton={false}
+                            render={
+                              <Link
+                                href={`/${orgSlug}/projects/${row.projectId}?tab=milestones&bill=${row.milestoneId}`}
+                              />
+                            }
+                          >
+                            Bill
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </SoftCard>
+        </PageShell>
+      ) : null}
+
+      {view === "month" && statement ? (
+        <PageShell className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="font-heading text-lg font-semibold tracking-tight">
+                {monthLabel}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Closing picture · started at{" "}
+                {moneyLabel(statement.opening, statement.currency)}
+              </p>
+            </div>
+            <FinanceMonthPicker orgSlug={orgSlug} value={month} />
+          </div>
+
+          <SoftCard>
+            <div className="grid divide-y divide-border/20 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              <div className="px-5 py-5">
+                <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                  Still open at month end
+                </p>
+                <p className="mt-2 font-heading text-3xl leading-none font-semibold tracking-tight tabular-nums">
+                  {moneyLabel(statement.closing, statement.currency)}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Ready to bill {moneyLabel(expectedThisMonthMinor, currency)}
+                </p>
+              </div>
+              <div className="px-5 py-5">
+                <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                  Charged
+                </p>
+                <p className="mt-2 font-heading text-3xl leading-none font-semibold tracking-tight tabular-nums">
+                  {moneyLabel(statement.newCharges, statement.currency)}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {monthCharges.length} posted this month
+                </p>
+              </div>
+              <div className="px-5 py-5">
+                <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                  Paid to you
+                </p>
+                <p className="mt-2 font-heading text-3xl leading-none font-semibold tracking-tight tabular-nums">
+                  {moneyLabel(statement.payments, statement.currency)}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {monthPayments.length} payments in
+                </p>
+              </div>
             </div>
           </SoftCard>
 
-          <SoftCard className="overflow-hidden">
-            <div className="border-b border-border/40 px-4 py-3">
-              <p className="text-sm font-semibold tracking-tight">
-                Expected billings · {monthLabel}
-              </p>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Milestones due this month that are not charged yet — bill to post them to the
-                ledger
-              </p>
-            </div>
-            {expectedThisMonth.length === 0 ? (
-              <p className="px-4 py-8 text-sm text-muted-foreground">
-                No unbilled milestones due in {monthLabel}.
-              </p>
-            ) : (
+          {partnerFlow.month || partnerFlow.payables.length > 0 ? (
+            <FinancePartnerSettlePanel
+              orgSlug={orgSlug}
+              partners={partnerRoster}
+              payables={partnerFlow.payables}
+              canWrite={ctx.canWrite}
+              month={partnerFlow.month}
+              shareCharges={partnerShareChargeDetails}
+            />
+          ) : null}
+
+          {expectedThisMonth.length > 0 ? (
+            <SoftCard className="overflow-hidden">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/20 px-5 py-3.5">
+                <div>
+                  <p className="font-heading text-base font-semibold tracking-tight">
+                    Ready to bill
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Unbilled milestones — Bill posts them to Collect
+                  </p>
+                </div>
+                <p className="font-heading text-lg font-semibold tabular-nums tracking-tight">
+                  {moneyLabel(expectedThisMonthMinor, currency)}
+                </p>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[36rem] border-collapse text-sm">
                   <thead>
-                    <tr className="border-b border-border/40 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-                      <th className="px-3 py-2.5 font-semibold">Due</th>
-                      <th className="px-3 py-2.5 font-semibold">Client</th>
-                      <th className="px-3 py-2.5 font-semibold">Milestone</th>
-                      <th className="px-3 py-2.5 text-right font-semibold">Expected</th>
-                      <th className="px-3 py-2.5 text-right font-semibold"> </th>
+                    <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+                      <th className="px-4 py-3 font-semibold">Due</th>
+                      <th className="px-4 py-3 font-semibold">Client</th>
+                      <th className="px-4 py-3 font-semibold">Milestone</th>
+                      <th className="px-4 py-3 text-right font-semibold">Expected</th>
+                      <th className="px-4 py-3 text-right font-semibold"> </th>
                     </tr>
                   </thead>
                   <tbody>
                     {expectedThisMonth.map((row) => (
-                      <tr key={row.milestoneId} className="border-b border-border/25">
-                        <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
+                      <tr key={row.milestoneId} className="border-b border-border/15">
+                        <td className="whitespace-nowrap px-4 py-3.5 text-muted-foreground">
                           {formatDay(row.dueOn)}
                         </td>
-                        <td className="px-3 py-2.5 font-medium">{row.clientName}</td>
-                        <td className="px-3 py-2.5">
-                          <span className="font-medium">{row.name}</span>
-                          <span className="ml-1 text-xs text-muted-foreground">
-                            · {row.projectName}
-                          </span>
+                        <td className="px-4 py-3.5 text-muted-foreground">{row.clientName}</td>
+                        <td className="px-4 py-3.5 text-muted-foreground">
+                          <span>{row.name}</span>
+                          <span className="ml-1 text-xs">· {row.projectName}</span>
                         </td>
-                        <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
+                        <td className="px-4 py-3.5 text-right text-base font-semibold tabular-nums">
                           {moneyLabel(row.amountMinor, row.currency)}
                         </td>
-                        <td className="px-3 py-2.5 text-right">
+                        <td className="px-4 py-3.5 text-right">
                           <Button
                             size="sm"
-                            variant="ghost"
+                            variant="outline"
                             nativeButton={false}
                             render={
                               <Link
@@ -954,15 +1108,22 @@ export default async function FinancePage({
                   </tbody>
                 </table>
               </div>
-            )}
-          </SoftCard>
+            </SoftCard>
+          ) : null}
 
-          <div className="grid gap-4 xl:grid-cols-2">
+          <div className="grid items-start gap-5 xl:grid-cols-2">
             <SoftCard className="overflow-hidden">
-              <div className="border-b border-border/40 px-4 py-3">
-                <p className="text-sm font-semibold tracking-tight">Charges this month</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {monthCharges.length} posted · {moneyLabel(statement.newCharges, currency)}
+              <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border/20 px-5 py-3.5">
+                <div>
+                  <p className="font-heading text-base font-semibold tracking-tight">
+                    Charges
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {monthCharges.length} posted
+                  </p>
+                </div>
+                <p className="font-heading text-lg font-semibold tabular-nums tracking-tight">
+                  {moneyLabel(statement.newCharges, currency)}
                 </p>
               </div>
               <ChargeSheet
@@ -973,10 +1134,17 @@ export default async function FinancePage({
               />
             </SoftCard>
             <SoftCard className="overflow-hidden">
-              <div className="border-b border-border/40 px-4 py-3">
-                <p className="text-sm font-semibold tracking-tight">Receipts this month</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {monthPayments.length} posted · {moneyLabel(statement.payments, currency)}
+              <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border/20 px-5 py-3.5">
+                <div>
+                  <p className="font-heading text-base font-semibold tracking-tight">
+                    Money in
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {monthPayments.length} posted
+                  </p>
+                </div>
+                <p className="font-heading text-lg font-semibold tabular-nums tracking-tight">
+                  {moneyLabel(statement.payments, currency)}
                 </p>
               </div>
               <PaymentSheet

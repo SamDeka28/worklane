@@ -77,7 +77,7 @@ export function ChargeRows({
                 {canWrite && stillDue && collectHref ? (
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="outline"
                     nativeButton={false}
                     render={<Link href={collectHref(charge.id)} />}
                   >
@@ -129,23 +129,23 @@ export function ChargeSheet({
     : charges.filter((charge) => charge.status !== "void");
 
   if (visible.length === 0) {
-    return <p className="px-4 py-8 text-sm text-muted-foreground">No charges in this sheet.</p>;
+    return <p className="px-5 py-8 text-sm text-muted-foreground">No charges in this sheet.</p>;
   }
 
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[40rem] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-border/40 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
-            {clientName ? <th className="px-3 py-2.5 font-semibold">Client</th> : null}
-            <th className="px-3 py-2.5 font-semibold">Charge</th>
-            <th className="px-3 py-2.5 font-semibold">Charged</th>
-            <th className="px-3 py-2.5 font-semibold">Due</th>
-            <th className="px-3 py-2.5 text-right font-semibold">Gross</th>
-            <th className="px-3 py-2.5 text-right font-semibold">Paid</th>
-            <th className="px-3 py-2.5 text-right font-semibold">Left</th>
-            <th className="px-3 py-2.5 font-semibold">Status</th>
-            <th className="px-3 py-2.5 text-right font-semibold"> </th>
+          <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+            {clientName ? <th className="px-4 py-3.5 font-semibold">Client</th> : null}
+            <th className="px-4 py-3.5 font-semibold">Charge</th>
+            <th className="px-4 py-3.5 font-semibold">Charged</th>
+            <th className="px-4 py-3.5 font-semibold">Due</th>
+            <th className="px-4 py-3.5 text-right font-semibold">Gross</th>
+            <th className="px-4 py-3.5 text-right font-semibold">Paid</th>
+            <th className="px-4 py-3.5 text-right font-semibold">Left</th>
+            <th className="px-4 py-3.5 font-semibold">Status</th>
+            <th className="px-4 py-3.5 text-right font-semibold"> </th>
           </tr>
         </thead>
         <tbody>
@@ -156,14 +156,16 @@ export function ChargeSheet({
               <tr
                 key={charge.id}
                 className={cn(
-                  "border-b border-border/25",
+                  "border-b border-border/15",
                   life === "cancelled" && "opacity-50",
-                  charge.id === activeChargeId && "bg-sky-50/70",
-                  life === "overdue" && charge.id !== activeChargeId && "bg-amber-50/40",
+                  charge.id === activeChargeId && "bg-muted/70",
+                  life === "overdue" &&
+                    charge.id !== activeChargeId &&
+                    "bg-amber-50/40 dark:bg-amber-950/20",
                 )}
               >
                 {clientName ? (
-                  <td className="px-3 py-2.5">
+                  <td className="px-4 py-4">
                     <Link
                       href={`/${orgSlug}/clients/${charge.clientId}`}
                       className="font-medium hover:underline"
@@ -172,37 +174,37 @@ export function ChargeSheet({
                     </Link>
                   </td>
                 ) : null}
-                <td className="max-w-[14rem] truncate px-3 py-2.5 font-medium">
+                <td className="max-w-[18rem] truncate px-4 py-4 font-medium">
                   {charge.memo || "Untitled charge"}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
                   {formatDay(charge.chargedOn)}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-muted-foreground">
+                <td className="whitespace-nowrap px-4 py-4 text-muted-foreground">
                   {charge.dueOn ? formatDay(charge.dueOn) : "—"}
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                <td className="px-4 py-4 text-right tabular-nums text-muted-foreground">
                   {moneyLabel(charge.grossMinor, charge.currency)}
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                <td className="px-4 py-4 text-right tabular-nums text-muted-foreground">
                   {moneyLabel(charge.allocatedMinor, charge.currency)}
                 </td>
-                <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
+                <td className="px-4 py-4 text-right font-semibold tabular-nums">
                   {life === "cancelled"
                     ? "—"
                     : stillDue
                       ? moneyLabel(charge.outstandingMinor, charge.currency)
                       : moneyLabel(BigInt(0), charge.currency)}
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-4 py-4">
                   <StatusChip tone={life}>{chargeLifeLabel(life)}</StatusChip>
                 </td>
-                <td className="px-3 py-2.5 text-right">
+                <td className="px-4 py-4 text-right">
                   <div className="inline-flex items-center justify-end gap-0.5">
                     {canWrite && stillDue && collectHref ? (
                       <Button
                         size="sm"
-                        variant="ghost"
+                        variant="outline"
                         nativeButton={false}
                         render={<Link href={collectHref(charge.id)} />}
                       >

@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   AlignCenter,
+  AlignJustify,
   AlignLeft,
   AlignRight,
   BetweenHorizonalEnd,
   BetweenVerticalEnd,
   Bold,
   Grid2X2X,
-  Highlighter,
   Italic,
   Link2,
   List,
@@ -18,18 +18,25 @@ import {
   Minus,
   Paperclip,
   Quote,
+  Redo2,
   Strikethrough,
   Table2,
   Underline as UnderlineIcon,
+  Undo2,
   ALargeSmall,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  EditorColorPicker,
+  HIGHLIGHT_COLOR_SWATCHES,
+  TEXT_COLOR_SWATCHES,
+} from "@/components/editor/color-picker";
 import {
   bumpFontSize,
   currentFontSize,
   DOCUMENT_FONTS,
   FONT_SIZE_STEPS,
 } from "@/components/editor/document-typography";
+import { cn } from "@/lib/utils";
 
 function ToolbarButton({
   active,
@@ -37,12 +44,14 @@ function ToolbarButton({
   children,
   label,
   className,
+  disabled,
 }: {
   active?: boolean;
   onClick: () => void;
   children: React.ReactNode;
   label: string;
   className?: string;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -50,12 +59,13 @@ function ToolbarButton({
       aria-label={label}
       title={label}
       aria-pressed={active}
+      disabled={disabled}
       onMouseDown={(event) => {
         event.preventDefault();
       }}
       onClick={onClick}
       className={cn(
-        "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
         active && "bg-muted text-foreground",
         className,
       )}
@@ -237,9 +247,27 @@ export function DocumentToolbar({
   uploading?: boolean;
   onAttachClick?: () => void;
 }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    let frame = 0;
+    const onSelection = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setTick((value) => value + 1));
+    };
+    editor.on("selectionUpdate", onSelection);
+    return () => {
+      cancelAnimationFrame(frame);
+      editor.off("selectionUpdate", onSelection);
+    };
+  }, [editor]);
+
   const fontFamily =
     (editor.getAttributes("textStyle").fontFamily as string | undefined) ?? "";
   const fontSize = currentFontSize(editor);
+  const textColor =
+    (editor.getAttributes("textStyle").color as string | undefined) ?? null;
+  const highlightColor =
+    (editor.getAttributes("highlight").color as string | undefined) ?? null;
   const knownFamily = DOCUMENT_FONTS.some((f) => f.value === fontFamily)
     ? fontFamily
     : fontFamily
@@ -250,7 +278,24 @@ export function DocumentToolbar({
     : "__custom__";
 
   return (
-    <div className="flex flex-wrap items-center gap-0.5 border-b border-border/40 bg-card/90 px-2.5 py-1.5 backdrop-blur-md">
+    <div className="flex flex-wrap items-center justify-center gap-0.5 px-2.5 py-1.5 sm:justify-start">
+      <ToolbarButton
+        label="Undo"
+        disabled={!editor.can().undo()}
+        onClick={() => editor.chain().focus().undo().run()}
+      >
+        <Undo2 className="size-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Redo"
+        disabled={!editor.can().redo()}
+        onClick={() => editor.chain().focus().redo().run()}
+      >
+        <Redo2 className="size-3.5" />
+      </ToolbarButton>
+
+      <ToolbarDivider />
+
       <ToolbarSelect
         label="Font"
         value={knownFamily}
@@ -343,31 +388,23 @@ export function DocumentToolbar({
       >
         <Strikethrough className="size-3.5" />
       </ToolbarButton>
-      <ToolbarButton
+
+      <EditorColorPicker
+        label="Text color"
+        mode="text"
+        value={textColor}
+        swatches={TEXT_COLOR_SWATCHES}
+        onChange={(color) => editor.chain().focus().setColor(color).run()}
+        onClear={() => editor.chain().focus().unsetColor().run()}
+      />
+      <EditorColorPicker
         label="Highlight"
-        active={editor.isActive("highlight")}
-        onClick={() => editor.chain().focus().toggleHighlight({ color: "#bbf7d0" }).run()}
-      >
-        <Highlighter className="size-3.5" />
-      </ToolbarButton>
-      <label
-        className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg hover:bg-muted"
-        title="Text color"
-      >
-        <span className="sr-only">Text color</span>
-        <input
-          type="color"
-          className="size-5 cursor-pointer rounded border-0 bg-transparent p-0"
-          value={
-            ((editor.getAttributes("textStyle").color as string | undefined) ||
-              "#1c1917") as string
-          }
-          onMouseDown={(event) => event.preventDefault()}
-          onChange={(event) => {
-            editor.chain().focus().setColor(event.target.value).run();
-          }}
-        />
-      </label>
+        mode="highlight"
+        value={highlightColor}
+        swatches={HIGHLIGHT_COLOR_SWATCHES}
+        onChange={(color) => editor.chain().focus().setHighlight({ color }).run()}
+        onClear={() => editor.chain().focus().unsetHighlight().run()}
+      />
 
       <ToolbarDivider />
 
@@ -391,6 +428,13 @@ export function DocumentToolbar({
         onClick={() => editor.chain().focus().setTextAlign("right").run()}
       >
         <AlignRight className="size-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Justify"
+        active={editor.isActive({ textAlign: "justify" })}
+        onClick={() => editor.chain().focus().setTextAlign("justify").run()}
+      >
+        <AlignJustify className="size-3.5" />
       </ToolbarButton>
 
       <ToolbarDivider />

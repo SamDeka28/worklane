@@ -1,18 +1,20 @@
 import type { Metadata } from "next";
-import { Source_Sans_3, Source_Serif_4 } from "next/font/google";
+import { Fraunces, Plus_Jakarta_Sans } from "next/font/google";
 import { AppProviders } from "@/components/providers";
 import "./globals.css";
 
-const sourceSans = Source_Sans_3({
-  variable: "--font-source-sans",
+const plusJakarta = Plus_Jakarta_Sans({
+  variable: "--font-plus-jakarta",
   subsets: ["latin"],
   display: "swap",
+  weight: ["400", "500", "600", "700", "800"],
 });
 
-const sourceSerif = Source_Serif_4({
-  variable: "--font-source-serif",
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
   subsets: ["latin"],
   display: "swap",
+  weight: ["500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -28,9 +30,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${sourceSans.variable} ${sourceSerif.variable} h-svh overflow-hidden antialiased`}
+      className={`${plusJakarta.variable} ${fraunces.variable} h-svh overflow-hidden antialiased`}
     >
-      <body className="h-full overflow-hidden font-sans">
+      <body className={`${plusJakarta.className} h-full overflow-hidden font-sans antialiased`}>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

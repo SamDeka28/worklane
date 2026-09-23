@@ -75,7 +75,7 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
                     <p className="font-heading text-base font-semibold tracking-tight">
                       {row.name}
                     </p>
-                    <span className="rounded-full bg-muted/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    <span className="rounded-lg bg-muted/80 px-2.5 py-1 text-xs font-medium text-muted-foreground">
                       {row.shareLabel}
                     </span>
                     {canExpand ? (

@@ -17,8 +17,8 @@ export const FONT_SIZE_STEPS = [
 ] as const;
 
 export const DOCUMENT_FONTS = [
-  { label: "Sans", value: "var(--font-source-sans), ui-sans-serif, system-ui, sans-serif" },
-  { label: "Serif", value: "var(--font-source-serif), ui-serif, Georgia, serif" },
+  { label: "Sans", value: "var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif" },
+  { label: "Serif", value: "var(--font-fraunces), ui-serif, Georgia, serif" },
   { label: "Georgia", value: "Georgia, 'Times New Roman', serif" },
   { label: "Times", value: "'Times New Roman', Times, serif" },
   { label: "Arial", value: "Arial, Helvetica, sans-serif" },

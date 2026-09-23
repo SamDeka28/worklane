@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireWritableOrg } from "@/modules/identity/org";
+import { requireModuleWrite, requireWritableOrg } from "@/modules/identity/org";
 import {
   assertShareSum,
   compilePoolRemainderDistribution,
@@ -34,7 +34,7 @@ async function loadClientCurrencyForPartner(
 }
 
 export async function createPartnerAction(orgSlug: string, formData: FormData) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "partners");
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const kind = asKind(String(formData.get("kind") ?? "participant"));
@@ -106,7 +106,7 @@ export async function createPartnerAction(orgSlug: string, formData: FormData) {
 }
 
 export async function updatePartnerAction(orgSlug: string, partnerId: string, formData: FormData) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "partners");
   const name = String(formData.get("name") ?? "").trim();
   const emailRaw = String(formData.get("email") ?? "").trim().toLowerCase();
   const email = emailRaw || null;
@@ -134,7 +134,7 @@ export async function updatePartnerAction(orgSlug: string, partnerId: string, fo
 
 /** Send (or re-send) a login invite for an existing partner profile. */
 export async function invitePartnerLoginAction(orgSlug: string, partnerId: string) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "partners");
   if (ctx.role !== "owner" && ctx.role !== "admin") {
     return { error: "Only owners and admins can invite partners" };
   }
@@ -178,7 +178,7 @@ export async function setProjectDistributionAction(
   projectId: string,
   formData: FormData,
 ) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "partners");
   const label = String(formData.get("label") ?? "").trim() || null;
   const effectiveOn =
     String(formData.get("effective_on") ?? "") || new Date().toISOString().slice(0, 10);
@@ -329,7 +329,7 @@ export async function addProjectPartnersAction(
   projectId: string,
   formData: FormData,
 ) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "partners");
   const partnerIds = [
     ...new Set(formData.getAll("partner_id").map(String).filter(Boolean)),
   ];
@@ -373,7 +373,7 @@ export async function removeProjectPartnerAction(
   projectId: string,
   partnerId: string,
 ) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "partners");
   const { error } = await ctx.supabase
     .from("project_partners")
     .delete()
@@ -451,7 +451,7 @@ export async function removeProjectMemberAction(
 }
 
 export async function recordPartnerSettlementAction(orgSlug: string, formData: FormData) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "partners");
   const partnerId = String(formData.get("partner_id") ?? "");
   const method = String(formData.get("method") ?? "other");
   const settledOn =
@@ -506,7 +506,7 @@ export async function recordPartnerSettlementAction(orgSlug: string, formData: F
 }
 
 export async function voidPartnerSettlementAction(orgSlug: string, settlementId: string) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const ctx = await requireModuleWrite(orgSlug, "partners");
   const { error } = await ctx.supabase
     .from("partner_settlements")
     .update({ status: "void" })

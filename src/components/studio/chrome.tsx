@@ -1,21 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { initials } from "@/modules/finance/presentation";
 
-const AVATAR_TONES = [
-  "bg-sky-100 text-sky-700",
-  "bg-violet-100 text-violet-700",
-  "bg-emerald-100 text-emerald-700",
-  "bg-amber-100 text-amber-800",
-  "bg-rose-100 text-rose-700",
-] as const;
-
-function avatarTone(name: string) {
-  let sum = 0;
-  for (const char of name) sum += char.charCodeAt(0);
-  return AVATAR_TONES[sum % AVATAR_TONES.length];
-}
+export { SoftTab, FilterChip } from "@/components/studio/nav-links";
+export { AvatarMark } from "@/components/studio/avatar-mark";
+export { ProjectChip, TagRow } from "@/components/studio/project-chip";
 
 export function moneyFill(part: bigint, whole: bigint) {
   if (whole <= BigInt(0)) return part > BigInt(0) ? 1 : 0.12;
@@ -36,7 +25,7 @@ export function SoftCard({
   return (
     <div
       className={cn(
-        "rounded-4xl bg-card shadow-soft transition-[transform,box-shadow] duration-300 ease-out ring-1 ring-border/25",
+        "rounded-2xl bg-card shadow-soft ring-1 ring-foreground/4 transition-[transform,box-shadow] duration-200 ease-out dark:ring-white/6",
         hover && "lane-surface-hover",
         className,
       )}
@@ -60,30 +49,107 @@ export function WorkSurface({
   );
 }
 
-export function SoftTab({
-  href,
-  active,
-  children,
+const STAT_BAR = {
+  slate: "bg-slate-500",
+  sky: "bg-sky-500",
+  emerald: "bg-emerald-500",
+  violet: "bg-violet-500",
+  amber: "bg-amber-500",
+  rose: "bg-rose-500",
+  blue: "bg-sky-500",
+  green: "bg-emerald-500",
+} as const;
+
+const STAT_BADGE = {
+  slate: "bg-slate-100 text-slate-800 dark:bg-slate-500/25 dark:text-slate-100",
+  sky: "bg-sky-100 text-sky-800 dark:bg-sky-400/20 dark:text-sky-100",
+  emerald: "bg-emerald-100 text-emerald-800 dark:bg-emerald-400/20 dark:text-emerald-100",
+  violet: "bg-violet-100 text-violet-800 dark:bg-violet-400/20 dark:text-violet-100",
+  amber: "bg-amber-100 text-amber-900 dark:bg-amber-400/20 dark:text-amber-100",
+  rose: "bg-rose-100 text-rose-800 dark:bg-rose-400/20 dark:text-rose-100",
+  blue: "bg-sky-100 text-sky-800 dark:bg-sky-400/20 dark:text-sky-100",
+  green: "bg-emerald-100 text-emerald-800 dark:bg-emerald-400/20 dark:text-emerald-100",
+} as const;
+
+export type StatTone = keyof typeof STAT_BAR;
+
+/** Unified metric — strip (index) or tile (dashboard). Quiet surface; color only on bar/badge. */
+export function Stat({
+  label,
+  value,
+  hint,
+  tone = "slate",
+  fill,
+  badge,
+  icon,
+  variant = "strip",
+  className,
 }: {
-  href: string;
-  active?: boolean;
-  children: ReactNode;
+  label: string;
+  value: string;
+  hint?: string;
+  tone?: StatTone;
+  fill?: number;
+  badge?: string;
+  icon?: ReactNode;
+  variant?: "strip" | "tile";
+  className?: string;
 }) {
+  const width =
+    fill == null ? undefined : `${Math.round(Math.min(1, Math.max(0.06, fill)) * 100)}%`;
+
   return (
-    <Link
-      href={href}
+    <div
       className={cn(
-        "rounded-full px-4 py-2 text-sm transition-all duration-200",
-        active
-          ? "bg-foreground font-medium text-background shadow-sm"
-          : "text-muted-foreground hover:bg-muted/80 hover:text-foreground",
+        "h-full bg-card",
+        variant === "tile" ? "rounded-none p-5 sm:p-6" : "lane-surface px-5 py-4",
+        variant === "strip" && "lane-surface-hover",
+        className,
       )}
     >
-      {children}
-    </Link>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+          {label}
+        </p>
+        {badge ? (
+          <span
+            className={cn(
+              "rounded-lg px-2.5 py-1 text-xs font-bold tabular-nums",
+              STAT_BADGE[tone],
+            )}
+          >
+            {badge}
+          </span>
+        ) : icon ? (
+          <span
+            className={cn(
+              "flex size-7 items-center justify-center rounded-lg",
+              STAT_BADGE[tone],
+            )}
+          >
+            {icon}
+          </span>
+        ) : null}
+      </div>
+      <p
+        className={cn(
+          "mt-2 font-semibold tracking-tight tabular-nums text-foreground",
+          variant === "tile" ? "text-2xl" : "text-xl sm:text-2xl",
+        )}
+      >
+        {value}
+      </p>
+      {hint ? <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p> : null}
+      {width ? (
+        <div className="mt-3 h-1 overflow-hidden rounded-full bg-muted">
+          <div className={cn("h-full rounded-full", STAT_BAR[tone])} style={{ width }} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
+/** @deprecated Use Stat variant="tile" */
 export function MetricCard({
   label,
   value,
@@ -99,56 +165,16 @@ export function MetricCard({
   tone?: "blue" | "green" | "violet" | "amber";
   fill?: number;
 }) {
-  const well = {
-    blue: "bg-sky-100 text-sky-700",
-    green: "bg-emerald-100 text-emerald-700",
-    violet: "bg-violet-100 text-violet-700",
-    amber: "bg-amber-100 text-amber-800",
-  }[tone];
-  const bar = {
-    blue: "bg-sky-400",
-    green: "bg-emerald-400",
-    violet: "bg-violet-400",
-    amber: "bg-amber-400",
-  }[tone];
-  const width = `${Math.round(Math.min(1, Math.max(0.08, fill)) * 100)}%`;
-
   return (
-    <SoftCard className="p-5">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <span className={cn("flex size-9 items-center justify-center rounded-2xl", well)}>
-          {icon}
-        </span>
-      </div>
-      <p className="mt-3 text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
-      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full rounded-full", bar)} style={{ width }} />
-      </div>
-    </SoftCard>
-  );
-}
-
-export function AvatarMark({
-  name,
-  size = "md",
-}: {
-  name: string;
-  size?: "sm" | "md" | "lg";
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full font-medium",
-        avatarTone(name),
-        size === "sm" && "size-7 text-[10px]",
-        size === "md" && "size-10 text-xs",
-        size === "lg" && "size-12 text-sm",
-      )}
-    >
-      {initials(name)}
-    </span>
+    <Stat
+      label={label}
+      value={value}
+      hint={hint}
+      icon={icon}
+      tone={tone}
+      fill={fill}
+      variant="tile"
+    />
   );
 }
 
@@ -170,29 +196,33 @@ export function StudioToolbar({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center gap-4 border-b border-border/30 px-5 py-3.5",
+        "flex shrink-0 items-center gap-4 border-b border-border/40 px-6 py-3.5",
         className,
       )}
     >
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 space-y-0.5">
         {title ? (
-          <div className="truncate text-xl font-semibold tracking-tight">{title}</div>
+          <div className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
+            {title}
+          </div>
         ) : null}
         {purpose ? (
           <p
             className={cn(
-              "truncate text-sm",
-              title ? "mt-0.5 text-muted-foreground" : "font-semibold text-foreground",
+              "truncate",
+              title
+                ? "text-sm text-muted-foreground"
+                : "text-sm font-medium tracking-tight text-foreground",
             )}
           >
             {purpose}
           </p>
         ) : null}
         {subtitle && !purpose ? (
-          <div className="mt-0.5 truncate text-sm text-muted-foreground">{subtitle}</div>
+          <div className="truncate text-sm text-muted-foreground">{subtitle}</div>
         ) : null}
         {subtitle && purpose && title ? (
-          <div className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</div>
+          <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
         ) : null}
       </div>
       {actions ? <div className="flex shrink-0 items-center gap-2">{actions}</div> : null}
@@ -200,7 +230,7 @@ export function StudioToolbar({
   );
 }
 
-/** Entity hub header: one primary CTA + overflow. No peer tab bars. */
+/** Entity hub header: one primary CTA + overflow. */
 export function EntityChrome({
   title,
   meta,
@@ -219,17 +249,17 @@ export function EntityChrome({
   return (
     <div
       className={cn(
-        "flex shrink-0 flex-col gap-3 border-b border-border/30 px-5 py-4",
+        "flex shrink-0 flex-col gap-3 border-b border-border/50 px-6 py-5",
         className,
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <div className="truncate font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+          <div className="truncate text-[1.75rem] font-bold leading-tight tracking-tight sm:text-[2rem]">
             {title}
           </div>
           {meta ? (
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-medium text-muted-foreground">
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
               {meta}
             </div>
           ) : null}
@@ -255,7 +285,7 @@ export function FilterChips({
   className?: string;
 }) {
   return (
-    <div className={cn("flex shrink-0 flex-wrap gap-1.5 px-5 py-2", className)}>
+    <div className={cn("flex shrink-0 flex-wrap gap-2 px-6 py-3", className)}>
       {children}
     </div>
   );
@@ -272,7 +302,7 @@ export function HubBody({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-4",
+        "flex min-h-0 flex-1 flex-col gap-8 overflow-y-auto px-6 py-6",
         className,
       )}
     >
@@ -287,17 +317,38 @@ export function HubSection({
   children,
   id,
   className,
+  variant = "plain",
 }: {
   title: string;
   action?: ReactNode;
   children: ReactNode;
   id?: string;
   className?: string;
+  /** `panel` wraps the section in a SoftCard so blocks read as distinct units. */
+  variant?: "plain" | "panel";
 }) {
+  if (variant === "panel") {
+    return (
+      <section id={id} className={cn("scroll-mt-4", className)}>
+        <SoftCard className="overflow-hidden">
+          <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted/25 px-4 py-3">
+            <h2 className="text-[12px] font-bold tracking-[0.12em] text-foreground/70 uppercase">
+              {title}
+            </h2>
+            {action}
+          </div>
+          <div className="p-0">{children}</div>
+        </SoftCard>
+      </section>
+    );
+  }
+
   return (
     <section id={id} className={cn("scroll-mt-4", className)}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        <h2 className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+          {title}
+        </h2>
         {action}
       </div>
       {children}
@@ -319,45 +370,22 @@ export function NextStepCard({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 rounded-[1.5rem] bg-linear-to-br from-sky-100/90 via-white to-emerald-50/50 px-4 py-3.5 ring-1 ring-sky-200/60 shadow-soft sm:flex-row sm:items-center",
+        "flex flex-col gap-3 rounded-2xl border border-border/60 bg-card px-4 py-3.5 sm:flex-row sm:items-center",
+        "border-l-[3px] border-l-primary",
         className,
       )}
     >
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-semibold tracking-[0.08em] text-sky-800/80 uppercase">
+        <p className="text-[10px] font-semibold tracking-[0.16em] text-primary uppercase">
           Do next
         </p>
-        <p className="mt-0.5 font-heading text-base font-semibold tracking-tight">{title}</p>
+        <p className="mt-1 text-[15px] font-semibold tracking-tight text-foreground">{title}</p>
         {body ? (
-          <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted-foreground">{body}</p>
+          <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-muted-foreground">{body}</p>
         ) : null}
       </div>
       {action ? <div className="shrink-0 self-start sm:self-center">{action}</div> : null}
     </div>
-  );
-}
-
-export function FilterChip({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "rounded-full px-3 py-1 text-xs transition-colors",
-        active
-          ? "bg-foreground font-medium text-background"
-          : "bg-muted text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </Link>
   );
 }
 
@@ -373,7 +401,7 @@ export function ListRow({
   className?: string;
 }) {
   const styles = cn(
-    "group relative flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition-colors",
+    "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors",
     active ? "bg-muted" : "hover:bg-muted/70",
     className,
   );

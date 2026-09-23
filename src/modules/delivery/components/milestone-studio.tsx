@@ -404,6 +404,7 @@ function MilestoneRow({
   linkedTaskId,
   canWrite,
   canBill,
+  showMoney,
   collectBaseHref,
   workHref,
   highlighted,
@@ -421,6 +422,7 @@ function MilestoneRow({
   linkedTaskId?: string;
   canWrite: boolean;
   canBill: boolean;
+  showMoney: boolean;
   collectBaseHref: string;
   workHref?: string;
   highlighted: boolean;
@@ -441,7 +443,7 @@ function MilestoneRow({
   }
 
   return (
-    <li id={`milestone-${item.id}`} className={cn(highlighted && "bg-sky-50/80")}>
+    <li id={`milestone-${item.id}`} className={cn(highlighted && "bg-lane-blue/10")}>
       <div className="flex items-start gap-2 px-3 py-2.5 sm:items-center sm:gap-3 sm:px-4">
         <button
           type="button"
@@ -454,7 +456,7 @@ function MilestoneRow({
           disabled={!canWrite}
         >
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="inline-flex h-5 min-w-7 items-center justify-center rounded-md bg-muted px-1.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+            <span className="inline-flex h-7 min-w-8 items-center justify-center rounded-lg bg-muted px-2 text-xs font-semibold tabular-nums text-muted-foreground">
               {code}
             </span>
             <p className="min-w-0 truncate text-sm font-semibold tracking-tight">{item.name}</p>
@@ -479,7 +481,7 @@ function MilestoneRow({
                 <span className="text-violet-700">Milestone card</span>
               </>
             ) : null}
-            {(billing === "due" || billing === "overdue") && charge ? (
+            {showMoney && (billing === "due" || billing === "overdue") && charge ? (
               <>
                 <span aria-hidden>·</span>
                 <span className="tabular-nums">{moneyLabel(due, currency)} still due</span>
@@ -499,17 +501,19 @@ function MilestoneRow({
           onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            className={cn(
-              "text-sm font-semibold tabular-nums",
-              canWrite && "rounded-lg px-1.5 py-0.5 hover:bg-muted/50",
-            )}
-            onClick={openEditor}
-            disabled={!canWrite}
-          >
-            {item.amountMinor != null ? moneyLabel(item.amountMinor, currency) : "—"}
-          </button>
+          {showMoney ? (
+            <button
+              type="button"
+              className={cn(
+                "text-sm font-semibold tabular-nums",
+                canWrite && "rounded-lg px-1.5 py-0.5 hover:bg-muted/50",
+              )}
+              onClick={openEditor}
+              disabled={!canWrite}
+            >
+              {item.amountMinor != null ? moneyLabel(item.amountMinor, currency) : "—"}
+            </button>
+          ) : null}
           {canWrite ? (
             <div className="flex flex-wrap items-center justify-end gap-1">
               <NativeSelect
@@ -609,7 +613,7 @@ function MilestoneRow({
                     </DropdownMenuItem>
                   )}
 
-                  {billing === "unbilled" && canBill ? (
+                  {showMoney && billing === "unbilled" && canBill ? (
                     <DropdownMenuItem
                       disabled={pending || item.amountMinor == null || item.status === "cancelled"}
                       onClick={() => {
@@ -633,7 +637,7 @@ function MilestoneRow({
                     </DropdownMenuItem>
                   ) : null}
 
-                  {(billing === "due" || billing === "overdue") && charge ? (
+                  {showMoney && (billing === "due" || billing === "overdue") && charge ? (
                     <DropdownMenuItem
                       onClick={() =>
                         router.push(
@@ -645,7 +649,7 @@ function MilestoneRow({
                     </DropdownMenuItem>
                   ) : null}
 
-                  {billing === "paid" && charge ? (
+                  {showMoney && billing === "paid" && charge ? (
                     <DropdownMenuItem
                       onClick={() =>
                         router.push(
@@ -676,6 +680,7 @@ export function MilestoneStudioList({
   chargeByMilestone,
   taskByMilestone,
   canWrite,
+  showMoney = true,
   collectBaseHref,
   workHref,
   highlightMilestoneId,
@@ -689,6 +694,7 @@ export function MilestoneStudioList({
   chargeByMilestone: Map<string, ChargeView>;
   taskByMilestone: Map<string, string>;
   canWrite: boolean;
+  showMoney?: boolean;
   collectBaseHref: string;
   workHref?: string;
   highlightMilestoneId?: string;
@@ -712,6 +718,7 @@ export function MilestoneStudioList({
           linkedTaskId={taskByMilestone.get(item.id)}
           canWrite={canWrite}
           canBill={canBill}
+          showMoney={showMoney}
           collectBaseHref={collectBaseHref}
           workHref={workHref}
           highlighted={highlightMilestoneId === item.id}

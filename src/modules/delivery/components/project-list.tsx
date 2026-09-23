@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Columns3 } from "lucide-react";
 import { AvatarMark } from "@/components/studio/chrome";
 import {
   DenseCell,
@@ -28,6 +29,10 @@ const STATUS_LABEL: Record<string, string> = {
   completed: "Completed",
   cancelled: "Cancelled",
 };
+
+function projectBoardHref(orgSlug: string, projectId: string) {
+  return `/${orgSlug}/projects/${projectId}?tab=work&panel=board`;
+}
 
 export type ProjectListCard = {
   project: {
@@ -59,26 +64,38 @@ export type ProjectListCard = {
 export function ProjectListPanel({
   orgSlug,
   cards,
+  showMoney = true,
 }: {
   orgSlug: string;
   canWrite?: boolean;
   cards: ProjectListCard[];
+  showMoney?: boolean;
 }) {
   return (
     <DenseListPanel
       columns={
         <>
           <span className="min-w-0 flex-[1.6]">Project</span>
-          <span className="hidden w-44 xl:block">Collected</span>
+          {showMoney ? <span className="hidden w-44 xl:block">Collected</span> : null}
           <span className="hidden w-28 text-right lg:block">Work</span>
-          <span className="w-24 text-right sm:w-28">Due</span>
-          <span className="hidden w-24 text-right md:block sm:w-28">Left</span>
+          {showMoney ? (
+            <>
+              <span className="w-24 text-right sm:w-28">Due</span>
+              <span className="hidden w-24 text-right md:block sm:w-28">Left</span>
+            </>
+          ) : null}
+          <span className="w-[5.75rem] shrink-0 text-right">Board</span>
         </>
       }
-      footer="Click a project to open the board, milestones, and money."
+      footer="Open a project for overview, or jump straight to its board."
     >
       {cards.map((card) => (
-        <ProjectListRow key={card.project.id} orgSlug={orgSlug} card={card} />
+        <ProjectListRow
+          key={card.project.id}
+          orgSlug={orgSlug}
+          card={card}
+          showMoney={showMoney}
+        />
       ))}
     </DenseListPanel>
   );
@@ -87,9 +104,11 @@ export function ProjectListPanel({
 function ProjectListRow({
   orgSlug,
   card,
+  showMoney,
 }: {
   orgSlug: string;
   card: ProjectListCard;
+  showMoney: boolean;
 }) {
   const total = Number(card.money.totalPriceMinor);
   const collected = Number(card.money.collectedMinor);
@@ -108,6 +127,8 @@ function ProjectListRow({
       : null,
     card.lastWorkedOn ? formatDay(card.lastWorkedOn) : null,
   ].filter(Boolean);
+
+  const boardHref = projectBoardHref(orgSlug, card.project.id);
 
   return (
     <DenseRow className="gap-4 py-3.5">
@@ -148,7 +169,7 @@ function ProjectListRow({
               ) : null}
             </p>
             <p className="mt-1 truncate text-[11px] text-muted-foreground xl:hidden">
-              {total > 0
+              {showMoney && total > 0
                 ? `${moneyLabel(card.money.collectedMinor, card.project.currency)} of ${moneyLabel(card.money.totalPriceMinor, card.project.currency)}`
                 : workBits.length > 0
                   ? workBits.join(" · ")
@@ -158,24 +179,26 @@ function ProjectListRow({
         </div>
       </DenseCell>
 
-      <DenseCell width="hidden w-44 xl:block">
-        <div className="space-y-1.5">
-          <Meter value={progress} tone={progressTone} />
-          <p className="truncate text-[11px] tabular-nums text-muted-foreground">
-            {total > 0 ? (
-              <>
-                <span className="font-medium text-foreground/80">
-                  {moneyLabel(card.money.collectedMinor, card.project.currency)}
-                </span>
-                {" / "}
-                {moneyLabel(card.money.totalPriceMinor, card.project.currency)}
-              </>
-            ) : (
-              "No contract yet"
-            )}
-          </p>
-        </div>
-      </DenseCell>
+      {showMoney ? (
+        <DenseCell width="hidden w-44 xl:block">
+          <div className="space-y-1.5">
+            <Meter value={progress} tone={progressTone} />
+            <p className="truncate text-[11px] tabular-nums text-muted-foreground">
+              {total > 0 ? (
+                <>
+                  <span className="font-medium text-foreground/80">
+                    {moneyLabel(card.money.collectedMinor, card.project.currency)}
+                  </span>
+                  {" / "}
+                  {moneyLabel(card.money.totalPriceMinor, card.project.currency)}
+                </>
+              ) : (
+                "No contract yet"
+              )}
+            </p>
+          </div>
+        </DenseCell>
+      ) : null}
 
       <DenseCell
         align="right"
@@ -210,25 +233,39 @@ function ProjectListRow({
         )}
       </DenseCell>
 
-      <DenseCell
-        align="right"
-        width="w-24 sm:w-28"
-        className="text-sm font-semibold tabular-nums tracking-tight"
-      >
-        <p>{moneyLabel(card.money.outstandingMinor, card.project.currency)}</p>
-        {card.monthDueMinor > BigInt(0) ? (
-          <p className="mt-0.5 text-[11px] font-normal text-amber-800/85">
-            {moneyLabel(card.monthDueMinor, card.project.currency)} this mo
-          </p>
-        ) : null}
-      </DenseCell>
+      {showMoney ? (
+        <DenseCell
+          align="right"
+          width="w-24 sm:w-28"
+          className="text-sm font-semibold tabular-nums tracking-tight"
+        >
+          <p>{moneyLabel(card.money.outstandingMinor, card.project.currency)}</p>
+          {card.monthDueMinor > BigInt(0) ? (
+            <p className="mt-0.5 text-[11px] font-normal text-amber-800/85">
+              {moneyLabel(card.monthDueMinor, card.project.currency)} this mo
+            </p>
+          ) : null}
+        </DenseCell>
+      ) : null}
 
-      <DenseCell
-        align="right"
-        width="hidden w-24 md:block sm:w-28"
-        className="text-sm tabular-nums text-muted-foreground"
-      >
-        {moneyLabel(card.money.remainingMinor, card.project.currency)}
+      {showMoney ? (
+        <DenseCell
+          align="right"
+          width="hidden w-24 md:block sm:w-28"
+          className="text-sm tabular-nums text-muted-foreground"
+        >
+          {moneyLabel(card.money.remainingMinor, card.project.currency)}
+        </DenseCell>
+      ) : null}
+
+      <DenseCell width="w-[5.75rem] shrink-0" align="right">
+        <Link
+          href={boardHref}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary/12 px-2.5 text-[13px] font-semibold text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/18 hover:ring-primary/35"
+        >
+          <Columns3 className="size-3.5 opacity-90" aria-hidden />
+          Board
+        </Link>
       </DenseCell>
     </DenseRow>
   );

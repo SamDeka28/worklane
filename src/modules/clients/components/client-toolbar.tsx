@@ -30,6 +30,7 @@ export function ClientToolbar({
   page,
   pageCount,
   total,
+  seeMoney = true,
 }: {
   orgSlug: string;
   q: string;
@@ -39,6 +40,7 @@ export function ClientToolbar({
   page: number;
   pageCount: number;
   total: number;
+  seeMoney?: boolean;
 }) {
   const router = useRouter();
   const base = `/${orgSlug}/clients`;
@@ -84,13 +86,15 @@ export function ClientToolbar({
           placeholder="Search clients"
           className="h-9 w-44 rounded-full bg-muted/80"
         />
-        <NativeSelect name="filter" defaultValue={filter} className="h-9 w-32 rounded-full bg-muted/80">
-          {FILTERS.map((item) => (
-            <option key={item.value || "all"} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </NativeSelect>
+        {seeMoney ? (
+          <NativeSelect name="filter" defaultValue={filter} className="h-9 w-32 rounded-full bg-muted/80">
+            {FILTERS.map((item) => (
+              <option key={item.value || "all"} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </NativeSelect>
+        ) : null}
         <NativeSelect name="kind" defaultValue={kind} className="h-9 w-32 rounded-full bg-muted/80">
           {KINDS.map((item) => (
             <option key={item.value || "all-kinds"} value={item.value}>

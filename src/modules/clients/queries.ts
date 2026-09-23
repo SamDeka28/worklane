@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { ActivityRecord, ClientRecord, ContactRecord } from "@/modules/clients/types";
 import { requireOrg } from "@/modules/identity/org";
 
@@ -45,7 +46,7 @@ function mapContact(row: {
   };
 }
 
-export async function listClients(orgSlug: string, query?: string) {
+export const listClients = cache(async (orgSlug: string, query = "") => {
   const { org, supabase } = await requireOrg(orgSlug);
   let builder = supabase
     .from("clients")
@@ -56,14 +57,14 @@ export async function listClients(orgSlug: string, query?: string) {
     .is("archived_at", null)
     .order("name");
 
-  if (query?.trim()) {
+  if (query.trim()) {
     builder = builder.ilike("name", `%${query.trim()}%`);
   }
 
   const { data, error } = await builder;
   if (error) throw new Error(error.message);
   return (data ?? []).map(mapClient);
-}
+});
 
 export async function getClient(orgSlug: string, clientId: string) {
   const { org, supabase } = await requireOrg(orgSlug);

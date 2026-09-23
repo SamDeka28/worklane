@@ -1,12 +1,15 @@
+import { cache } from "react";
 import { requireOrg } from "@/modules/identity/org";
 import { asLedgerMinor } from "@/modules/finance/ledger";
 import type {
   BoardColumn,
+  BoardTask,
   MilestoneItemRecord,
   MilestoneRecord,
   MilestoneStatus,
   ProjectRecord,
   TaskComment,
+  TaskKind,
   TaskPriority,
   TaskRecord,
   TaskStatus,
@@ -16,12 +19,27 @@ import {
   BILLING_MODES,
   MILESTONE_STATUSES,
   PROJECT_STATUSES,
+  TASK_KINDS,
   TASK_PRIORITIES,
   TASK_STATUSES,
 } from "@/modules/delivery/types";
 
 function asStatus<T extends string>(value: string, allowed: readonly T[], fallback: T): T {
   return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+function asLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+}
+
+function asUserIds(value: unknown, fallbackId?: string | null): string[] {
+  const fromArray = Array.isArray(value)
+    ? value.map((item) => String(item ?? "").trim()).filter(Boolean)
+    : [];
+  if (fromArray.length > 0) return [...new Set(fromArray)];
+  if (fallbackId) return [fallbackId];
+  return [];
 }
 
 function mapProject(row: {
@@ -66,7 +84,7 @@ function mapProject(row: {
 const PROJECT_SELECT =
   "id, organization_id, client_id, name, status, billing_mode, default_fee_bps, earn_on, contracted_amount_minor, scope, scope_doc, starts_on, due_on, created_at, clients(name, currency)";
 
-export async function listProjects(orgSlug: string) {
+export const listProjects = cache(async (orgSlug: string) => {
   const { org, supabase } = await requireOrg(orgSlug);
   const { data, error } = await supabase
     .from("projects")
@@ -75,7 +93,7 @@ export async function listProjects(orgSlug: string) {
     .order("created_at", { ascending: false });
   if (error) throw new Error(error.message);
   return (data ?? []).map(mapProject);
-}
+});
 
 export async function listClientProjects(orgSlug: string, clientId: string) {
   const { org, supabase } = await requireOrg(orgSlug);
@@ -227,11 +245,43 @@ export async function listProjectColumns(orgSlug: string, projectId: string) {
   );
 }
 
+/** Columns for many projects — used by the org board when filtering to one project. */
+export async function listColumnsForProjects(orgSlug: string, projectIds: string[]) {
+  if (projectIds.length === 0) return {} as Record<string, BoardColumn[]>;
+  const { org, supabase } = await requireOrg(orgSlug);
+  const { data, error } = await supabase
+    .from("project_columns")
+    .select("id, project_id, name, position, system_key")
+    .eq("organization_id", org.id)
+    .in("project_id", projectIds)
+    .order("position")
+    .order("created_at");
+  if (error) throw new Error(error.message);
+
+  const map: Record<string, BoardColumn[]> = {};
+  for (const id of projectIds) map[id] = [];
+  for (const row of data ?? []) {
+    const projectId = row.project_id as string;
+    const list = map[projectId] ?? (map[projectId] = []);
+    list.push({
+      id: row.id,
+      projectId,
+      name: row.name,
+      position: row.position,
+      systemKey:
+        row.system_key === "todo" || row.system_key === "doing" || row.system_key === "done"
+          ? row.system_key
+          : null,
+    });
+  }
+  return map;
+}
+
 export async function listTasks(orgSlug: string, projectId: string) {
   const { org, supabase } = await requireOrg(orgSlug);
   const { data, error } = await supabase
     .from("tasks")
-    .select("id, project_id, milestone_id, column_id, title, description, description_doc, status, priority, due_on, position, assignee_user_id, created_at")
+    .select("id, project_id, milestone_id, column_id, title, description, description_doc, status, priority, kind, labels, due_on, position, assignee_user_id, assignee_user_ids, created_at")
     .eq("organization_id", org.id)
     .eq("project_id", projectId)
     .order("position")
@@ -252,8 +302,12 @@ export async function listTasks(orgSlug: string, projectId: string) {
     }
   }
 
-  return (data ?? []).map(
-    (row): TaskRecord => ({
+  return (data ?? []).map((row): TaskRecord => {
+    const assigneeUserIds = asUserIds(
+      row.assignee_user_ids,
+      (row.assignee_user_id as string | null) ?? null,
+    );
+    return {
       id: row.id,
       projectId: row.project_id,
       milestoneId: row.milestone_id,
@@ -263,13 +317,151 @@ export async function listTasks(orgSlug: string, projectId: string) {
       descriptionDoc: (row.description_doc as Record<string, unknown> | null) ?? null,
       status: asStatus(row.status, TASK_STATUSES, "todo") as TaskStatus,
       priority: asStatus(row.priority, TASK_PRIORITIES, "medium") as TaskPriority,
+      kind: asStatus((row.kind as string | null) ?? "task", TASK_KINDS, "task") as TaskKind,
+      labels: asLabels(row.labels),
       dueOn: row.due_on,
       position: row.position ?? 0,
-      assigneeUserId: (row.assignee_user_id as string | null) ?? null,
+      assigneeUserId: assigneeUserIds[0] ?? null,
+      assigneeUserIds,
       commentCount: counts.get(row.id) ?? 0,
       createdAt: row.created_at,
+    };
+  });
+}
+
+/** Active delivery work across projects for the shared org kanban. */
+export const listOrgBoardTasks = cache(async (orgSlug: string): Promise<BoardTask[]> => {
+  const { org, supabase } = await requireOrg(orgSlug);
+  const { data: projects, error: projectsError } = await supabase
+    .from("projects")
+    .select("id, name, status, client_id, clients(name)")
+    .eq("organization_id", org.id)
+    .in("status", ["planning", "active", "on_hold"]);
+  if (projectsError) throw new Error(projectsError.message);
+  if (!projects?.length) return [];
+
+  const projectMeta = new Map(
+    projects.map((row) => {
+      const clientJoin = Array.isArray(row.clients) ? row.clients[0] : row.clients;
+      return [
+        row.id as string,
+        {
+          projectName: row.name as string,
+          clientId: row.client_id as string,
+          clientName: (clientJoin?.name as string | undefined) ?? "Client",
+        },
+      ] as const;
     }),
   );
+  const projectIds = [...projectMeta.keys()];
+
+  const { data, error } = await supabase
+    .from("tasks")
+    .select(
+      "id, project_id, milestone_id, column_id, title, description, description_doc, status, priority, kind, labels, due_on, position, assignee_user_id, assignee_user_ids, created_at",
+    )
+    .eq("organization_id", org.id)
+    .in("project_id", projectIds)
+    .order("position")
+    .order("created_at");
+  if (error) throw new Error(error.message);
+
+  const taskRows = data ?? [];
+  const taskIds = taskRows.map((row) => row.id as string);
+  const assigneeIds = [
+    ...new Set(
+      taskRows.flatMap((row) =>
+        asUserIds(row.assignee_user_ids, (row.assignee_user_id as string | null) ?? null),
+      ),
+    ),
+  ];
+
+  const commentCounts = new Map<string, number>();
+  if (taskIds.length > 0) {
+    const commentsRes = await supabase
+      .from("task_comments")
+      .select("task_id")
+      .eq("organization_id", org.id)
+      .in("task_id", taskIds);
+    if (commentsRes.error) throw new Error(commentsRes.error.message);
+    for (const row of commentsRes.data ?? []) {
+      commentCounts.set(row.task_id, (commentCounts.get(row.task_id) ?? 0) + 1);
+    }
+  }
+
+  const assigneeLabels = new Map<string, string>();
+  if (assigneeIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, email, display_name")
+      .in("id", assigneeIds);
+    for (const profile of profiles ?? []) {
+      const label =
+        (profile.display_name as string | null)?.trim() ||
+        (profile.email as string | null) ||
+        "Member";
+      assigneeLabels.set(profile.id as string, label);
+    }
+  }
+
+  return taskRows.map((row) => {
+    const meta = projectMeta.get(row.project_id as string);
+    const assigneeUserIds = asUserIds(
+      row.assignee_user_ids,
+      (row.assignee_user_id as string | null) ?? null,
+    );
+    const labelsForAssignees = assigneeUserIds.map(
+      (id) => assigneeLabels.get(id) ?? "Member",
+    );
+    return {
+      id: row.id as string,
+      projectId: row.project_id as string,
+      milestoneId: (row.milestone_id as string | null) ?? null,
+      columnId: (row.column_id as string | null) ?? null,
+      title: row.title as string,
+      description: (row.description as string | null) ?? null,
+      descriptionDoc: (row.description_doc as Record<string, unknown> | null) ?? null,
+      status: asStatus(row.status as string, TASK_STATUSES, "todo") as TaskStatus,
+      priority: asStatus(row.priority as string, TASK_PRIORITIES, "medium") as TaskPriority,
+      kind: asStatus((row.kind as string | null) ?? "task", TASK_KINDS, "task") as TaskKind,
+      labels: asLabels(row.labels),
+      dueOn: (row.due_on as string | null) ?? null,
+      position: (row.position as number | null) ?? 0,
+      assigneeUserId: assigneeUserIds[0] ?? null,
+      assigneeUserIds,
+      commentCount: commentCounts.get(row.id as string) ?? 0,
+      createdAt: row.created_at as string,
+      projectName: meta?.projectName ?? "Project",
+      clientName: meta?.clientName ?? "Client",
+      clientId: meta?.clientId,
+      assigneeLabel: labelsForAssignees[0] ?? null,
+      assigneeLabels: labelsForAssignees,
+    };
+  });
+});
+
+export async function listMilestonesForProjects(orgSlug: string, projectIds: string[]) {
+  if (projectIds.length === 0) {
+    return {} as Record<string, { id: string; name: string }[]>;
+  }
+  const { org, supabase } = await requireOrg(orgSlug);
+  const { data, error } = await supabase
+    .from("milestones")
+    .select("id, project_id, name, status")
+    .eq("organization_id", org.id)
+    .in("project_id", projectIds)
+    .neq("status", "cancelled")
+    .order("created_at");
+  if (error) throw new Error(error.message);
+
+  const map: Record<string, { id: string; name: string }[]> = {};
+  for (const row of data ?? []) {
+    const projectId = row.project_id as string;
+    const list = map[projectId] ?? [];
+    list.push({ id: row.id as string, name: row.name as string });
+    map[projectId] = list;
+  }
+  return map;
 }
 
 export async function listTaskComments(orgSlug: string, taskIds: string[]) {
@@ -280,6 +472,30 @@ export async function listTaskComments(orgSlug: string, taskIds: string[]) {
     .select("id, task_id, body, body_doc, body_text, created_by, created_at")
     .eq("organization_id", org.id)
     .in("task_id", taskIds)
+    .order("created_at");
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(
+    (row): TaskComment => ({
+      id: row.id,
+      taskId: row.task_id,
+      body: (row.body_text as string | null) || row.body,
+      bodyDoc: (row.body_doc as Record<string, unknown> | null) ?? null,
+      createdBy: row.created_by,
+      createdAt: row.created_at,
+    }),
+  );
+}
+
+/** Comments for a project's tasks in one round-trip (avoids waiting on task ids first). */
+export async function listTaskCommentsForProject(orgSlug: string, projectId: string) {
+  const { org, supabase } = await requireOrg(orgSlug);
+  const { data, error } = await supabase
+    .from("task_comments")
+    .select(
+      "id, task_id, body, body_doc, body_text, created_by, created_at, tasks!inner(project_id)",
+    )
+    .eq("organization_id", org.id)
+    .eq("tasks.project_id", projectId)
     .order("created_at");
   if (error) throw new Error(error.message);
   return (data ?? []).map(
@@ -333,7 +549,7 @@ export async function countProjects(orgSlug: string) {
   return count ?? 0;
 }
 
-export async function listProjectBoard(orgSlug: string) {
+export const listProjectBoard = cache(async (orgSlug: string) => {
   const projects = await listProjects(orgSlug);
   if (projects.length === 0) {
     return [] as Array<{
@@ -392,10 +608,10 @@ export async function listProjectBoard(orgSlug: string) {
       ).length,
     };
   });
-}
+});
 
 /** Unbilled milestones with due dates — expected cash, not posted charges. */
-export async function listExpectedBillings(orgSlug: string): Promise<
+export const listExpectedBillings = cache(async (orgSlug: string): Promise<
   {
     milestoneId: string;
     projectId: string;
@@ -407,7 +623,7 @@ export async function listExpectedBillings(orgSlug: string): Promise<
     amountMinor: bigint;
     dueOn: string;
   }[]
-> {
+> => {
   const { org, supabase } = await requireOrg(orgSlug);
   const { data, error } = await supabase
     .from("milestones")
@@ -454,4 +670,4 @@ export async function listExpectedBillings(orgSlug: string): Promise<
   }
 
   return rows;
-}
+});

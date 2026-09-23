@@ -19,36 +19,29 @@ import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { moveLeadStageAction } from "@/modules/crm/actions";
 import {
-  LEAD_STAGES,
-  LEAD_STAGE_LABELS,
+  isWonStage,
+  stageLabel,
+  stageTone,
   type LeadRecord,
-  type LeadStage,
+  type LeadStageRecord,
 } from "@/modules/crm/types";
 import { formatMoney } from "@/shared/money";
 
-const STAGE_TONE: Record<
-  LeadStage,
-  "planning" | "hourly" | "due" | "partial" | "paid" | "overdue" | "cancelled"
-> = {
-  new: "planning",
-  contacted: "hourly",
-  discovery: "due",
-  qualified: "partial",
-  proposal: "due",
-  negotiation: "partial",
-  won: "paid",
-  lost: "cancelled",
-};
-
-function groupLeads(leads: LeadRecord[]) {
-  const map = new Map<LeadStage, LeadRecord[]>();
-  for (const stage of LEAD_STAGES) map.set(stage, []);
+function groupLeads(leads: LeadRecord[], stages: LeadStageRecord[]) {
+  const map = new Map<string, LeadRecord[]>();
+  for (const stage of stages) map.set(stage.slug, []);
   const sorted = [...leads].sort((a, b) => {
     if (a.position !== b.position) return a.position - b.position;
     return b.updatedAt.localeCompare(a.updatedAt);
   });
   for (const lead of sorted) {
-    map.get(lead.stage)?.push(lead);
+    const bucket = map.get(lead.stage);
+    if (bucket) bucket.push(lead);
+    else {
+      // Orphan stage (deleted): park under first column if any.
+      const first = stages[0]?.slug;
+      if (first) map.get(first)?.push(lead);
+    }
   }
   return map;
 }
@@ -56,28 +49,33 @@ function groupLeads(leads: LeadRecord[]) {
 export function LeadBoard({
   orgSlug,
   leads,
+  stages,
   canWrite,
+  showMoney = true,
   activeLeadId,
 }: {
   orgSlug: string;
   leads: LeadRecord[];
+  stages: LeadStageRecord[];
   canWrite: boolean;
+  showMoney?: boolean;
   activeLeadId?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [items, setItems] = useState(() => groupLeads(leads));
+  const [items, setItems] = useState(() => groupLeads(leads, stages));
   const [activeId, setActiveId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const stageSlugs = useMemo(() => new Set(stages.map((stage) => stage.slug)), [stages]);
 
   useEffect(() => {
-    setItems(groupLeads(leads));
-  }, [leads]);
+    setItems(groupLeads(leads, stages));
+  }, [leads, stages]);
 
   const leadMap = useMemo(() => new Map(leads.map((lead) => [lead.id, lead])), [leads]);
   const overlay = activeId ? leadMap.get(activeId) : null;
 
-  function stageOf(leadId: string): LeadStage | null {
+  function stageOf(leadId: string): string | null {
     for (const [stage, list] of items) {
       if (list.some((lead) => lead.id === leadId)) return stage;
     }
@@ -91,9 +89,7 @@ export function LeadBoard({
     if (!overId || !canWrite) return;
 
     const fromStage = stageOf(leadId);
-    const overStage = (LEAD_STAGES as readonly string[]).includes(overId)
-      ? (overId as LeadStage)
-      : stageOf(overId);
+    const overStage = stageSlugs.has(overId) ? overId : stageOf(overId);
     if (!fromStage || !overStage) return;
 
     const fromList = items.get(fromStage) ?? [];
@@ -125,7 +121,7 @@ export function LeadBoard({
       const result = await moveLeadStageAction(orgSlug, leadId, overStage, orderedIds);
       if (result.error) {
         toast.error(result.error);
-        setItems(groupLeads(leads));
+        setItems(groupLeads(leads, stages));
         return;
       }
       router.refresh();
@@ -141,13 +137,13 @@ export function LeadBoard({
       onDragCancel={() => setActiveId(null)}
     >
       <BoardCanvas>
-        {LEAD_STAGES.map((stage) => {
-          const column = items.get(stage) ?? [];
+        {stages.map((stage) => {
+          const column = items.get(stage.slug) ?? [];
           return (
             <BoardColumn
-              key={stage}
-              id={stage}
-              title={LEAD_STAGE_LABELS[stage]}
+              key={stage.id}
+              id={stage.slug}
+              title={stage.name}
               count={column.length}
             >
               <SortableContext
@@ -158,6 +154,8 @@ export function LeadBoard({
                   <SortableLeadCard
                     key={lead.id}
                     lead={lead}
+                    stages={stages}
+                    showMoney={showMoney}
                     disabled={!canWrite || pending}
                     active={activeLeadId === lead.id}
                     onOpen={() =>
@@ -191,11 +189,15 @@ export function LeadBoard({
 
 function SortableLeadCard({
   lead,
+  stages,
+  showMoney = true,
   disabled,
   active,
   onOpen,
 }: {
   lead: LeadRecord;
+  stages: LeadStageRecord[];
+  showMoney?: boolean;
   disabled?: boolean;
   active?: boolean;
   onOpen: () => void;
@@ -223,10 +225,10 @@ function SortableLeadCard({
           <p className="mt-0.5 truncate text-xs text-muted-foreground">{lead.company}</p>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <StatusChip tone={STAGE_TONE[lead.stage]}>
-            {LEAD_STAGE_LABELS[lead.stage]}
+          <StatusChip tone={stageTone(lead.stage, stages)}>
+            {stageLabel(lead.stage, stages)}
           </StatusChip>
-          {lead.estimatedValueMinor != null ? (
+          {showMoney && lead.estimatedValueMinor != null ? (
             <span className="text-[11px] tabular-nums text-muted-foreground">
               {formatMoney({
                 amountMinor: lead.estimatedValueMinor,
@@ -234,7 +236,7 @@ function SortableLeadCard({
               })}
             </span>
           ) : null}
-          {lead.stage === "won" && !lead.clientId ? (
+          {isWonStage(lead.stage, stages) && !lead.clientId ? (
             <span className="text-[11px] font-medium text-emerald-700">Become a client →</span>
           ) : null}
         </div>

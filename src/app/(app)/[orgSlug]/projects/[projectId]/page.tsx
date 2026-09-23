@@ -36,7 +36,7 @@ import {
   listMilestones,
   listMilestoneItemsForProject,
   listProjectColumns,
-  listTaskComments,
+  listTaskCommentsForProject,
   listTasks,
   listWorkLogs,
 } from "@/modules/delivery/queries";
@@ -54,6 +54,7 @@ import { listFilesForEntity } from "@/modules/files/queries";
 import { requireOrg, listOrgMembers, requireModuleAccess } from "@/modules/identity/org";
 import {
   canAccessProjectTab,
+  canSeeMoney,
   firstAllowedProjectTab,
   type ProjectTabKey,
 } from "@/modules/identity/permissions";
@@ -127,6 +128,7 @@ export default async function ProjectDetailPage({
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
   requireModuleAccess(ctx, "delivery");
+  const seeMoney = canSeeMoney(ctx.permissions);
   const project = await getProject(orgSlug, projectId);
   if (!project) notFound();
 
@@ -154,16 +156,21 @@ export default async function ProjectDetailPage({
     return `${base}?${params.toString()}`;
   };
 
-  const needOverviewBits = tab === "overview";
-  const needMilestones = tab === "overview" || tab === "milestones" || tab === "work";
+  const needMilestones =
+    tab === "overview" || tab === "milestones" || tab === "work" || tab === "charges";
+  const needMilestoneItems = tab === "milestones" || tab === "work";
   const needTasks = tab === "overview" || tab === "milestones" || tab === "work";
   const needLogs = tab === "overview" || tab === "work";
   const needFinance =
-    tab === "overview" || tab === "charges" || tab === "milestones" || tab === "split";
-  const needColumns = tab === "work" || tab === "overview";
+    seeMoney &&
+    (tab === "overview" || tab === "charges" || tab === "milestones" || tab === "split");
+  const needColumns = tab === "work";
   const needDocs = tab === "documents";
-  const needSplit = tab === "split" || tab === "overview";
-  const needTeam = tab === "work" || tab === "split" || tab === "overview";
+  const needDocCount = tab === "overview" || tab === "documents";
+  const needPartnerHints = tab === "overview";
+  const needSplitFull = tab === "split";
+  const needTeam = tab === "work" || tab === "split";
+  const needComments = tab === "work";
 
   const [
     milestones,
@@ -181,11 +188,12 @@ export default async function ProjectDetailPage({
     distributions,
     projectFiles,
     partnerEarnings,
+    comments,
   ] = await Promise.all([
     needMilestones
       ? listMilestones(orgSlug, projectId)
       : Promise.resolve([] as Awaited<ReturnType<typeof listMilestones>>),
-    needMilestones
+    needMilestoneItems
       ? listMilestoneItemsForProject(orgSlug, projectId)
       : Promise.resolve(new Map() as Awaited<ReturnType<typeof listMilestoneItemsForProject>>),
     needTasks
@@ -201,24 +209,26 @@ export default async function ProjectDetailPage({
       ? listProjectColumns(orgSlug, projectId)
       : Promise.resolve([] as Awaited<ReturnType<typeof listProjectColumns>>),
     needDocs ? listDocuments(orgSlug).catch(() => []) : Promise.resolve([]),
-    needDocs
+    needDocCount
       ? listDocumentsForProjectSurface(orgSlug, projectId).catch(() => [])
       : Promise.resolve([]),
-    needSplit ? listPartners(orgSlug).catch(() => []) : Promise.resolve([]),
-    needSplit || needTeam
+    needPartnerHints || needSplitFull
+      ? listPartners(orgSlug).catch(() => [])
+      : Promise.resolve([]),
+    needPartnerHints || needSplitFull || needTeam
       ? listProjectPartners(orgSlug, projectId).catch(() => [])
       : Promise.resolve([]),
     needTeam
       ? listProjectMembers(orgSlug, projectId).catch(() => [])
       : Promise.resolve([]),
     needTeam ? listOrgMembers(orgSlug).catch(() => []) : Promise.resolve([]),
-    needSplit
+    needPartnerHints || needSplitFull
       ? listProjectDistributions(orgSlug, projectId).catch(() => [])
       : Promise.resolve([]),
-    needDocs
+    needDocCount
       ? listFilesForEntity(orgSlug, "project", projectId).catch(() => [])
       : Promise.resolve([]),
-    needSplit
+    needSplitFull
       ? loadProjectPartnerEarnings(orgSlug, projectId).catch(() => ({
           rows: [],
           details: [],
@@ -229,8 +239,10 @@ export default async function ProjectDetailPage({
           details: [],
           totalEarnedMinor: BigInt(0),
         }),
+    needComments
+      ? listTaskCommentsForProject(orgSlug, projectId).catch(() => [])
+      : Promise.resolve([] as Awaited<ReturnType<typeof listTaskCommentsForProject>>),
   ]);
-  void needOverviewBits;
   const clientDocs = documents.filter((doc) => doc.clientId === project.clientId);
   const projectDocs = projectSurfaceDocs;
   const attachableDocs = clientDocs.filter((doc) => !doc.projectId);
@@ -240,13 +252,6 @@ export default async function ProjectDetailPage({
     ctx.canWrite &&
     projectPartners.some((partner) => partner.active) &&
     distributions.length === 0;
-  const comments =
-    tab === "work"
-      ? await listTaskComments(
-          orgSlug,
-          tasks.map((task) => task.id),
-        )
-      : ([] as Awaited<ReturnType<typeof listTaskComments>>);
 
 
   const columnById = new Map(columns.map((column) => [column.id, column]));
@@ -263,7 +268,7 @@ export default async function ProjectDetailPage({
     logCount: logs.length,
     openTasks,
     unbilledMilestones: unbilledMilestones.length,
-    outstandingMinor: money.outstandingMinor,
+    outstandingMinor: seeMoney ? money.outstandingMinor : BigInt(0),
     milestoneCount: milestones.length,
   });
   const nextHref =
@@ -480,12 +485,16 @@ export default async function ProjectDetailPage({
                 <span>Due {formatDay(project.dueOn)}</span>
               </>
             ) : null}
-            <span aria-hidden>·</span>
-            <span className="tabular-nums font-semibold text-foreground">
-              {money.totalPriceMinor > BigInt(0)
-                ? `${moneyLabel(money.totalPriceMinor, project.currency)} total`
-                : `${moneyLabel(money.outstandingMinor, project.currency)} due`}
-            </span>
+            {seeMoney ? (
+              <>
+                <span aria-hidden>·</span>
+                <span className="tabular-nums font-semibold text-foreground">
+                  {money.totalPriceMinor > BigInt(0)
+                    ? `${moneyLabel(money.totalPriceMinor, project.currency)} total`
+                    : `${moneyLabel(money.outstandingMinor, project.currency)} due`}
+                </span>
+              </>
+            ) : null}
           </>
         }
         primaryAction={
@@ -559,7 +568,13 @@ export default async function ProjectDetailPage({
 
       <HubBody className="gap-4">
         {tab === "overview" ? (
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)] lg:items-start">
+          <div
+            className={
+              seeMoney
+                ? "grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)] lg:items-start"
+                : "grid gap-5 lg:items-start"
+            }
+          >
             <div className="min-w-0 space-y-4">
               <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-3xl bg-muted/40 px-4 py-3 text-sm ring-1 ring-border/30">
                 <Link
@@ -573,17 +588,19 @@ export default async function ProjectDetailPage({
                   <span className="text-muted-foreground">Ready </span>
                   <span className="font-semibold tabular-nums">{unbilledMilestones.length}</span>
                 </Link>
-                <Link href={tabHref("charges")} className="hover:text-foreground">
-                  <span className="text-muted-foreground">Owed </span>
-                  <span className="font-semibold tabular-nums">
-                    {moneyLabel(money.outstandingMinor, project.currency)}
-                  </span>
-                </Link>
+                {seeMoney ? (
+                  <Link href={tabHref("charges")} className="hover:text-foreground">
+                    <span className="text-muted-foreground">Owed </span>
+                    <span className="font-semibold tabular-nums">
+                      {moneyLabel(money.outstandingMinor, project.currency)}
+                    </span>
+                  </Link>
+                ) : null}
                 <Link href={tabHref("documents")} className="hover:text-foreground">
                   <span className="text-muted-foreground">Docs </span>
                   <span className="font-semibold tabular-nums">{docsCount}</span>
                 </Link>
-                {money.totalPriceMinor > BigInt(0) ? (
+                {seeMoney && money.totalPriceMinor > BigInt(0) ? (
                   <span className="ml-auto">
                     <span className="text-muted-foreground">Total </span>
                     <span className="font-semibold tabular-nums">
@@ -679,7 +696,7 @@ export default async function ProjectDetailPage({
                           <li key={item.id}>
                             <Link
                               href={tabHref("milestones")}
-                              className="flex items-center justify-between gap-4 px-4 py-3.5 transition-colors hover:bg-sky-50/40"
+                              className="flex items-center justify-between gap-4 px-4 py-3.5 transition-colors hover:bg-muted/50"
                             >
                               <div className="min-w-0">
                                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -697,11 +714,13 @@ export default async function ProjectDetailPage({
                                   {item.dueOn ? `Due ${formatDay(item.dueOn)}` : "No due date"}
                                 </p>
                               </div>
-                              <p className="shrink-0 text-sm font-semibold tabular-nums tracking-tight">
-                                {item.amountMinor != null
-                                  ? moneyLabel(item.amountMinor, project.currency)
-                                  : "—"}
-                              </p>
+                              {seeMoney ? (
+                                <p className="shrink-0 text-sm font-semibold tabular-nums tracking-tight">
+                                  {item.amountMinor != null
+                                    ? moneyLabel(item.amountMinor, project.currency)
+                                    : "—"}
+                                </p>
+                              ) : null}
                             </Link>
                           </li>
                         );
@@ -712,17 +731,19 @@ export default async function ProjectDetailPage({
               )}
             </div>
 
-            <ProjectOverviewRail
-              currency={project.currency}
-              money={money}
-              feeBps={feeBps}
-              feeMinor={feeMinor}
-              netTotalMinor={netTotalMinor}
-              poolAmountMinor={poolAmountMinor}
-              totalEarnedMinor={totalEarnedMinor}
-              splitRows={splitPartnerRows}
-              splitHref={tabHref("split")}
-            />
+            {seeMoney ? (
+              <ProjectOverviewRail
+                currency={project.currency}
+                money={money}
+                feeBps={feeBps}
+                feeMinor={feeMinor}
+                netTotalMinor={netTotalMinor}
+                poolAmountMinor={poolAmountMinor}
+                totalEarnedMinor={totalEarnedMinor}
+                splitRows={splitPartnerRows}
+                splitHref={tabHref("split")}
+              />
+            ) : null}
           </div>
         ) : null}
 
@@ -760,6 +781,7 @@ export default async function ProjectDetailPage({
                 chargeByMilestone={chargesByMilestone}
                 taskByMilestone={boardTaskByMilestone}
                 canWrite={ctx.canWrite}
+                showMoney={seeMoney}
                 collectBaseHref={tabHref("charges", "collect=1")}
                 workHref={tabHref("work", "panel=board")}
                 highlightMilestoneId={billId}
@@ -786,34 +808,35 @@ export default async function ProjectDetailPage({
             }
           >
             {panel === "board" ? (
-              <div className="flex min-h-112 flex-col overflow-hidden rounded-[1.75rem] bg-muted/30 ring-1 ring-border/30">
-                <div className="min-h-0 flex-1 overflow-auto">
-                  <KanbanBoard
-                    orgSlug={orgSlug}
-                    projectId={project.id}
-                    columns={columns}
-                    tasks={tasks}
-                    milestones={milestones.map((item, index) => ({
-                      id: item.id,
-                      name: `M${index + 1} · ${item.name}`,
-                    }))}
-                    taskMilestoneRefs={taskMilestoneRefs}
-                    comments={comments}
-                    canWrite={ctx.canWrite}
-                    currentUserId={ctx.userId}
-                    assignees={projectMembers.map((member) => {
-                      const orgMember = orgMembers.find((row) => row.userId === member.userId);
-                      return {
-                        userId: member.userId,
-                        label: member.isYou
-                          ? "You"
-                          : orgMember?.displayName ||
-                            orgMember?.email ||
-                            `Member ${member.userId.slice(0, 8)}`,
-                      };
-                    })}
-                  />
-                </div>
+              <div className="flex min-h-[min(70vh,42rem)] flex-1 flex-col overflow-hidden rounded-[1.75rem] bg-muted/20 ring-1 ring-border/30">
+                <KanbanBoard
+                  orgSlug={orgSlug}
+                  scope="project"
+                  projectId={project.id}
+                  columns={columns}
+                  tasks={tasks}
+                  milestones={milestones.map((item, index) => ({
+                    id: item.id,
+                    name: `M${index + 1} · ${item.name}`,
+                  }))}
+                  taskMilestoneRefs={taskMilestoneRefs}
+                  comments={comments}
+                  canWrite={ctx.canWrite}
+                  currentUserId={ctx.userId}
+                  assignees={projectMembers.map((member) => {
+                    const orgMember = orgMembers.find((row) => row.userId === member.userId);
+                    return {
+                      userId: member.userId,
+                      label: member.isYou
+                        ? "You"
+                        : orgMember?.displayName ||
+                          orgMember?.email ||
+                          `Member ${member.userId.slice(0, 8)}`,
+                      avatarUrl: orgMember?.avatarUrl ?? null,
+                    };
+                  })}
+                  className="min-h-0 flex-1"
+                />
               </div>
             ) : logs.length === 0 ? (
               <EmptyState

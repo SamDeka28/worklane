@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireWritableOrg } from "@/modules/identity/org";
+import { listFilesForEntity } from "@/modules/files/queries";
 
 const MAX_BYTES = 12 * 1024 * 1024;
 const ALLOWED = new Set([
@@ -88,4 +89,8 @@ export async function softDeleteFileAction(orgSlug: string, fileId: string) {
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}`);
   return { ok: true as const };
+}
+
+export async function listTaskFilesAction(orgSlug: string, taskId: string) {
+  return listFilesForEntity(orgSlug, "task", taskId);
 }

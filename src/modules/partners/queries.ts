@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { requireOrg } from "@/modules/identity/org";
 import { monthlyRegisterBucket } from "@/modules/partners/ledger";
 import type {
@@ -19,7 +20,7 @@ function asKind(value: string): PartnerKind {
   return "participant";
 }
 
-export async function listPartners(orgSlug: string): Promise<PartnerRecord[]> {
+export const listPartners = cache(async (orgSlug: string): Promise<PartnerRecord[]> => {
   const ctx = await requireOrg(orgSlug);
   const { data, error } = await ctx.supabase
     .from("partners")
@@ -37,7 +38,7 @@ export async function listPartners(orgSlug: string): Promise<PartnerRecord[]> {
     active: row.active,
     createdAt: row.created_at,
   }));
-}
+});
 
 export async function listProjectPartners(
   orgSlug: string,
@@ -270,7 +271,7 @@ export async function loadMonthlyPartnerRegister(
   }));
 }
 
-export async function loadPartnerBalances(orgSlug: string) {
+export const loadPartnerBalances = cache(async (orgSlug: string) => {
   const ctx = await requireOrg(orgSlug);
   const partners = await listPartners(orgSlug);
   const [allocRes, settleRes] = await Promise.all([
@@ -311,7 +312,7 @@ export async function loadPartnerBalances(orgSlug: string) {
       active: partner.active,
     };
   });
-}
+});
 
 /** Posted partner earnings for a project's charges (charge- or receipt-timed). */
 export async function loadProjectPartnerEarnings(
@@ -376,4 +377,246 @@ export async function loadProjectPartnerEarnings(
   }));
   const totalEarnedMinor = rows.reduce((sum, row) => sum + row.earnedMinor, BigInt(0));
   return { rows, details, totalEarnedMinor };
+}
+
+export type FinancePartnerShare = {
+  partnerId: string;
+  partnerName: string;
+  earnedMinor: bigint;
+  shareBps: number;
+  currency: IsoCurrency;
+  projectId: string | null;
+};
+
+export type FinancePartnerMonthStrip = {
+  earnedMinor: bigint;
+  settledMinor: bigint;
+  payableMinor: bigint;
+  currency: IsoCurrency;
+};
+
+export type FinancePartnerPayable = {
+  partnerId: string;
+  partnerName: string;
+  currency: IsoCurrency;
+  payableMinor: bigint;
+  earnedMinor: bigint;
+  settledMinor: bigint;
+};
+
+export type FinancePartnerFlow = {
+  byChargeId: Record<string, FinancePartnerShare[]>;
+  byPaymentId: Record<string, FinancePartnerShare[]>;
+  month: FinancePartnerMonthStrip | null;
+  payables: FinancePartnerPayable[];
+};
+
+function sharesFromAllocations(
+  rows: {
+    partnerId: string;
+    partnerName: string;
+    earnedMinor: bigint;
+    currency: IsoCurrency;
+    projectId: string | null;
+  }[],
+): FinancePartnerShare[] {
+  const total = rows.reduce((sum, row) => sum + row.earnedMinor, BigInt(0));
+  return rows
+    .filter((row) => row.earnedMinor > BigInt(0))
+    .map((row) => ({
+      ...row,
+      shareBps:
+        total > BigInt(0)
+          ? Number((row.earnedMinor * BigInt(10_000)) / total)
+          : 0,
+    }))
+    .sort((a, b) => {
+      if (a.earnedMinor === b.earnedMinor) return a.partnerName.localeCompare(b.partnerName);
+      return a.earnedMinor > b.earnedMinor ? -1 : 1;
+    });
+}
+
+/** Read-only partner share lines for Finance Collect / Money in / Month wrap. */
+export async function loadFinancePartnerFlow(
+  orgSlug: string,
+  opts: {
+    chargeIds?: string[];
+    paymentIds?: string[];
+    month?: string;
+    /** Load org-wide partner payables for settle actions (Collect / Month wrap). */
+    includePayables?: boolean;
+  } = {},
+): Promise<FinancePartnerFlow> {
+  const chargeIds = [...new Set(opts.chargeIds ?? [])].filter(Boolean);
+  const paymentIds = [...new Set(opts.paymentIds ?? [])].filter(Boolean);
+  const needAllocs = chargeIds.length > 0 || paymentIds.length > 0;
+
+  const empty: FinancePartnerFlow = {
+    byChargeId: {},
+    byPaymentId: {},
+    month: null,
+    payables: [],
+  };
+  if (!needAllocs && !opts.month && !opts.includePayables) return empty;
+
+  const ctx = await requireOrg(orgSlug);
+  const partners = await listPartners(orgSlug);
+  const nameById = new Map(partners.map((partner) => [partner.id, partner.name]));
+
+  const byChargeId: Record<string, FinancePartnerShare[]> = {};
+  const byPaymentId: Record<string, FinancePartnerShare[]> = {};
+
+  if (needAllocs) {
+    const allocRows: {
+      partner_id: string;
+      charge_id: string;
+      payment_id: string | null;
+      earned_minor: string | number;
+      currency: string;
+    }[] = [];
+
+    if (chargeIds.length > 0) {
+      const { data, error } = await ctx.supabase
+        .from("partner_allocations")
+        .select("partner_id, charge_id, payment_id, earned_minor, currency")
+        .eq("organization_id", ctx.org.id)
+        .eq("status", "posted")
+        .in("charge_id", chargeIds);
+      if (error) throw new Error(error.message);
+      allocRows.push(...((data ?? []) as typeof allocRows));
+    }
+    if (paymentIds.length > 0) {
+      const { data, error } = await ctx.supabase
+        .from("partner_allocations")
+        .select("partner_id, charge_id, payment_id, earned_minor, currency")
+        .eq("organization_id", ctx.org.id)
+        .eq("status", "posted")
+        .in("payment_id", paymentIds);
+      if (error) throw new Error(error.message);
+      for (const row of (data ?? []) as typeof allocRows) {
+        if (!allocRows.some((existing) =>
+          existing.partner_id === row.partner_id &&
+          existing.charge_id === row.charge_id &&
+          existing.payment_id === row.payment_id &&
+          String(existing.earned_minor) === String(row.earned_minor)
+        )) {
+          allocRows.push(row);
+        }
+      }
+    }
+
+    const relatedChargeIds = [...new Set(allocRows.map((row) => row.charge_id))];
+    const projectByCharge = new Map<string, string | null>();
+    if (relatedChargeIds.length > 0) {
+      const { data: charges, error: chargeError } = await ctx.supabase
+        .from("charges")
+        .select("id, project_id")
+        .eq("organization_id", ctx.org.id)
+        .in("id", relatedChargeIds);
+      if (chargeError) throw new Error(chargeError.message);
+      for (const row of charges ?? []) {
+        projectByCharge.set(row.id as string, (row.project_id as string | null) ?? null);
+      }
+    }
+
+    const chargeBuckets = new Map<
+      string,
+      {
+        partnerId: string;
+        partnerName: string;
+        earnedMinor: bigint;
+        currency: IsoCurrency;
+        projectId: string | null;
+      }[]
+    >();
+    const paymentBuckets = new Map<
+      string,
+      {
+        partnerId: string;
+        partnerName: string;
+        earnedMinor: bigint;
+        currency: IsoCurrency;
+        projectId: string | null;
+      }[]
+    >();
+
+    for (const row of allocRows) {
+      const partnerId = row.partner_id;
+      const chargeId = row.charge_id;
+      const paymentId = row.payment_id;
+      const earnedMinor = BigInt(row.earned_minor);
+      const currency = asCurrency(row.currency);
+      const projectId = projectByCharge.get(chargeId) ?? null;
+      const entry = {
+        partnerId,
+        partnerName: nameById.get(partnerId) ?? "Partner",
+        earnedMinor,
+        currency,
+        projectId,
+      };
+
+      // Charge-timed earns (no payment) attach to the charge.
+      if (!paymentId) {
+        const list = chargeBuckets.get(chargeId) ?? [];
+        list.push(entry);
+        chargeBuckets.set(chargeId, list);
+      } else {
+        const list = paymentBuckets.get(paymentId) ?? [];
+        list.push(entry);
+        paymentBuckets.set(paymentId, list);
+      }
+    }
+
+    for (const [chargeId, list] of chargeBuckets) {
+      byChargeId[chargeId] = sharesFromAllocations(list);
+    }
+    for (const [paymentId, list] of paymentBuckets) {
+      byPaymentId[paymentId] = sharesFromAllocations(list);
+    }
+  }
+
+  let month: FinancePartnerMonthStrip | null = null;
+  let payables: FinancePartnerPayable[] = [];
+
+  if (opts.month || opts.includePayables) {
+    const balances = await loadPartnerBalances(orgSlug);
+    payables = balances
+      .filter((row) => row.payableMinor > BigInt(0))
+      .map((row) => ({
+        partnerId: row.partnerId,
+        partnerName: row.name,
+        currency: row.currency,
+        payableMinor: row.payableMinor,
+        earnedMinor: row.earnedMinor,
+        settledMinor: row.settledMinor,
+      }))
+      .sort((a, b) => {
+        if (a.payableMinor === b.payableMinor) {
+          return a.partnerName.localeCompare(b.partnerName);
+        }
+        return a.payableMinor > b.payableMinor ? -1 : 1;
+      });
+
+    if (opts.month) {
+      const register = await loadMonthlyPartnerRegister(orgSlug, opts.month);
+      const earnedMinor = register.reduce((sum, row) => sum + row.earnedMinor, BigInt(0));
+      const settledMinor = register.reduce((sum, row) => sum + row.settledMinor, BigInt(0));
+      const payableMinor = balances.reduce((sum, row) => sum + row.payableMinor, BigInt(0));
+      const currency =
+        register[0]?.currency ??
+        balances.find((row) => row.payableMinor > BigInt(0) || row.earnedMinor > BigInt(0))
+          ?.currency ??
+        asCurrency(ctx.org.defaultCurrency);
+
+      if (
+        earnedMinor > BigInt(0) ||
+        settledMinor > BigInt(0) ||
+        payableMinor > BigInt(0)
+      ) {
+        month = { earnedMinor, settledMinor, payableMinor, currency };
+      }
+    }
+  }
+
+  return { byChargeId, byPaymentId, month, payables };
 }

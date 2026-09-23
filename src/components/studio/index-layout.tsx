@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { Stat, type StatTone } from "@/components/studio/chrome";
 
 /** Full-height body under purpose + filters. */
 export function IndexBody({
@@ -50,30 +51,9 @@ export function SummaryStat({
   label: string;
   value: string;
   hint?: string;
-  tone?: "slate" | "sky" | "amber" | "emerald" | "rose";
+  tone?: Extract<StatTone, "slate" | "sky" | "amber" | "emerald" | "rose">;
 }) {
-  const well = {
-    slate: "from-white to-slate-50/90",
-    sky: "from-white to-sky-50/90",
-    amber: "from-white to-amber-50/90",
-    emerald: "from-white to-emerald-50/90",
-    rose: "from-white to-rose-50/90",
-  }[tone];
-
-  return (
-    <div
-      className={cn(
-        "lane-surface lane-surface-hover bg-linear-to-br px-5 py-4",
-        well,
-      )}
-    >
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1.5 truncate text-2xl font-semibold tracking-tight tabular-nums">
-        {value}
-      </p>
-      {hint ? <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p> : null}
-    </div>
-  );
+  return <Stat label={label} value={value} hint={hint} tone={tone} variant="strip" />;
 }
 
 /** Grounded full-height list workspace — not floating rows on white. */
@@ -91,20 +71,20 @@ export function DenseListPanel({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.75rem] bg-card/70 shadow-soft ring-1 ring-border/30 backdrop-blur-sm",
+        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl bg-muted/30 ring-1 ring-foreground/6 dark:ring-white/8",
         className,
       )}
     >
       {columns ? (
-        <div className="flex shrink-0 items-center gap-3 border-b border-border/40 bg-muted/30 px-5 py-3 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+        <div className="flex shrink-0 items-center gap-3 border-b border-border/50 bg-card/70 px-5 py-3.5 text-[11px] font-bold tracking-wide text-muted-foreground uppercase">
           {columns}
         </div>
       ) : null}
-      <ul className="min-h-0 flex-1 divide-y divide-border/35 overflow-y-auto">
+      <ul className="min-h-0 flex-1 divide-y divide-border/40 overflow-y-auto bg-card/50">
         {children}
       </ul>
       {footer ? (
-        <div className="shrink-0 border-t border-border/40 bg-muted/20 px-5 py-3.5 text-sm text-muted-foreground">
+        <div className="shrink-0 border-t border-border/50 bg-card/60 px-5 py-3 text-sm text-muted-foreground">
           {footer}
         </div>
       ) : null}
@@ -122,7 +102,7 @@ export function DenseRow({
   return (
     <li
       className={cn(
-        "flex items-center gap-3 px-5 py-4 transition-colors duration-200 hover:bg-sky-50/50",
+        "flex items-center gap-3 px-5 py-4 transition-colors duration-150 hover:bg-muted/60",
         className,
       )}
     >

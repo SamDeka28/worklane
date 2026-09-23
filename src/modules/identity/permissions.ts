@@ -156,11 +156,22 @@ export function canWriteModule(
   return moduleAccess(permissions, module) === "write";
 }
 
+/** Studio money (charges, due, totals, invoices, estimates). */
+export function canSeeMoney(permissions: MemberPermissions): boolean {
+  return canAccessModule(permissions, "finance");
+}
+
 export function canAccessProjectTab(
   permissions: MemberPermissions,
   tab: ProjectTabKey,
 ): boolean {
   if (!canAccessModule(permissions, "delivery")) return false;
+  if (
+    (tab === "charges" || tab === "split") &&
+    !canAccessModule(permissions, "finance")
+  ) {
+    return false;
+  }
   const tabs = permissions.delivery?.tabs;
   if (!tabs) return true;
   return tabs[tab] !== false;

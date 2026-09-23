@@ -33,6 +33,9 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const TASK_PRIORITIES = ["low", "medium", "high"] as const;
 export type TaskPriority = (typeof TASK_PRIORITIES)[number];
 
+export const TASK_KINDS = ["task", "bug", "feature", "chore"] as const;
+export type TaskKind = (typeof TASK_KINDS)[number];
+
 export type ProjectRecord = {
   id: string;
   organizationId: string;
@@ -97,12 +100,34 @@ export type TaskRecord = {
   descriptionDoc: Record<string, unknown> | null;
   status: TaskStatus;
   priority: TaskPriority;
+  kind: TaskKind;
+  labels: string[];
   dueOn: string | null;
   position: number;
+  /** @deprecated prefer assigneeUserIds — first assignee for legacy reads */
   assigneeUserId: string | null;
+  assigneeUserIds: string[];
   commentCount: number;
   createdAt: string;
 };
+
+export type TaskAssigneeOption = {
+  userId: string;
+  label: string;
+  avatarUrl?: string | null;
+};
+
+export type BoardTask = TaskRecord & {
+  projectName?: string;
+  clientName?: string;
+  clientId?: string;
+  /** @deprecated prefer assigneeLabels */
+  assigneeLabel?: string | null;
+  assigneeLabels?: string[];
+};
+
+/** @deprecated use BoardTask */
+export type OrgBoardTask = BoardTask;
 
 export type TaskComment = {
   id: string;

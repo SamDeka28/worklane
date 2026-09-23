@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { isLeadStage } from "@/modules/crm/types";
+import { slugifyStageName } from "@/modules/crm/types";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
@@ -43,6 +43,40 @@ async function recordActivity(
   });
 }
 
+async function orgStageSlugs(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+): Promise<Set<string>> {
+  const { data } = await ctx.supabase
+    .from("lead_stages")
+    .select("slug")
+    .eq("organization_id", ctx.org.id);
+  return new Set((data ?? []).map((row) => String(row.slug)));
+}
+
+async function defaultStageSlug(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+): Promise<string> {
+  const { data } = await ctx.supabase
+    .from("lead_stages")
+    .select("slug")
+    .eq("organization_id", ctx.org.id)
+    .order("position", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return data?.slug ? String(data.slug) : "new";
+}
+
+async function resolveStageSlug(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  raw: string,
+): Promise<string> {
+  const slug = raw.trim();
+  const known = await orgStageSlugs(ctx);
+  if (slug && known.has(slug)) return slug;
+  if (known.size === 0 && slug) return slug;
+  return defaultStageSlug(ctx);
+}
+
 export async function createLeadAction(orgSlug: string, formData: FormData) {
   const ctx = await requireWritableOrg(orgSlug);
   if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
@@ -64,8 +98,7 @@ export async function createLeadAction(orgSlug: string, formData: FormData) {
     }
   }
 
-  const stageRaw = String(formData.get("stage") ?? "new");
-  const stage = isLeadStage(stageRaw) ? stageRaw : "new";
+  const stage = await resolveStageSlug(ctx, String(formData.get("stage") ?? ""));
   const notesDoc = parseNotesDoc(formData);
   const notesPlain = String(formData.get("notes") ?? "").trim() || null;
 
@@ -125,8 +158,7 @@ export async function updateLeadAction(
     }
   }
 
-  const stageRaw = String(formData.get("stage") ?? "new");
-  const stage = isLeadStage(stageRaw) ? stageRaw : "new";
+  const stage = await resolveStageSlug(ctx, String(formData.get("stage") ?? ""));
   const notesDoc = parseNotesDoc(formData);
 
   const { error } = await ctx.supabase
@@ -165,11 +197,12 @@ export async function moveLeadStageAction(
 ) {
   const ctx = await requireWritableOrg(orgSlug);
   if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
-  if (!isLeadStage(stage)) return { error: "Unknown stage" };
+  const resolved = await resolveStageSlug(ctx, stage);
+  if (resolved !== stage.trim()) return { error: "Unknown stage" };
 
   const { error } = await ctx.supabase
     .from("leads")
-    .update({ stage })
+    .update({ stage: resolved })
     .eq("id", leadId)
     .eq("organization_id", ctx.org.id);
 
@@ -179,14 +212,150 @@ export async function moveLeadStageAction(
     for (const [index, id] of orderedIds.entries()) {
       const { error: posError } = await ctx.supabase
         .from("leads")
-        .update({ position: index, stage })
+        .update({ position: index, stage: resolved })
         .eq("id", id)
         .eq("organization_id", ctx.org.id);
       if (posError) return { error: posError.message };
     }
   }
 
-  await recordActivity(ctx, "stage_moved", leadId, { stage });
+  await recordActivity(ctx, "stage_moved", leadId, { stage: resolved });
+  revalidatePath(`/${orgSlug}/crm`);
+  revalidatePath(`/${orgSlug}`);
+  return { ok: true as const };
+}
+
+export async function createLeadStageAction(orgSlug: string, formData: FormData) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Stage name is required" };
+
+  const { data: existing } = await ctx.supabase
+    .from("lead_stages")
+    .select("slug, position, system_key")
+    .eq("organization_id", ctx.org.id)
+    .order("position", { ascending: true });
+
+  const used = new Set((existing ?? []).map((row) => String(row.slug)));
+  let slug = slugifyStageName(name);
+  if (used.has(slug)) {
+    let n = 2;
+    while (used.has(`${slug}-${n}`)) n += 1;
+    slug = `${slug}-${n}`;
+  }
+
+  const maxPos = (existing ?? []).reduce(
+    (max, row) => Math.max(max, Number(row.position) || 0),
+    -1,
+  );
+  const terminal = (existing ?? []).filter((row) => row.system_key != null);
+  const insertAt =
+    terminal.length > 0
+      ? Math.min(...terminal.map((row) => Number(row.position) || 0))
+      : maxPos + 1;
+
+  if (terminal.length > 0) {
+    for (const row of existing ?? []) {
+      if (Number(row.position) >= insertAt) {
+        await ctx.supabase
+          .from("lead_stages")
+          .update({ position: Number(row.position) + 1 })
+          .eq("organization_id", ctx.org.id)
+          .eq("slug", row.slug);
+      }
+    }
+  }
+
+  const { error } = await ctx.supabase.from("lead_stages").insert({
+    organization_id: ctx.org.id,
+    name,
+    slug,
+    position: insertAt,
+    system_key: null,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/${orgSlug}/crm`);
+  revalidatePath(`/${orgSlug}`);
+  return { ok: true as const, slug };
+}
+
+export async function renameLeadStageAction(
+  orgSlug: string,
+  stageId: string,
+  formData: FormData,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Stage name is required" };
+
+  const { error } = await ctx.supabase
+    .from("lead_stages")
+    .update({ name })
+    .eq("id", stageId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/${orgSlug}/crm`);
+  return { ok: true as const };
+}
+
+export async function reorderLeadStagesAction(orgSlug: string, orderedIds: string[]) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
+  if (orderedIds.length === 0) return { error: "Nothing to reorder" };
+
+  for (const [index, id] of orderedIds.entries()) {
+    const { error } = await ctx.supabase
+      .from("lead_stages")
+      .update({ position: index })
+      .eq("id", id)
+      .eq("organization_id", ctx.org.id);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath(`/${orgSlug}/crm`);
+  return { ok: true as const };
+}
+
+export async function deleteLeadStageAction(orgSlug: string, stageId: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
+
+  const { data: stage } = await ctx.supabase
+    .from("lead_stages")
+    .select("id, slug, system_key")
+    .eq("id", stageId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!stage) return { error: "Stage not found" };
+  if (stage.system_key) return { error: "Won and Lost stages can’t be removed" };
+
+  const { data: stages } = await ctx.supabase
+    .from("lead_stages")
+    .select("id, slug, position")
+    .eq("organization_id", ctx.org.id)
+    .order("position", { ascending: true });
+  const fallback = (stages ?? []).find((row) => row.id !== stageId);
+  if (!fallback) return { error: "Keep at least one stage" };
+
+  await ctx.supabase
+    .from("leads")
+    .update({ stage: fallback.slug })
+    .eq("organization_id", ctx.org.id)
+    .eq("stage", stage.slug);
+
+  const { error } = await ctx.supabase
+    .from("lead_stages")
+    .delete()
+    .eq("id", stageId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+
   revalidatePath(`/${orgSlug}/crm`);
   revalidatePath(`/${orgSlug}`);
   return { ok: true as const };
@@ -291,9 +460,17 @@ export async function convertLeadToClientAction(
     }
   }
 
+  const { data: wonStage } = await ctx.supabase
+    .from("lead_stages")
+    .select("slug")
+    .eq("organization_id", ctx.org.id)
+    .eq("system_key", "won")
+    .maybeSingle();
+  const wonSlug = wonStage?.slug ? String(wonStage.slug) : "won";
+
   const { error: updateError } = await ctx.supabase
     .from("leads")
-    .update({ stage: "won", client_id: client.id })
+    .update({ stage: wonSlug, client_id: client.id })
     .eq("id", leadId)
     .eq("organization_id", ctx.org.id);
 

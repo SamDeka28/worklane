@@ -126,7 +126,7 @@ export default async function TeamPage({
               <SoftCard className="p-5">
                 <p className="mb-1 text-sm font-semibold tracking-tight">Invite</p>
                 <p className="mb-4 text-xs text-muted-foreground">
-                  Send an email invite — optionally add them to a project
+                  Email a teammate and set what they can see
                 </p>
                 <InviteMemberForm orgSlug={orgSlug} projects={projects} />
               </SoftCard>

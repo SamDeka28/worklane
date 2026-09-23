@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Columns3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
 import { AvatarMark, SoftCard, StudioToolbar, WorkSurface } from "@/components/studio/chrome";
@@ -19,6 +20,7 @@ import { projectNextStep } from "@/modules/delivery/next-step";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import type { ProjectStatus } from "@/modules/delivery/types";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
+import { canSeeMoney } from "@/modules/identity/permissions";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { dueThisMonthMinor, formatDay } from "@/modules/finance/presentation";
 import { loadOrgFinance } from "@/modules/finance/queries";
@@ -50,10 +52,11 @@ export default async function ProjectsPage({
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
   requireModuleAccess(ctx, "delivery");
+  const seeMoney = canSeeMoney(ctx.permissions);
   const [board, clients, finance] = await Promise.all([
     listProjectBoard(orgSlug),
     listClients(orgSlug),
-    loadOrgFinance(orgSlug),
+    seeMoney ? loadOrgFinance(orgSlug) : Promise.resolve(null),
   ]);
   const clientOptions = clients.map((client) => ({
     id: client.id,
@@ -84,17 +87,17 @@ export default async function ProjectsPage({
       : filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const cards = visible.map((row) => {
-    const projectCharges = finance.charges.filter(
-      (charge) => charge.projectId === row.project.id,
-    );
+    const projectCharges = seeMoney
+      ? (finance?.charges.filter((charge) => charge.projectId === row.project.id) ?? [])
+      : [];
     const money = projectMoneyStats(row.project, projectCharges);
-    const monthDueMinor = dueThisMonthMinor(projectCharges);
+    const monthDueMinor = seeMoney ? dueThisMonthMinor(projectCharges) : BigInt(0);
     const next = projectNextStep({
       billingMode: row.project.billingMode,
       logCount: row.logCount,
       openTasks: row.openTasks,
       unbilledMilestones: row.unbilledMilestones,
-      outstandingMinor: money.outstandingMinor,
+      outstandingMinor: seeMoney ? money.outstandingMinor : BigInt(0),
       milestoneCount: row.milestoneCount,
     });
     const nextHref =
@@ -122,8 +125,12 @@ export default async function ProjectsPage({
   const activeCount = board.filter(
     (r) => r.project.status === "active" || r.project.status === "planning",
   ).length;
-  const dueTotal = cards.reduce((sum, c) => sum + c.money.outstandingMinor, BigInt(0));
-  const leftTotal = cards.reduce((sum, c) => sum + c.money.remainingMinor, BigInt(0));
+  const dueTotal = seeMoney
+    ? cards.reduce((sum, c) => sum + c.money.outstandingMinor, BigInt(0))
+    : BigInt(0);
+  const leftTotal = seeMoney
+    ? cards.reduce((sum, c) => sum + c.money.remainingMinor, BigInt(0))
+    : BigInt(0);
   const openTasks = cards.reduce((sum, c) => sum + c.openTasks, 0);
   const currency = cards[0]?.project.currency ?? ctx.org.defaultCurrency;
 
@@ -191,9 +198,10 @@ export default async function ProjectsPage({
                 <ProjectStatusBoard
                   orgSlug={orgSlug}
                   canWrite={ctx.canWrite}
+                  showMoney={seeMoney}
                   rows={cards.map((card) => ({
                     project: card.project,
-                    outstandingMinor: card.money.outstandingMinor,
+                    outstandingMinor: seeMoney ? card.money.outstandingMinor : undefined,
                     openTasks: card.openTasks,
                   }))}
                 />
@@ -208,18 +216,22 @@ export default async function ProjectsPage({
                   hint="Planning + delivery"
                   tone="sky"
                 />
-                <SummaryStat
-                  label="Due"
-                  value={moneyLabel(dueTotal, currency)}
-                  hint="On the ledger"
-                  tone="amber"
-                />
-                <SummaryStat
-                  label="Left"
-                  value={moneyLabel(leftTotal, currency)}
-                  hint="Still to bill or collect"
-                  tone="slate"
-                />
+                {seeMoney ? (
+                  <SummaryStat
+                    label="Due"
+                    value={moneyLabel(dueTotal, currency)}
+                    hint="On the ledger"
+                    tone="amber"
+                  />
+                ) : null}
+                {seeMoney ? (
+                  <SummaryStat
+                    label="Left"
+                    value={moneyLabel(leftTotal, currency)}
+                    hint="Still to bill or collect"
+                    tone="slate"
+                  />
+                ) : null}
                 <SummaryStat
                   label="Open tasks"
                   value={String(openTasks)}
@@ -233,6 +245,7 @@ export default async function ProjectsPage({
                 <ProjectListPanel
                   orgSlug={orgSlug}
                   cards={cards}
+                  showMoney={seeMoney}
                 />
               ) : (
                 <div className="min-h-0 flex-1 overflow-y-auto rounded-[1.75rem] bg-card/50 p-4 shadow-soft ring-1 ring-border/30 sm:p-5">
@@ -279,57 +292,78 @@ export default async function ProjectsPage({
                                 </p>
                               </div>
                             </Link>
-                            <MoneyMetaCards
-                              className="grid-cols-2"
-                              items={[
-                                {
-                                  label: "Due",
-                                  value: moneyLabel(
-                                    card.money.outstandingMinor,
-                                    card.project.currency,
-                                  ),
-                                  tone: "sky",
-                                },
-                                {
-                                  label: "Left",
-                                  value: moneyLabel(
-                                    card.money.remainingMinor,
-                                    card.project.currency,
-                                  ),
-                                  tone: "violet",
-                                },
-                              ]}
-                            />
-                            {ctx.canWrite ? (
-                              <Button
-                                size="sm"
-                                className="mt-auto self-start"
-                                nativeButton={false}
-                                render={<Link href={card.nextHref} />}
-                              >
-                                {card.next.cta}
-                              </Button>
+                            {seeMoney ? (
+                              <MoneyMetaCards
+                                className="grid-cols-2"
+                                items={[
+                                  {
+                                    label: "Due",
+                                    value: moneyLabel(
+                                      card.money.outstandingMinor,
+                                      card.project.currency,
+                                    ),
+                                    tone: "sky",
+                                  },
+                                  {
+                                    label: "Left",
+                                    value: moneyLabel(
+                                      card.money.remainingMinor,
+                                      card.project.currency,
+                                    ),
+                                    tone: "violet",
+                                  },
+                                ]}
+                              />
                             ) : null}
+                            {ctx.canWrite ? (
+                              <div className="mt-auto flex flex-wrap items-center gap-2 self-start">
+                                <Link
+                                  href={`/${orgSlug}/projects/${card.project.id}?tab=work&panel=board`}
+                                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary/12 px-2.5 text-[13px] font-semibold text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/18 hover:ring-primary/35"
+                                >
+                                  <Columns3 className="size-3.5 opacity-90" aria-hidden />
+                                  Board
+                                </Link>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  nativeButton={false}
+                                  render={<Link href={card.nextHref} />}
+                                >
+                                  {card.next.cta}
+                                </Button>
+                              </div>
+                            ) : (
+                              <Link
+                                href={`/${orgSlug}/projects/${card.project.id}?tab=work&panel=board`}
+                                className="mt-auto inline-flex h-8 items-center gap-1.5 self-start rounded-lg bg-primary/12 px-2.5 text-[13px] font-semibold text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/18 hover:ring-primary/35"
+                              >
+                                <Columns3 className="size-3.5 opacity-90" aria-hidden />
+                                Board
+                              </Link>
+                            )}
                           </div>
-                          <MoneyDonutCard
-                            className="hidden shrink-0 self-center sm:block"
-                            size="lg"
-                            collected={Number(card.money.collectedMinor)}
-                            due={Number(card.money.outstandingMinor)}
-                            remaining={Number(
-                              card.money.remainingMinor > card.money.outstandingMinor
-                                ? card.money.remainingMinor - card.money.outstandingMinor
-                                : BigInt(0),
-                            )}
-                            collectedLabel={`Collected · ${moneyLabel(card.money.collectedMinor, card.project.currency)}`}
-                            dueLabel={`Due · ${moneyLabel(card.money.outstandingMinor, card.project.currency)}`}
-                            remainingLabel={`Remaining · ${moneyLabel(card.money.remainingMinor, card.project.currency)}`}
-                            centerValue={moneyLabel(
-                              card.money.totalPriceMinor,
-                              card.project.currency,
-                            )}
-                            centerLabel="Total"
-                          />
+                          {seeMoney ? (
+                            <MoneyDonutCard
+                              className="hidden shrink-0 self-center sm:block"
+                              size="lg"
+                              collected={Number(card.money.collectedMinor)}
+                              due={Number(card.money.outstandingMinor)}
+                              remaining={Number(
+                                card.money.remainingMinor > card.money.outstandingMinor
+                                  ? card.money.remainingMinor - card.money.outstandingMinor
+                                  : BigInt(0),
+                              )}
+                              collectedLabel={`Collected · ${moneyLabel(card.money.collectedMinor, card.project.currency)}`}
+                              dueLabel={`Due · ${moneyLabel(card.money.outstandingMinor, card.project.currency)}`}
+                              remainingLabel={`Remaining · ${moneyLabel(card.money.remainingMinor, card.project.currency)}`}
+                              centerValue={moneyLabel(
+                                card.money.totalPriceMinor,
+                                card.project.currency,
+                              )}
+                              centerLabel="Total"
+                            />
+                          ) : null}
                         </SoftCard>
                       );
                     })}

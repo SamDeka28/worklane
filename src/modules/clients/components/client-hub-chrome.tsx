@@ -23,6 +23,7 @@ export function ClientHubChrome({
   contactOpen,
   projectOpen,
   chargeOpen,
+  seeMoney = true,
   attachableDocuments = [],
 }: {
   orgSlug: string;
@@ -40,6 +41,7 @@ export function ClientHubChrome({
   contactOpen?: boolean;
   projectOpen?: boolean;
   chargeOpen?: boolean;
+  seeMoney?: boolean;
   attachableDocuments?: AttachableDocument[];
 }) {
   const router = useRouter();
@@ -109,7 +111,7 @@ export function ClientHubChrome({
               clientId={client.id}
               onEditProfile={() => setEdit(true)}
               onNewProject={() => setProject(true)}
-              onNewCharge={() => setCharge(true)}
+              onNewCharge={seeMoney ? () => setCharge(true) : undefined}
             />
           </>
         ) : null}
@@ -149,18 +151,20 @@ export function ClientHubChrome({
         returnHref={base}
         attachableDocuments={attachableDocuments}
       />
-      <CreateChargeDialog
-        orgSlug={orgSlug}
-        clients={clientOption}
-        defaultClientId={client.id}
-        open={charge}
-        onOpenChange={(nextOpen) => {
-          setCharge(nextOpen);
-          if (!nextOpen && chargeOpen) clearQuery();
-        }}
-        hideTrigger
-        returnHref={base}
-      />
+      {seeMoney ? (
+        <CreateChargeDialog
+          orgSlug={orgSlug}
+          clients={clientOption}
+          defaultClientId={client.id}
+          open={charge}
+          onOpenChange={(nextOpen) => {
+            setCharge(nextOpen);
+            if (!nextOpen && chargeOpen) clearQuery();
+          }}
+          hideTrigger
+          returnHref={base}
+        />
+      ) : null}
     </>
   );
 }

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { listClients, listOrgActivity } from "@/modules/clients/queries";
 import { countProjects } from "@/modules/delivery/queries";
 import { requireOrg } from "@/modules/identity/org";
@@ -74,8 +75,10 @@ function mapPayment(row: {
   };
 }
 
-async function loadLedger(orgSlug: string, clientId?: string) {
+/** One org ledger load per request (statements reuse this). */
+const loadLedger = cache(async (orgSlug: string, clientId = "") => {
   const { org, supabase } = await requireOrg(orgSlug);
+  const scopedClient = clientId || undefined;
 
   let chargesQuery = supabase
     .from("charges")
@@ -93,9 +96,9 @@ async function loadLedger(orgSlug: string, clientId?: string) {
     .eq("organization_id", org.id)
     .order("paid_on", { ascending: false });
 
-  if (clientId) {
-    chargesQuery = chargesQuery.eq("client_id", clientId);
-    paymentsQuery = paymentsQuery.eq("client_id", clientId);
+  if (scopedClient) {
+    chargesQuery = chargesQuery.eq("client_id", scopedClient);
+    paymentsQuery = paymentsQuery.eq("client_id", scopedClient);
   }
 
   const [chargesRes, paymentsRes, allocationsRes] = await Promise.all([
@@ -120,14 +123,14 @@ async function loadLedger(orgSlug: string, clientId?: string) {
   }));
 
   return { org, charges, payments, allocations };
-}
+});
 
-export async function loadOrgFinance(orgSlug: string) {
+export const loadOrgFinance = cache(async (orgSlug: string) => {
   const { org, charges, payments, allocations } = await loadLedger(orgSlug);
   const views = withChargeOutstanding(charges, allocations, payments);
   const snapshot = clientMoneySnapshot(charges, payments, allocations);
   return { org, charges: views, payments, snapshot, allocations };
-}
+});
 
 export async function loadClientFinance(orgSlug: string, clientId: string) {
   const { org, charges, payments, allocations } = await loadLedger(orgSlug, clientId);
@@ -137,10 +140,57 @@ export async function loadClientFinance(orgSlug: string, clientId: string) {
 }
 
 export async function loadProjectFinance(orgSlug: string, projectId: string) {
-  const { charges, payments, allocations } = await loadLedger(orgSlug);
-  const projectCharges = charges.filter((charge) => charge.projectId === projectId);
-  const views = withChargeOutstanding(projectCharges, allocations, payments);
-  const snapshot = clientMoneySnapshot(projectCharges, payments, allocations);
+  const { org, supabase } = await requireOrg(orgSlug);
+
+  const { data: chargeRows, error: chargesError } = await supabase
+    .from("charges")
+    .select(
+      "id, client_id, project_id, milestone_id, work_log_id, gross_minor, fee_bps, net_minor, currency, charged_on, due_on, source, status, memo, created_at",
+    )
+    .eq("organization_id", org.id)
+    .eq("project_id", projectId)
+    .order("charged_on", { ascending: false });
+  if (chargesError) throw new Error(chargesError.message);
+
+  const charges = (chargeRows ?? []).map(mapCharge);
+  const chargeIds = charges.map((row) => row.id);
+
+  if (chargeIds.length === 0) {
+    return {
+      charges: withChargeOutstanding([], [], []),
+      snapshot: clientMoneySnapshot([], [], []),
+    };
+  }
+
+  const { data: allocationRows, error: allocationsError } = await supabase
+    .from("payment_allocations")
+    .select("payment_id, charge_id, amount_minor")
+    .eq("organization_id", org.id)
+    .in("charge_id", chargeIds);
+  if (allocationsError) throw new Error(allocationsError.message);
+
+  const allocations: AllocationRow[] = (allocationRows ?? []).map((row) => ({
+    paymentId: row.payment_id,
+    chargeId: row.charge_id,
+    amountMinor: asLedgerMinor(row.amount_minor),
+  }));
+
+  const paymentIds = [...new Set(allocations.map((row) => row.paymentId))];
+  let payments: PaymentRow[] = [];
+  if (paymentIds.length > 0) {
+    const { data: paymentRows, error: paymentsError } = await supabase
+      .from("payments")
+      .select(
+        "id, client_id, amount_minor, currency, paid_on, method, reference, kind, status, created_at",
+      )
+      .eq("organization_id", org.id)
+      .in("id", paymentIds);
+    if (paymentsError) throw new Error(paymentsError.message);
+    payments = (paymentRows ?? []).map(mapPayment);
+  }
+
+  const views = withChargeOutstanding(charges, allocations, payments);
+  const snapshot = clientMoneySnapshot(charges, payments, allocations);
   return { charges: views, snapshot };
 }
 
@@ -149,7 +199,7 @@ export async function loadMonthlyStatement(
   yearMonth: string,
   clientId?: string,
 ) {
-  const { charges, payments } = await loadLedger(orgSlug, clientId);
+  const { charges, payments } = await loadLedger(orgSlug, clientId ?? "");
   const currency: IsoCurrency = charges[0]?.currency ?? payments[0]?.currency ?? "USD";
   return {
     currency,
@@ -157,11 +207,26 @@ export async function loadMonthlyStatement(
   };
 }
 
-export async function loadOrgDashboard(orgSlug: string) {
+/** Multiple months from one cached ledger (avoids N statement round-trips). */
+export async function loadMonthlyStatements(
+  orgSlug: string,
+  yearMonths: string[],
+  clientId?: string,
+) {
+  const { charges, payments } = await loadLedger(orgSlug, clientId ?? "");
+  const currency: IsoCurrency = charges[0]?.currency ?? payments[0]?.currency ?? "USD";
+  return yearMonths.map((yearMonth) => ({
+    yearMonth,
+    currency,
+    ...statementForMonth(charges, payments, yearMonth),
+  }));
+}
+
+export const loadOrgDashboard = cache(async (orgSlug: string) => {
   const [finance, clients, activities, projectCount] = await Promise.all([
     loadOrgFinance(orgSlug),
     listClients(orgSlug),
-    listOrgActivity(orgSlug, 10),
+    listOrgActivity(orgSlug, 30),
     countProjects(orgSlug),
   ]);
 
@@ -188,7 +253,7 @@ export async function loadOrgDashboard(orgSlug: string) {
       clientName: row.entityId ? (names.get(row.entityId) ?? null) : null,
     })),
   };
-}
+});
 
 export async function listClientsWithOutstanding(orgSlug: string, query?: string) {
   const clients = await listClients(orgSlug, query);

@@ -47,7 +47,7 @@ export function Workbench({
   className?: string;
 }) {
   return (
-    <div className={cn("flex min-h-0 flex-1 gap-3 overflow-hidden", className)}>
+    <div className={cn("flex min-h-0 flex-1 gap-4 overflow-hidden", className)}>
       {children}
     </div>
   );
@@ -61,6 +61,13 @@ export function PageShell({
   className?: string;
 }) {
   return (
-    <div className={cn("min-h-0 flex-1 overflow-auto", className)}>{children}</div>
+    <div
+      className={cn(
+        "min-h-0 flex-1 overflow-auto px-6 pb-8 pt-6",
+        className,
+      )}
+    >
+      {children}
+    </div>
   );
 }

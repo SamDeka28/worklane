@@ -14,14 +14,21 @@ import {
 import { StatusChip } from "@/components/studio/status-chip";
 import { CreateClientDialog } from "@/modules/clients/components/client-forms";
 import { ClientToolbar } from "@/modules/clients/components/client-toolbar";
+import { listClients } from "@/modules/clients/queries";
 import { listClientsWithOutstanding, loadOrgFinance } from "@/modules/finance/queries";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { dueThisMonthMinor } from "@/modules/finance/presentation";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import { requireOrg } from "@/modules/identity/org";
+import { canSeeMoney } from "@/modules/identity/permissions";
 import { JOURNEY } from "@/shared/journey-copy";
 
 const PAGE_SIZE = 40;
+
+const zeroSnapshot = {
+  outstandingMinor: BigInt(0),
+  collectedMinor: BigInt(0),
+};
 
 export default async function ClientsPage({
   params,
@@ -30,6 +37,8 @@ export default async function ClientsPage({
   const { orgSlug } = await params;
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
+  const seeMoney = canSeeMoney(ctx.permissions);
+  const canCollect = ctx.canWrite && seeMoney;
   const q = typeof query.q === "string" ? query.q : "";
   const filter = typeof query.filter === "string" ? query.filter : "";
   const kind = typeof query.kind === "string" ? query.kind : "";
@@ -37,9 +46,15 @@ export default async function ClientsPage({
   const page = Math.max(1, Number(query.page) || 1);
 
   const [rows, board, finance] = await Promise.all([
-    listClientsWithOutstanding(orgSlug, q),
+    seeMoney
+      ? listClientsWithOutstanding(orgSlug, q)
+      : listClients(orgSlug, q).then((clients) =>
+          clients.map((client) => ({ client, snapshot: zeroSnapshot })),
+        ),
     listProjectBoard(orgSlug),
-    loadOrgFinance(orgSlug),
+    seeMoney && view === "cards"
+      ? loadOrgFinance(orgSlug)
+      : Promise.resolve(null as Awaited<ReturnType<typeof loadOrgFinance>> | null),
   ]);
 
   const projectCount = new Map<string, number>();
@@ -49,6 +64,7 @@ export default async function ClientsPage({
 
   const filtered = rows.filter(({ client, snapshot }) => {
     if (kind && client.kind !== kind) return false;
+    if (!seeMoney) return true;
     if (filter === "owing" && snapshot.outstandingMinor <= BigInt(0)) return false;
     if (filter === "settled" && snapshot.outstandingMinor > BigInt(0)) return false;
     return true;
@@ -56,8 +72,12 @@ export default async function ClientsPage({
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const owingCount = rows.filter((r) => r.snapshot.outstandingMinor > BigInt(0)).length;
-  const totalDue = rows.reduce((sum, r) => sum + r.snapshot.outstandingMinor, BigInt(0));
+  const owingCount = seeMoney
+    ? rows.filter((r) => r.snapshot.outstandingMinor > BigInt(0)).length
+    : 0;
+  const totalDue = seeMoney
+    ? rows.reduce((sum, r) => sum + r.snapshot.outstandingMinor, BigInt(0))
+    : BigInt(0);
   const currency = rows[0]?.client.currency ?? ctx.org.defaultCurrency;
   const activeProjects = board.filter(
     (r) => r.project.status === "active" || r.project.status === "planning",
@@ -93,22 +113,27 @@ export default async function ClientsPage({
             page={page}
             pageCount={pageCount}
             total={filtered.length}
+            seeMoney={seeMoney}
           />
           <IndexBody>
             <SummaryStrip>
               <SummaryStat label="Clients" value={String(rows.length)} hint="Who you bill" />
-              <SummaryStat
-                label="Owing"
-                value={String(owingCount)}
-                hint="Open ledger balance"
-                tone={owingCount ? "rose" : "emerald"}
-              />
-              <SummaryStat
-                label="Due total"
-                value={moneyLabel(totalDue, currency)}
-                hint="Across all clients"
-                tone="sky"
-              />
+              {seeMoney ? (
+                <>
+                  <SummaryStat
+                    label="Owing"
+                    value={String(owingCount)}
+                    hint="Open ledger balance"
+                    tone={owingCount ? "rose" : "emerald"}
+                  />
+                  <SummaryStat
+                    label="Due total"
+                    value={moneyLabel(totalDue, currency)}
+                    hint="Across all clients"
+                    tone="sky"
+                  />
+                </>
+              ) : null}
               <SummaryStat
                 label="Projects"
                 value={String(activeProjects)}
@@ -122,22 +147,32 @@ export default async function ClientsPage({
             ) : view === "list" ? (
               <DenseListPanel
                 columns={
-                  <>
-                    <span className="min-w-0 flex-1">Client</span>
-                    <span className="hidden w-24 text-right sm:block">Projects</span>
-                    <span className="w-28 text-right">Due</span>
-                    <span className="w-28 text-right">Next</span>
-                  </>
+                  seeMoney ? (
+                    <>
+                      <span className="min-w-0 flex-1">Client</span>
+                      <span className="hidden w-24 text-right sm:block">Projects</span>
+                      <span className="w-28 text-right">Due</span>
+                      <span className="w-28 text-right">Next</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="min-w-0 flex-1">Client</span>
+                      <span className="hidden w-24 text-right sm:block">Projects</span>
+                      <span className="w-28 text-right">Next</span>
+                    </>
+                  )
                 }
                 footer={
-                  owingCount
-                    ? "Collect from a row, or open a client to see projects and contacts."
-                    : "Everyone is settled — start a project or post the next charge."
+                  seeMoney
+                    ? owingCount
+                      ? "Collect from a row, or open a client to see projects and contacts."
+                      : "Everyone is settled — start a project or post the next charge."
+                    : "Open a client to see projects and contacts."
                 }
               >
                 {visible.map(({ client, snapshot }) => {
                   const projects = projectCount.get(client.id) ?? 0;
-                  const owing = snapshot.outstandingMinor > BigInt(0);
+                  const owing = seeMoney && snapshot.outstandingMinor > BigInt(0);
                   return (
                     <DenseRow key={client.id}>
                       <DenseCell className="min-w-0 flex-1">
@@ -149,13 +184,21 @@ export default async function ClientsPage({
                           <div className="min-w-0">
                             <span className="flex flex-wrap items-center gap-2">
                               <span className="truncate text-sm font-medium">{client.name}</span>
-                              <StatusChip tone={owing ? "overdue" : "paid"}>
-                                {owing ? "Owing" : "Settled"}
-                              </StatusChip>
+                              {seeMoney ? (
+                                <StatusChip tone={owing ? "overdue" : "paid"}>
+                                  {owing ? "Owing" : "Settled"}
+                                </StatusChip>
+                              ) : null}
                             </span>
-                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                              {owing ? "Open on ledger" : "Nothing outstanding"}
-                            </p>
+                            {seeMoney ? (
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                                {owing ? "Open on ledger" : "Nothing outstanding"}
+                              </p>
+                            ) : (
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground capitalize">
+                                {client.kind}
+                              </p>
+                            )}
                           </div>
                         </Link>
                       </DenseCell>
@@ -166,9 +209,11 @@ export default async function ClientsPage({
                       >
                         {projects}
                       </DenseCell>
-                      <DenseCell align="right" width="w-28" className="text-sm font-medium">
-                        {moneyLabel(snapshot.outstandingMinor, client.currency)}
-                      </DenseCell>
+                      {seeMoney ? (
+                        <DenseCell align="right" width="w-28" className="text-sm font-medium">
+                          {moneyLabel(snapshot.outstandingMinor, client.currency)}
+                        </DenseCell>
+                      ) : null}
                       <DenseCell align="right" width="w-28" className="text-xs">
                         <div className="flex flex-col items-end gap-1">
                           <Link
@@ -177,7 +222,7 @@ export default async function ClientsPage({
                           >
                             Projects
                           </Link>
-                          {owing ? (
+                          {owing && canCollect ? (
                             <Link
                               href={`/${orgSlug}/finance?client=${client.id}`}
                               className="font-medium text-foreground underline-offset-2 hover:underline"
@@ -196,9 +241,11 @@ export default async function ClientsPage({
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {visible.map(({ client, snapshot }) => {
                     const projects = projectCount.get(client.id) ?? 0;
-                    const monthDue = dueThisMonthMinor(
-                      finance.charges.filter((c) => c.clientId === client.id),
-                    );
+                    const monthDue = seeMoney
+                      ? dueThisMonthMinor(
+                          (finance?.charges ?? []).filter((c) => c.clientId === client.id),
+                        )
+                      : BigInt(0);
                     return (
                       <SoftCard key={client.id} className="flex gap-4 p-4">
                         <div className="flex min-w-0 flex-1 flex-col gap-3">
@@ -211,45 +258,51 @@ export default async function ClientsPage({
                               </p>
                             </div>
                           </Link>
-                          <MoneyMetaCards
-                            className="grid-cols-2"
-                            items={[
-                              {
-                                label: "Due",
-                                value: moneyLabel(snapshot.outstandingMinor, client.currency),
-                                tone: "sky",
-                              },
-                              {
-                                label: "Month",
-                                value: moneyLabel(monthDue, client.currency),
-                                tone: "amber",
-                              },
-                            ]}
-                          />
-                          {ctx.canWrite && snapshot.outstandingMinor > BigInt(0) ? (
-                            <Button
-                              size="sm"
-                              className="self-start"
-                              nativeButton={false}
-                              render={
-                                <Link href={`/${orgSlug}/finance?client=${client.id}`} />
-                              }
-                            >
-                              Collect
-                            </Button>
+                          {seeMoney ? (
+                            <>
+                              <MoneyMetaCards
+                                className="grid-cols-2"
+                                items={[
+                                  {
+                                    label: "Due",
+                                    value: moneyLabel(snapshot.outstandingMinor, client.currency),
+                                    tone: "sky",
+                                  },
+                                  {
+                                    label: "Month",
+                                    value: moneyLabel(monthDue, client.currency),
+                                    tone: "amber",
+                                  },
+                                ]}
+                              />
+                              {canCollect && snapshot.outstandingMinor > BigInt(0) ? (
+                                <Button
+                                  size="sm"
+                                  className="self-start"
+                                  nativeButton={false}
+                                  render={
+                                    <Link href={`/${orgSlug}/finance?client=${client.id}`} />
+                                  }
+                                >
+                                  Collect
+                                </Button>
+                              ) : null}
+                            </>
                           ) : null}
                         </div>
-                        <MoneyDonutCard
-                          className="hidden shrink-0 self-center sm:block"
-                          collected={Number(snapshot.collectedMinor)}
-                          due={Number(snapshot.outstandingMinor)}
-                          remaining={0}
-                          collectedLabel="Collected"
-                          dueLabel="Due"
-                          remainingLabel="—"
-                          centerValue={moneyLabel(snapshot.outstandingMinor, client.currency)}
-                          centerLabel="Due"
-                        />
+                        {seeMoney ? (
+                          <MoneyDonutCard
+                            className="hidden shrink-0 self-center sm:block"
+                            collected={Number(snapshot.collectedMinor)}
+                            due={Number(snapshot.outstandingMinor)}
+                            remaining={0}
+                            collectedLabel="Collected"
+                            dueLabel="Due"
+                            remainingLabel="—"
+                            centerValue={moneyLabel(snapshot.outstandingMinor, client.currency)}
+                            centerLabel="Due"
+                          />
+                        ) : null}
                       </SoftCard>
                     );
                   })}

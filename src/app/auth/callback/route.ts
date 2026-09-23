@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { syncProfileFromAuthUser } from "@/modules/identity/actions";
 import { createServerSupabaseClient } from "@/shared/db/supabase/server";
 
 function safeNextPath(raw: string | null, origin: string): string {
@@ -30,6 +31,17 @@ export async function GET(request: Request) {
           login.searchParams.set("invite", next.slice("/invite/".length).split("?")[0] ?? "");
         }
         return NextResponse.redirect(login);
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        try {
+          await syncProfileFromAuthUser(user);
+        } catch {
+          // Non-blocking — session still works without profile sync.
+        }
       }
     }
   }

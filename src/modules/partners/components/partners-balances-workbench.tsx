@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Workbench } from "@/components/studio/composer";
 import { AvatarMark, SoftCard } from "@/components/studio/chrome";
@@ -160,8 +161,8 @@ export function PartnersBalancesWorkbench({
               key={row.partnerId}
               className={
                 active
-                  ? "cursor-pointer bg-sky-50/70 ring-1 ring-inset ring-sky-200/80"
-                  : "cursor-pointer"
+                  ? "cursor-pointer bg-muted/60 ring-1 ring-inset ring-lane-blue/30"
+                  : "cursor-pointer hover:bg-muted/40"
               }
             >
               <DenseCell className="min-w-0 flex-1">
@@ -207,6 +208,9 @@ export function PartnersBalancesWorkbench({
                       }).replace(/[^\d.]/g, "")}
                       triggerLabel="Settle"
                       triggerVariant="outline"
+                      triggerSize="icon-sm"
+                      triggerIconOnly
+                      triggerAriaLabel={`Settle ${partner?.name ?? "partner"}`}
                     />
                   ) : (
                     <span className="text-xs text-muted-foreground">—</span>
@@ -237,8 +241,6 @@ export function PartnersBalancesWorkbench({
                   <EditPartnerDialog
                     orgSlug={orgSlug}
                     partner={selectedPartner}
-                    triggerVariant="ghost"
-                    triggerLabel="Edit"
                   />
                 ) : null}
               </div>
@@ -280,6 +282,7 @@ export function PartnersBalancesWorkbench({
                         <RevokeInviteButton
                           orgSlug={orgSlug}
                           invitationId={selectedInvite.id}
+                          iconOnly
                         />
                       </>
                     ) : selectedPartner.email ? (
@@ -295,6 +298,9 @@ export function PartnersBalancesWorkbench({
                         partner={selectedPartner}
                         triggerVariant="default"
                         triggerLabel="Add email"
+                        triggerIconOnly={false}
+                        triggerSize="sm"
+                        triggerIcon={<Pencil className="size-3.5" />}
                       />
                     ) : null}
                   </div>
@@ -337,6 +343,8 @@ export function PartnersBalancesWorkbench({
                         currency: selected.currency,
                       }).replace(/[^\d.]/g, "")}
                       triggerLabel="Settle balance"
+                      triggerVariant="default"
+                      triggerSize="sm"
                     />
                   </div>
                 ) : null}

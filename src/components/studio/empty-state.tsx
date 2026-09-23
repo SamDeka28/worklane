@@ -25,16 +25,25 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "rounded-[1.75rem] bg-muted/35 px-6 py-8 ring-1 ring-border/30",
+        "rounded-2xl bg-muted/40 px-6 py-10 ring-1 ring-foreground/6 dark:ring-white/8",
         fill && "flex min-h-0 flex-1 flex-col items-center justify-center text-center",
         className,
       )}
     >
-      <p className="text-base font-semibold tracking-tight">{title}</p>
+      <div
+        className={cn(
+          "mb-4 size-12 rounded-2xl bg-card shadow-soft ring-1 ring-foreground/8 dark:ring-white/10",
+          fill && "mx-auto",
+        )}
+        aria-hidden
+      >
+        <div className="lane-gradient size-full rounded-2xl opacity-90" />
+      </div>
+      <p className="text-xl font-bold tracking-tight">{title}</p>
       {body ? (
         <p
           className={cn(
-            "mt-1.5 max-w-md text-sm leading-relaxed text-muted-foreground",
+            "mt-2 max-w-md text-[15px] leading-relaxed text-muted-foreground",
             fill && "mx-auto",
           )}
         >

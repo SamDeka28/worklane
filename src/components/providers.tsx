@@ -20,7 +20,13 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" forcedTheme="light" enableSystem={false}>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="dark"
+      forcedTheme="dark"
+      enableSystem={false}
+      disableTransitionOnChange
+    >
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delay={200}>
           {children}

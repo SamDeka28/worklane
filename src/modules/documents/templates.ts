@@ -216,7 +216,7 @@ export function buildBasicDocumentTemplate(input: {
           bold: true,
           color: NAVY,
           size: "11px",
-          font: "var(--font-source-sans), ui-sans-serif, system-ui, sans-serif",
+          font: "var(--font-plus-jakarta), ui-sans-serif, system-ui, sans-serif",
         }),
       ),
       heading(1, title),

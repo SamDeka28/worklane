@@ -1,5 +1,18 @@
-import Link from "next/link";
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useMemo } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { cn } from "@/lib/utils";
+import { Stat } from "@/components/studio/chrome";
 
 export type MoneySlice = {
   label: string;
@@ -65,78 +78,196 @@ export function MoneyRing({
   );
 }
 
+type ProjectMoneyRow = {
+  id: string;
+  label: string;
+  href?: string;
+  meta?: string;
+  /** Amount in minor units (cents). */
+  collected: number;
+  due: number;
+  remaining: number;
+  collectedLabel?: string;
+  dueLabel?: string;
+  remainingLabel?: string;
+};
+
+const SERIES = [
+  { key: "collected" as const, label: "Collected", color: "#34d399", dot: "bg-emerald-400" },
+  { key: "due" as const, label: "Due", color: "#38bdf8", dot: "bg-sky-400" },
+  { key: "remaining" as const, label: "Unbilled", color: "#fbbf24", dot: "bg-amber-400" },
+];
+
+type ChartDatum = {
+  id: string;
+  name: string;
+  href?: string;
+  collected: number;
+  due: number;
+  remaining: number;
+  collectedLabel: string;
+  dueLabel: string;
+  remainingLabel: string;
+};
+
+function ProjectMoneyTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: ChartDatum }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+
+  return (
+    <div className="min-w-44 rounded-xl bg-card px-3 py-2.5 text-xs shadow-lift ring-1 ring-border/60">
+      <p className="mb-2 truncate font-medium text-foreground">{row.name}</p>
+      <ul className="space-y-1.5">
+        {SERIES.map((s) => (
+          <li key={s.key} className="flex items-center justify-between gap-4">
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <span className={cn("size-2 rounded-full", s.dot)} />
+              {s.label}
+            </span>
+            <span className="tabular-nums font-medium text-foreground">
+              {row[`${s.key}Label`]}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Recharts grouped bars — collected / due / unbilled per project. */
+export function ProjectMoneyCurves({
+  rows,
+  className,
+}: {
+  rows: ProjectMoneyRow[];
+  className?: string;
+}) {
+  const router = useRouter();
+
+  const data = useMemo<ChartDatum[]>(
+    () =>
+      rows.map((row) => ({
+        id: row.id,
+        name: row.label,
+        href: row.href,
+        // Chart in major units so the axis reads as money, not cents.
+        collected: Math.max(0, row.collected) / 100,
+        due: Math.max(0, row.due) / 100,
+        remaining: Math.max(0, row.remaining) / 100,
+        collectedLabel: row.collectedLabel ?? formatMajor(row.collected / 100),
+        dueLabel: row.dueLabel ?? row.meta ?? formatMajor(row.due / 100),
+        remainingLabel: row.remainingLabel ?? formatMajor(row.remaining / 100),
+      })),
+    [rows],
+  );
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className={cn("w-full", className)}>
+      <div className="mb-3 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+        {SERIES.map((s) => (
+          <span key={s.key} className="inline-flex items-center gap-1.5">
+            <span className={cn("size-2 rounded-full", s.dot)} />
+            {s.label}
+          </span>
+        ))}
+      </div>
+
+      <div className="h-56 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={data}
+            margin={{ top: 8, right: 8, left: 0, bottom: 4 }}
+            barCategoryGap="28%"
+            barGap={4}
+          >
+            <CartesianGrid
+              vertical={false}
+              stroke="currentColor"
+              className="text-border/50"
+              strokeDasharray="4 6"
+            />
+            <XAxis
+              dataKey="name"
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: "currentColor", fontSize: 11 }}
+              className="text-muted-foreground"
+              interval={0}
+              tickFormatter={(value: string) =>
+                value.length > 12 ? `${value.slice(0, 10)}…` : value
+              }
+            />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              width={44}
+              tick={{ fill: "currentColor", fontSize: 11 }}
+              className="text-muted-foreground"
+              tickFormatter={(value: number) => formatAxisMoney(value)}
+            />
+            <Tooltip
+              cursor={{ fill: "currentColor", className: "text-muted/40", opacity: 0.35 }}
+              content={<ProjectMoneyTooltip />}
+              wrapperStyle={{ outline: "none", zIndex: 40 }}
+            />
+            {SERIES.map((s) => (
+              <Bar
+                key={s.key}
+                dataKey={s.key}
+                name={s.label}
+                fill={s.color}
+                radius={[6, 6, 2, 2]}
+                maxBarSize={28}
+                cursor="pointer"
+                onClick={(entry) => {
+                  const payload = entry as { payload?: ChartDatum; href?: string };
+                  const href = payload.payload?.href ?? payload.href;
+                  if (href) router.push(href);
+                }}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function formatMajor(value: number) {
+  if (!Number.isFinite(value)) return "—";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatAxisMoney(value: number) {
+  if (!Number.isFinite(value) || value === 0) return "$0";
+  if (Math.abs(value) >= 1000) {
+    return `$${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}k`;
+  }
+  return `$${Math.round(value)}`;
+}
+
+/** @deprecated Prefer ProjectMoneyCurves. */
 export function HorizonBars({
   rows,
   className,
 }: {
-  rows: {
-    id: string;
-    label: string;
-    href?: string;
-    meta?: string;
-    collected: number;
-    due: number;
-    remaining: number;
-  }[];
+  rows: ProjectMoneyRow[];
   className?: string;
 }) {
-  const max = Math.max(
-    1,
-    ...rows.map(
-      (row) => Math.max(0, row.collected) + Math.max(0, row.due) + Math.max(0, row.remaining),
-    ),
-  );
-
-  return (
-    <ul className={cn("flex flex-col gap-5", className)}>
-      {rows.map((row) => {
-        const total =
-          Math.max(0, row.collected) + Math.max(0, row.due) + Math.max(0, row.remaining);
-        const width = `${Math.round((total / max) * 100)}%`;
-        const collectedPct = total > 0 ? (Math.max(0, row.collected) / total) * 100 : 0;
-        const duePct = total > 0 ? (Math.max(0, row.due) / total) * 100 : 0;
-        const remainingPct = total > 0 ? (Math.max(0, row.remaining) / total) * 100 : 0;
-        const title = (
-          <div className="mb-2 flex items-baseline justify-between gap-2">
-            <span className="truncate text-sm font-medium tracking-tight">{row.label}</span>
-            {row.meta ? (
-              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{row.meta}</span>
-            ) : null}
-          </div>
-        );
-        return (
-          <li key={row.id} className="group">
-            {row.href ? (
-              <Link href={row.href} className="block transition-opacity hover:opacity-90">
-                {title}
-              </Link>
-            ) : (
-              title
-            )}
-            <div className="h-3 w-full overflow-hidden rounded-full bg-muted/80">
-              <div
-                className="flex h-full overflow-hidden rounded-full transition-[width] duration-500 ease-out"
-                style={{ width }}
-              >
-                <span
-                  className="h-full bg-emerald-400 transition-[width] duration-500"
-                  style={{ width: `${collectedPct}%` }}
-                />
-                <span
-                  className="h-full bg-sky-400 transition-[width] duration-500"
-                  style={{ width: `${duePct}%` }}
-                />
-                <span
-                  className="h-full bg-amber-300/90 transition-[width] duration-500"
-                  style={{ width: `${remainingPct}%` }}
-                />
-              </div>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
+  return <ProjectMoneyCurves rows={rows} className={className} />;
 }
 
 /** Vertical stacks of dots — inspired by soft analytics dashboards. */
@@ -163,10 +294,10 @@ export function DotStackChart({
         return (
           <li
             key={row.id}
-            className="group flex min-w-0 flex-1 flex-col items-center gap-2"
+            className="group relative flex min-w-0 flex-1 flex-col items-center gap-2"
             title={row.meta ?? row.label}
           >
-            <span className="text-[10px] tabular-nums text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+            <span className="pointer-events-none absolute -top-1 z-10 -translate-y-full rounded-lg bg-card px-2 py-1 text-[10px] tabular-nums text-foreground opacity-0 shadow-lift ring-1 ring-border/50 transition-opacity group-hover:opacity-100">
               {row.meta ?? (row.value > 0 ? String(row.value) : "—")}
             </span>
             <div className="flex flex-col-reverse items-center gap-1.5">
@@ -246,62 +377,15 @@ export function SoftStatCard({
   fill?: number;
   badge?: string;
 }) {
-  const well = {
-    slate: "from-white to-slate-50/80",
-    sky: "from-white to-sky-50/90",
-    emerald: "from-white to-emerald-50/90",
-    violet: "from-white to-violet-50/80",
-    amber: "from-white to-amber-50/90",
-  }[tone];
-  const bar = {
-    slate: "bg-slate-400",
-    sky: "bg-sky-400",
-    emerald: "bg-emerald-400",
-    violet: "bg-violet-400",
-    amber: "bg-amber-400",
-  }[tone];
-  const badgeTone = {
-    slate: "bg-slate-100 text-slate-700",
-    sky: "bg-sky-100 text-sky-700",
-    emerald: "bg-emerald-100 text-emerald-700",
-    violet: "bg-violet-100 text-violet-700",
-    amber: "bg-amber-100 text-amber-800",
-  }[tone];
-  const width =
-    fill == null ? undefined : `${Math.round(Math.min(1, Math.max(0.06, fill)) * 100)}%`;
-
   return (
-    <div
-      className={cn(
-        "lane-surface lane-surface-hover h-full bg-linear-to-br p-5",
-        well,
-      )}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        {badge ? (
-          <span
-            className={cn(
-              "rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums",
-              badgeTone,
-            )}
-          >
-            {badge}
-          </span>
-        ) : null}
-      </div>
-      <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums sm:text-[1.75rem]">
-        {value}
-      </p>
-      {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
-      {width ? (
-        <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted/70">
-          <div
-            className={cn("h-full rounded-full transition-[width] duration-700 ease-out", bar)}
-            style={{ width }}
-          />
-        </div>
-      ) : null}
-    </div>
+    <Stat
+      label={label}
+      value={value}
+      hint={hint}
+      tone={tone}
+      fill={fill}
+      badge={badge}
+      variant="tile"
+    />
   );
 }

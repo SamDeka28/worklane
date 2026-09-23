@@ -1,13 +1,13 @@
 "use client";
 
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { cn } from "@/lib/utils";
 
+/** Hex kept for callers that still pass `color`; rendering prefers key → Tailwind. */
 export const MONEY_COLORS = {
   collected: "#34d399",
   due: "#38bdf8",
-  remaining: "#c4b5fd",
-  muted: "#e2e8f0",
+  remaining: "#8b7cf8",
+  muted: "#94a3b8",
 } as const;
 
 export type DonutSlice = {
@@ -17,29 +17,37 @@ export type DonutSlice = {
   color: string;
 };
 
-function DonutTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: Array<{ name?: string; value?: number; payload?: DonutSlice & { fill?: string } }>;
-}) {
-  if (!active || !payload?.length) return null;
-  const row = payload[0];
-  const slice = row.payload;
-  return (
-    <div className="rounded-2xl bg-card px-3 py-2 text-xs shadow-soft ring-1 ring-border/50">
-      <span className="inline-flex items-center gap-2">
-        <span
-          className="size-2 shrink-0 rounded-full"
-          style={{ background: slice?.color ?? slice?.fill }}
-        />
-        <span className="font-medium">{slice?.label ?? row.name}</span>
-      </span>
-    </div>
-  );
+function toNumber(value: number | bigint | string | null | undefined): number {
+  if (value == null) return 0;
+  if (typeof value === "bigint") return Number(value);
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
 }
 
+const SLICE_TONE: Record<string, { swatch: string; stroke: string }> = {
+  collected: { swatch: "bg-emerald-400", stroke: "stroke-emerald-400" },
+  due: { swatch: "bg-sky-400", stroke: "stroke-sky-400" },
+  remaining: { swatch: "bg-violet-400", stroke: "stroke-violet-400" },
+  unbilled: { swatch: "bg-violet-400", stroke: "stroke-violet-400" },
+  muted: { swatch: "bg-slate-400", stroke: "stroke-slate-400" },
+  empty: { swatch: "bg-slate-400", stroke: "stroke-slate-400" },
+};
+
+const FALLBACK_TONES = [
+  { swatch: "bg-emerald-400", stroke: "stroke-emerald-400" },
+  { swatch: "bg-sky-400", stroke: "stroke-sky-400" },
+  { swatch: "bg-violet-400", stroke: "stroke-violet-400" },
+  { swatch: "bg-amber-400", stroke: "stroke-amber-400" },
+] as const;
+
+function toneFor(key: string, index: number) {
+  return SLICE_TONE[key] ?? FALLBACK_TONES[index % FALLBACK_TONES.length];
+}
+
+/**
+ * Multicolor donut via SVG stroke arcs + Tailwind colors
+ * (avoids Recharts Cell no-op and fragile conic-gradient inline fills).
+ */
 export function MoneyDonut({
   slices,
   centerLabel,
@@ -55,15 +63,33 @@ export function MoneyDonut({
   showLegend?: boolean;
   className?: string;
 }) {
-  const positive = slices.filter((slice) => slice.value > 0);
-  const data =
+  const normalized = slices.map((slice) => ({
+    ...slice,
+    value: Math.max(0, toNumber(slice.value)),
+  }));
+  const positive = normalized.filter((slice) => slice.value > 0);
+  const paint =
     positive.length > 0
-      ? positive.map((slice) => ({ ...slice, fill: slice.color }))
-      : [{ key: "empty", label: "None", value: 1, color: MONEY_COLORS.muted, fill: MONEY_COLORS.muted }];
+      ? positive
+      : [{ key: "empty", label: "None", value: 1, color: MONEY_COLORS.muted }];
+
+  const total = paint.reduce((sum, slice) => sum + slice.value, 0);
   const dim = size === "sm" ? 96 : size === "lg" ? 200 : 136;
-  const inner = size === "sm" ? "64%" : size === "lg" ? "56%" : "58%";
-  const outer = size === "sm" ? "92%" : size === "lg" ? "90%" : "86%";
-  const corner = size === "sm" ? 6 : size === "lg" ? 14 : 9;
+  const stroke = size === "sm" ? 12 : size === "lg" ? 22 : 16;
+  const view = 120;
+  const radius = (view - stroke) / 2 - 2;
+  const circumference = 2 * Math.PI * radius;
+  const gap = paint.length > 1 ? circumference * 0.02 : 0;
+  const usable = Math.max(0, circumference - gap * paint.length);
+
+  let cursor = 0;
+  const arcs = paint.map((slice, index) => {
+    const length = (slice.value / total) * usable;
+    const tone = toneFor(slice.key, index);
+    const dashoffset = -cursor;
+    cursor += length + gap;
+    return { ...slice, length, dashoffset, tone };
+  });
 
   return (
     <div
@@ -73,44 +99,50 @@ export function MoneyDonut({
         className,
       )}
     >
-      <div className="relative z-0 shrink-0" style={{ width: dim, height: dim }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="value"
-              nameKey="label"
-              cx="50%"
-              cy="50%"
-              innerRadius={inner}
-              outerRadius={outer}
-              paddingAngle={positive.length > 1 ? 3 : 0}
-              cornerRadius={corner}
-              stroke="none"
-              isAnimationActive={false}
-            >
-              {data.map((slice) => (
-                <Cell
-                  key={slice.key}
-                  fill={slice.fill}
-                  stroke="none"
-                  style={{ fill: slice.fill, outline: "none" }}
-                />
-              ))}
-            </Pie>
-            <Tooltip
-              content={<DonutTooltip />}
-              allowEscapeViewBox={{ x: true, y: true }}
-              wrapperStyle={{ zIndex: 60, outline: "none" }}
+      <div
+        className="relative shrink-0"
+        style={{ width: dim, height: dim }}
+        role="img"
+        aria-label={
+          centerValue
+            ? `${centerLabel ?? "Total"} ${centerValue}`
+            : (centerLabel ?? "Money mix")
+        }
+      >
+        <svg
+          viewBox={`0 0 ${view} ${view}`}
+          className="size-full -rotate-90"
+          aria-hidden
+        >
+          <circle
+            cx={view / 2}
+            cy={view / 2}
+            r={radius}
+            fill="none"
+            className="stroke-muted/60"
+            strokeWidth={stroke}
+          />
+          {arcs.map((arc) => (
+            <circle
+              key={arc.key}
+              cx={view / 2}
+              cy={view / 2}
+              r={radius}
+              fill="none"
+              className={cn(arc.tone.stroke, "transition-[stroke-dasharray] duration-500")}
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={`${arc.length} ${circumference}`}
+              strokeDashoffset={arc.dashoffset}
             />
-          </PieChart>
-        </ResponsiveContainer>
+          ))}
+        </svg>
         {(centerValue || centerLabel) && (
-          <div className="pointer-events-none absolute inset-[22%] z-0 flex flex-col items-center justify-center rounded-full bg-card text-center">
+          <div className="pointer-events-none absolute inset-[28%] flex flex-col items-center justify-center rounded-full bg-card text-center shadow-soft ring-1 ring-border/40">
             {centerValue ? (
               <p
                 className={cn(
-                  "font-semibold tabular-nums tracking-tight text-foreground",
+                  "px-1 font-semibold tabular-nums tracking-tight text-foreground",
                   size === "sm" ? "text-[11px]" : size === "lg" ? "text-sm" : "text-xs",
                 )}
               >
@@ -125,15 +157,21 @@ export function MoneyDonut({
       </div>
       {showLegend ? (
         <ul className="min-w-0 flex-1 space-y-2.5 text-xs">
-          {slices.map((slice) => (
-            <li key={slice.key} className="flex items-start gap-2.5">
-              <span
-                className="mt-1 size-2.5 shrink-0 rounded-full"
-                style={{ background: slice.color }}
-              />
-              <span className="min-w-0 leading-snug text-muted-foreground">{slice.label}</span>
-            </li>
-          ))}
+          {normalized.map((slice, index) => {
+            const tone = toneFor(slice.key, index);
+            return (
+              <li key={slice.key} className="flex items-start gap-2.5">
+                <span
+                  className={cn(
+                    "mt-1 size-2.5 shrink-0 rounded-full ring-1 ring-black/10 dark:ring-white/20",
+                    tone.swatch,
+                  )}
+                  aria-hidden
+                />
+                <span className="min-w-0 leading-snug text-muted-foreground">{slice.label}</span>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </div>
@@ -168,7 +206,7 @@ export function MoneyDonutCard({
     {
       key: "collected",
       label: collectedLabel,
-      value: Math.max(0, collected),
+      value: Math.max(0, toNumber(collected)),
       color: MONEY_COLORS.collected,
     },
   ];
@@ -176,7 +214,7 @@ export function MoneyDonutCard({
     slices.push({
       key: "due",
       label: dueLabel,
-      value: Math.max(0, due),
+      value: Math.max(0, toNumber(due)),
       color: MONEY_COLORS.due,
     });
   }
@@ -184,7 +222,7 @@ export function MoneyDonutCard({
     slices.push({
       key: "remaining",
       label: remainingLabel,
-      value: Math.max(0, remaining),
+      value: Math.max(0, toNumber(remaining)),
       color: MONEY_COLORS.remaining,
     });
   }
@@ -209,11 +247,11 @@ export function MoneyMetaCards({
   className?: string;
 }) {
   const toneClass = {
-    slate: "bg-slate-50 text-foreground",
-    sky: "bg-sky-50 text-sky-950",
-    emerald: "bg-emerald-50 text-emerald-950",
-    violet: "bg-violet-50 text-violet-950",
-    amber: "bg-amber-50 text-amber-950",
+    slate: "bg-muted text-foreground",
+    sky: "bg-status-due text-status-due-fg",
+    emerald: "bg-status-paid text-status-paid-fg",
+    violet: "bg-status-planning text-status-planning-fg",
+    amber: "bg-status-hold text-status-hold-fg",
   } as const;
 
   return (

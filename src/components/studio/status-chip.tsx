@@ -3,18 +3,19 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 const PILL: Record<string, string> = {
-  due: "bg-sky-100 text-sky-700",
-  partial: "bg-violet-100 text-violet-700",
-  overdue: "bg-rose-100 text-rose-700",
-  paid: "bg-emerald-100 text-emerald-700",
-  cancelled: "bg-muted text-muted-foreground",
-  active: "bg-emerald-100 text-emerald-700",
-  planning: "bg-violet-100 text-violet-700",
-  on_hold: "bg-amber-100 text-amber-800",
-  completed: "bg-sky-100 text-sky-700",
-  hourly: "bg-sky-100 text-sky-700",
+  due: "status-due",
+  partial: "status-partial",
+  overdue: "status-overdue",
+  paid: "status-paid",
+  cancelled: "status-cancelled",
+  active: "status-active",
+  planning: "status-planning",
+  on_hold: "status-hold",
+  completed: "status-due",
+  hourly: "status-due",
 };
 
+/** Status badge — one accent signal. Keep short labels. */
 export function StatusChip({
   tone = "due",
   children,
@@ -25,7 +26,7 @@ export function StatusChip({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold tracking-wide",
         PILL[tone] ?? PILL.due,
       )}
     >

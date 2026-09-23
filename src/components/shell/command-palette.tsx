@@ -57,6 +57,24 @@ export function CommandPalette({
     };
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const routes = [
+      base,
+      `${base}/crm`,
+      `${base}/clients`,
+      `${base}/projects`,
+      `${base}/board`,
+      `${base}/documents`,
+      `${base}/team`,
+      `${base}/finance`,
+      `${base}/partners`,
+      `${base}/settings`,
+      `${base}/profile`,
+    ];
+    for (const href of routes) router.prefetch(href);
+  }, [open, base, router]);
+
   const go = (href: string) => {
     setOpen(false);
     router.push(href);

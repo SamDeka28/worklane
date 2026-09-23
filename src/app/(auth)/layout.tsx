@@ -28,7 +28,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         />
         <div className="absolute inset-0 bg-linear-to-t from-[#070A16] via-[#070A16]/25 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-12">
-          <p className="font-heading max-w-md text-4xl leading-tight tracking-tight text-white">
+          <p className="font-display max-w-md text-4xl leading-tight tracking-tight text-white">
             From first conversation to final payment.
           </p>
           <p className="mt-4 max-w-md text-sm leading-6 text-white/75">

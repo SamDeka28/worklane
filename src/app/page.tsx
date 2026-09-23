@@ -23,7 +23,7 @@ export default function HomePage() {
         <p className="text-xs font-medium tracking-[0.16em] text-muted-foreground uppercase">
           Studio operating system
         </p>
-        <h1 className="font-heading mt-4 max-w-2xl text-4xl leading-[1.1] tracking-tight md:text-6xl">
+        <h1 className="font-display mt-4 max-w-2xl text-4xl leading-[1.1] tracking-tight md:text-6xl">
           From first conversation to final payment.
         </h1>
         <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground">

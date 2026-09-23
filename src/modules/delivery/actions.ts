@@ -14,10 +14,12 @@ import {
   BILLING_MODES,
   MILESTONE_STATUSES,
   PROJECT_STATUSES,
+  TASK_KINDS,
   TASK_PRIORITIES,
   TASK_STATUSES,
   type BillingMode,
   type MilestoneStatus,
+  type TaskKind,
   type TaskPriority,
   type TaskStatus,
 } from "@/modules/delivery/types";
@@ -55,6 +57,34 @@ function parseEnum<T extends string>(
   fallback: T,
 ): T {
   return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
+}
+
+function normalizeTaskLabels(raw: FormDataEntryValue | null): string[] {
+  const text = String(raw ?? "").trim();
+  if (!text) return [];
+  let parts: string[] = [];
+  if (text.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      if (Array.isArray(parsed)) parts = parsed.map((item) => String(item ?? ""));
+    } catch {
+      parts = text.split(/[,|\n]/);
+    }
+  } else {
+    parts = text.split(/[,|\n]/);
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of parts) {
+    const label = part.trim().replace(/\s+/g, " ").slice(0, 24);
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(label);
+    if (out.length >= 12) break;
+  }
+  return out;
 }
 
 async function loadProjectRow(
@@ -1196,23 +1226,47 @@ export async function postContractedChargeAction(orgSlug: string, projectId: str
   return { ok: true as const };
 }
 
-async function resolveProjectAssignee(
+async function resolveProjectAssignees(
   ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
   projectId: string,
   formData: FormData,
 ) {
-  const assigneeUserId = String(formData.get("assignee_user_id") ?? "").trim() || null;
-  if (!assigneeUserId) return { assigneeUserId: null as string | null };
-  const { data: membership, error } = await ctx.supabase
+  const raw = String(formData.get("assignee_user_ids") ?? formData.get("assignee_user_id") ?? "").trim();
+  let ids: string[] = [];
+  if (!raw) {
+    return { assigneeUserIds: [] as string[], assigneeUserId: null as string | null };
+  }
+  if (raw.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) ids = parsed.map((item) => String(item ?? "").trim()).filter(Boolean);
+    } catch {
+      ids = raw.split(",").map((item) => item.trim()).filter(Boolean);
+    }
+  } else {
+    ids = raw.split(",").map((item) => item.trim()).filter(Boolean);
+  }
+  ids = [...new Set(ids)].slice(0, 8);
+  if (ids.length === 0) {
+    return { assigneeUserIds: [] as string[], assigneeUserId: null as string | null };
+  }
+
+  const { data: members, error } = await ctx.supabase
     .from("project_members")
-    .select("id")
+    .select("user_id")
     .eq("organization_id", ctx.org.id)
     .eq("project_id", projectId)
-    .eq("user_id", assigneeUserId)
-    .maybeSingle();
+    .in("user_id", ids);
   if (error) return { error: error.message };
-  if (!membership) return { error: "Assignee must be a project member" };
-  return { assigneeUserId };
+  const allowed = new Set((members ?? []).map((row) => row.user_id as string));
+  const assigneeUserIds = ids.filter((id) => allowed.has(id));
+  if (assigneeUserIds.length !== ids.length) {
+    return { error: "Assignees must be project members" };
+  }
+  return {
+    assigneeUserIds,
+    assigneeUserId: assigneeUserIds[0] ?? null,
+  };
 }
 
 export async function createTaskAction(
@@ -1226,15 +1280,30 @@ export async function createTaskAction(
 
   const title = String(formData.get("title") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
+  let descriptionDoc: unknown = null;
+  const descriptionDocRaw = String(formData.get("description_doc") ?? "").trim();
+  if (descriptionDocRaw) {
+    try {
+      descriptionDoc = JSON.parse(descriptionDocRaw);
+    } catch {
+      return { error: "Invalid description document" };
+    }
+  }
   const priority = parseEnum(
     String(formData.get("priority") ?? "medium"),
     TASK_PRIORITIES,
     "medium",
   ) satisfies TaskPriority;
+  const kind = parseEnum(
+    String(formData.get("kind") ?? "task"),
+    TASK_KINDS,
+    "task",
+  ) satisfies TaskKind;
+  const labels = normalizeTaskLabels(formData.get("labels"));
   const dueOn = String(formData.get("due_on") ?? "").trim() || null;
   const milestoneId = String(formData.get("milestone_id") ?? "").trim() || null;
   const columnId = String(formData.get("column_id") ?? "").trim() || null;
-  const assignee = await resolveProjectAssignee(ctx, projectId, formData);
+  const assignee = await resolveProjectAssignees(ctx, projectId, formData);
   if ("error" in assignee && assignee.error) return { error: assignee.error };
 
   if (!title) return { error: "Task title is required" };
@@ -1246,8 +1315,14 @@ export async function createTaskAction(
     .eq("project_id", projectId)
     .order("position");
 
+  const statusHint = String(formData.get("status") ?? "").trim();
   const column =
-    (columnId ? columns?.find((row) => row.id === columnId) : null) ?? columns?.[0] ?? null;
+    (columnId ? columns?.find((row) => row.id === columnId) : null) ??
+    (statusHint === "todo" || statusHint === "doing" || statusHint === "done"
+      ? columns?.find((row) => row.system_key === statusHint)
+      : null) ??
+    columns?.[0] ??
+    null;
   if (!column) return { error: "Add a board column first" };
 
   const { data: last } = await ctx.supabase
@@ -1268,9 +1343,13 @@ export async function createTaskAction(
       column_id: column.id,
       title,
       description,
+      description_doc: descriptionDoc,
       priority,
+      kind,
+      labels,
       due_on: dueOn,
       assignee_user_id: assignee.assigneeUserId,
+      assignee_user_ids: assignee.assigneeUserIds,
       status: statusForColumn(
         column.system_key === "todo" || column.system_key === "doing" || column.system_key === "done"
           ? column.system_key
@@ -1285,6 +1364,7 @@ export async function createTaskAction(
 
   await recordActivity(ctx, "tasked", "project", projectId, { title });
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  revalidatePath(`/${orgSlug}/board`);
   return { id: data.id as string, title, ok: true as const };
 }
 
@@ -1296,18 +1376,48 @@ export async function updateTaskStatusAction(
   const ctx = await requireWritableOrg(orgSlug);
   if (!TASK_STATUSES.includes(status)) return { error: "Unknown task status" };
 
-  const { data: task, error } = await ctx.supabase
+  const { data: task } = await ctx.supabase
     .from("tasks")
-    .update({ status })
+    .select("id, project_id")
     .eq("id", taskId)
     .eq("organization_id", ctx.org.id)
-    .select("project_id")
     .maybeSingle();
-
-  if (error) return { error: error.message };
   if (!task) return { error: "Task not found" };
 
+  const { data: column } = await ctx.supabase
+    .from("project_columns")
+    .select("id")
+    .eq("organization_id", ctx.org.id)
+    .eq("project_id", task.project_id)
+    .eq("system_key", status)
+    .maybeSingle();
+
+  const { data: last } = column
+    ? await ctx.supabase
+        .from("tasks")
+        .select("position")
+        .eq("organization_id", ctx.org.id)
+        .eq("column_id", column.id)
+        .neq("id", taskId)
+        .order("position", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : { data: null };
+
+  const { error } = await ctx.supabase
+    .from("tasks")
+    .update({
+      status,
+      column_id: column?.id ?? null,
+      position: (last?.position ?? -1) + 1,
+    })
+    .eq("id", taskId)
+    .eq("organization_id", ctx.org.id);
+
+  if (error) return { error: error.message };
+
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
+  revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
 }
 
@@ -1330,6 +1440,7 @@ export async function deleteTaskAction(orgSlug: string, taskId: string) {
 
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
+  revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
 }
 
@@ -1360,9 +1471,15 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
     TASK_PRIORITIES,
     "medium",
   ) satisfies TaskPriority;
+  const kind = parseEnum(
+    String(formData.get("kind") ?? "task"),
+    TASK_KINDS,
+    "task",
+  ) satisfies TaskKind;
+  const labels = normalizeTaskLabels(formData.get("labels"));
   const dueOn = String(formData.get("due_on") ?? "").trim() || null;
   const milestoneId = String(formData.get("milestone_id") ?? "").trim() || null;
-  const assignee = await resolveProjectAssignee(ctx, task.project_id as string, formData);
+  const assignee = await resolveProjectAssignees(ctx, task.project_id as string, formData);
   if ("error" in assignee && assignee.error) return { error: assignee.error };
 
   const { error } = await ctx.supabase
@@ -1372,15 +1489,19 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
       description,
       description_doc: descriptionDoc,
       priority,
+      kind,
+      labels,
       due_on: dueOn,
       milestone_id: milestoneId,
       assignee_user_id: assignee.assigneeUserId,
+      assignee_user_ids: assignee.assigneeUserIds,
     })
     .eq("id", taskId)
     .eq("organization_id", ctx.org.id);
 
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
+  revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
 }
 
@@ -1426,6 +1547,7 @@ export async function moveTaskAction(
   }
 
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
+  revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
 }
 
@@ -1490,6 +1612,7 @@ export async function createColumnAction(orgSlug: string, projectId: string, for
   if (error) return { error: error.message };
 
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
 }
 
@@ -1509,6 +1632,7 @@ export async function renameColumnAction(orgSlug: string, columnId: string, form
   if (!column) return { error: "Column not found" };
 
   revalidatePath(`/${orgSlug}/projects/${column.project_id}`);
+  revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
 }
 
@@ -1545,6 +1669,7 @@ export async function reorderColumnsAction(
   }
 
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
 }
 
@@ -1581,5 +1706,6 @@ export async function deleteColumnAction(orgSlug: string, columnId: string) {
   if (error) return { error: error.message };
 
   revalidatePath(`/${orgSlug}/projects/${column.project_id}`);
+  revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
 }

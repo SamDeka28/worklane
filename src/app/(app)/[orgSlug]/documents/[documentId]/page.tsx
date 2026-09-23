@@ -1,11 +1,5 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  FilterChip,
-  FilterChips,
-  StudioToolbar,
-  WorkSurface,
-} from "@/components/studio/chrome";
+import { WorkSurface } from "@/components/studio/chrome";
 import { listClients, listPrimaryContactsForOrg } from "@/modules/clients/queries";
 import { listMilestones, listProjects, listTasks } from "@/modules/delivery/queries";
 import { DocumentEditor } from "@/modules/documents/components/document-editor";
@@ -52,39 +46,19 @@ export default async function DocumentDetailPage({
   const project = projects.find((p) => p.id === document.projectId);
   const currency = project?.currency ?? ctx.org.defaultCurrency;
 
-  const base = `/${orgSlug}/documents/${documentId}`;
-
   return (
     <WorkSurface>
-      <StudioToolbar
-        title={document.title}
-        className="py-2.5"
-        actions={
-          <Link
-            href={`/${orgSlug}/documents`}
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            All documents
-          </Link>
-        }
-      />
-      <FilterChips className="border-b border-border/40 py-0">
-        {versions.map((row) => (
-          <FilterChip
-            key={row.id}
-            href={`${base}?version=${row.id}`}
-            active={row.id === version.id}
-          >
-            v{row.versionNumber} · {row.status}
-          </FilterChip>
-        ))}
-      </FilterChips>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-2 pt-2 sm:px-4">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <DocumentEditor
             orgSlug={orgSlug}
             document={document}
             version={version}
+            versions={versions.map((row) => ({
+              id: row.id,
+              versionNumber: row.versionNumber,
+              status: row.status,
+            }))}
             canWrite={ctx.canWrite}
             clients={clients.map((c) => {
               const contact = primaryContacts.get(c.id);

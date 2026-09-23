@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   type DragEndEvent,
   DragOverlay,
   PointerSensor,
-  closestCorners,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
@@ -14,7 +14,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { BoardCanvas, BoardCardShell, BoardColumn } from "@/components/studio/board";
+import { BoardCanvas, BoardCardShell, BoardColumn, boardCollisionDetection } from "@/components/studio/board";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { setProjectStatusAction } from "@/modules/delivery/actions";
@@ -33,7 +33,7 @@ const STATUS_LABEL: Record<ProjectStatus, string> = {
 
 type BoardRow = {
   project: ProjectRecord;
-  outstandingMinor: bigint;
+  outstandingMinor?: bigint;
   openTasks: number;
 };
 
@@ -51,15 +51,18 @@ export function ProjectStatusBoard({
   orgSlug,
   rows,
   canWrite,
+  showMoney = true,
 }: {
   orgSlug: string;
   rows: BoardRow[];
   canWrite: boolean;
+  showMoney?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [items, setItems] = useState(() => group(rows));
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [overStatus, setOverStatus] = useState<ProjectStatus | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   useEffect(() => {
@@ -83,6 +86,7 @@ export function ProjectStatusBoard({
     const projectId = String(event.active.id);
     const overId = event.over ? String(event.over.id) : null;
     setActiveId(null);
+    setOverStatus(null);
     if (!overId || !canWrite) return;
 
     const from = statusOf(projectId);
@@ -121,10 +125,24 @@ export function ProjectStatusBoard({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={boardCollisionDetection}
       onDragStart={({ active }) => setActiveId(String(active.id))}
+      onDragOver={({ over }) => {
+        if (!over) {
+          setOverStatus(null);
+          return;
+        }
+        const overId = String(over.id);
+        const next = (BOARD_STATUSES as readonly string[]).includes(overId)
+          ? (overId as ProjectStatus)
+          : statusOf(overId);
+        setOverStatus(next);
+      }}
       onDragEnd={onDragEnd}
-      onDragCancel={() => setActiveId(null)}
+      onDragCancel={() => {
+        setActiveId(null);
+        setOverStatus(null);
+      }}
     >
       <BoardCanvas>
         {BOARD_STATUSES.map((status) => {
@@ -135,6 +153,7 @@ export function ProjectStatusBoard({
               id={status}
               title={STATUS_LABEL[status]}
               count={column.length}
+              isOver={Boolean(activeId) && overStatus === status}
             >
               <SortableContext
                 items={column.map((row) => row.project.id)}
@@ -144,6 +163,7 @@ export function ProjectStatusBoard({
                   <SortableProjectCard
                     key={row.project.id}
                     row={row}
+                    showMoney={showMoney}
                     disabled={!canWrite || pending}
                     onOpen={() => router.push(`/${orgSlug}/projects/${row.project.id}`)}
                   />
@@ -158,26 +178,33 @@ export function ProjectStatusBoard({
           );
         })}
       </BoardCanvas>
-      <DragOverlay>
-        {overlay ? (
-          <BoardCardShell className="w-72 shadow-soft">
-            <p className="truncate text-sm font-medium">{overlay.project.name}</p>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {overlay.project.clientName}
-            </p>
-          </BoardCardShell>
-        ) : null}
-      </DragOverlay>
+      {typeof document !== "undefined"
+        ? createPortal(
+            <DragOverlay dropAnimation={null}>
+              {overlay ? (
+                <BoardCardShell className="w-72 cursor-grabbing shadow-soft">
+                  <p className="truncate text-sm font-medium">{overlay.project.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {overlay.project.clientName}
+                  </p>
+                </BoardCardShell>
+              ) : null}
+            </DragOverlay>,
+            document.body,
+          )
+        : null}
     </DndContext>
   );
 }
 
 function SortableProjectCard({
   row,
+  showMoney,
   disabled,
   onOpen,
 }: {
   row: BoardRow;
+  showMoney: boolean;
   disabled?: boolean;
   onOpen: () => void;
 }) {
@@ -190,9 +217,9 @@ function SortableProjectCard({
     <div
       ref={setNodeRef}
       style={{
-        transform: CSS.Transform.toString(transform),
+        transform: CSS.Translate.toString(transform),
         transition,
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0 : undefined,
       }}
       className={cn(isDragging && "z-10")}
       {...attributes}
@@ -207,9 +234,11 @@ function SortableProjectCard({
           <StatusChip tone={row.project.status === "active" ? "active" : "planning"}>
             {STATUS_LABEL[row.project.status]}
           </StatusChip>
-          <span className="tabular-nums">
-            {moneyLabel(row.outstandingMinor, row.project.currency)} due
-          </span>
+          {showMoney && row.outstandingMinor != null ? (
+            <span className="tabular-nums">
+              {moneyLabel(row.outstandingMinor, row.project.currency)} due
+            </span>
+          ) : null}
           {row.openTasks > 0 ? <span>{row.openTasks} open</span> : null}
         </div>
       </BoardCardShell>

@@ -6,8 +6,8 @@ export type PageMargins = {
 };
 
 export const DEFAULT_PAGE_MARGINS: PageMargins = {
-  top: 48,
-  right: 56,
-  bottom: 48,
-  left: 56,
+  top: 72,
+  right: 80,
+  bottom: 72,
+  left: 80,
 };
