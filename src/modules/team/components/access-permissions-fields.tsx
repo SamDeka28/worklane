@@ -160,7 +160,7 @@ function AccessSegment({
 }) {
   return (
     <div
-      className="inline-flex rounded-lg bg-background/80 p-0.5 ring-1 ring-border/40"
+      className="inline-flex rounded-xl bg-inset p-0.5 ring-1 ring-white/10"
       role="radiogroup"
       aria-label={name}
     >
@@ -174,9 +174,9 @@ function AccessSegment({
             aria-checked={active}
             onClick={() => onChange(option.value)}
             className={cn(
-              "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+              "min-w-[3.25rem] rounded-[0.625rem] px-2.5 py-1.5 text-xs font-semibold tracking-tight transition-[background-color,color,box-shadow]",
               active
-                ? "bg-card text-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
