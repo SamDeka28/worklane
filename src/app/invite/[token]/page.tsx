@@ -1,12 +1,8 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { SoftCard } from "@/components/studio/chrome";
 import { Button } from "@/components/ui/button";
-import { listMyOrgs } from "@/modules/identity/org";
-import {
-  acceptInvitation,
-  getInvitationByToken,
-} from "@/modules/team/invites";
+import { InviteJoinClient } from "@/app/invite/[token]/invite-join-client";
+import { getInvitationByToken } from "@/modules/team/invites";
 import { getSessionUser } from "@/shared/db/require-user";
 
 export default async function InviteAcceptPage({
@@ -65,51 +61,12 @@ export default async function InviteAcceptPage({
     );
   }
 
-  // Already in this studio — skip accept (avoids re-running join + keeps welcome once).
-  const memberships = await listMyOrgs();
-  const existing = memberships.find((row) => row.org.id === invite.organizationId);
-  if (existing) {
-    const qs = invite.acceptedAt ? "" : "?joined=1";
-    if (invite.projectId) {
-      redirect(`/${existing.org.slug}/projects/${invite.projectId}${qs}`);
-    }
-    redirect(`/${existing.org.slug}${qs}`);
-  }
-
-  const result = await acceptInvitation(token);
-  if (result.ok) {
-    const qs = result.alreadyAccepted ? "" : "?joined=1";
-    if (result.projectId) {
-      redirect(`/${result.orgSlug}/projects/${result.projectId}${qs}`);
-    }
-    redirect(`/${result.orgSlug}${qs}`);
-  }
-
+  // Accept + navigate from the client — never mutate/redirect during RSC render.
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-16">
-      <h1 className="font-heading text-2xl font-semibold">Couldn’t accept invite</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{result.error}</p>
-      {result.expectedEmail ? (
-        <p className="mt-2 text-sm">
-          Signed in as {(user.email ?? "").toLowerCase()}. Switch to{" "}
-          <strong>{result.expectedEmail}</strong>.
-        </p>
-      ) : null}
-      <div className="mt-6 flex flex-wrap gap-2">
-        <Button
-          nativeButton={false}
-          render={<Link href={`/login?invite=${encodeURIComponent(token)}`} />}
-        >
-          Switch account
-        </Button>
-        <Button
-          nativeButton={false}
-          render={<Link href={invite.org ? `/${invite.org.slug}` : "/onboarding"} />}
-          variant="outline"
-        >
-          Go to studio
-        </Button>
-      </div>
-    </main>
+    <InviteJoinClient
+      token={token}
+      orgName={invite.org.name}
+      signedInEmail={user.email ?? null}
+    />
   );
 }
