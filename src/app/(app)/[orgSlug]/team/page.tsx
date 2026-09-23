@@ -95,19 +95,30 @@ export default async function TeamPage({
                       key={member.id}
                       className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-sm hover:bg-muted/60"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">
-                          {member.isYou
-                            ? "You"
-                            : member.displayName ||
-                              member.email ||
-                              member.userId.slice(0, 8)}
-                        </p>
-                        {member.email && !member.isYou ? (
-                          <p className="truncate text-xs text-muted-foreground">
-                            {member.email}
+                      <div className="flex min-w-0 items-center gap-3">
+                        <AvatarMark
+                          name={
+                            member.displayName ||
+                            member.email ||
+                            (member.isYou ? "You" : member.userId.slice(0, 8))
+                          }
+                          src={member.avatarUrl}
+                          size="sm"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {member.isYou
+                              ? "You"
+                              : member.displayName ||
+                                member.email ||
+                                member.userId.slice(0, 8)}
                           </p>
-                        ) : null}
+                          {member.email && !member.isYou ? (
+                            <p className="truncate text-xs text-muted-foreground">
+                              {member.email}
+                            </p>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
                         <StatusChip tone="paid">Active</StatusChip>
