@@ -1,14 +1,21 @@
 "use client";
 
-import { Ban } from "lucide-react";
+import { Ban, Check, ChevronDown, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { StatusChip } from "@/components/studio/status-chip";
 import { Field } from "@/components/studio/field";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import {
   inviteOrgMemberAction,
   resendInvitationAction,
@@ -38,6 +45,7 @@ export function InviteMemberForm({
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
     defaultProjectId ? [defaultProjectId] : [],
   );
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const access = useAccessPermissionsState(null, "member");
 
   const effectivePreset =
@@ -45,10 +53,19 @@ export function InviteMemberForm({
   const showProjectRole =
     selectedProjectIds.length > 0 || Boolean(defaultProjectId && projects.length === 0);
 
+  const selectedProjects = useMemo(
+    () => projects.filter((project) => selectedProjectIds.includes(project.id)),
+    [projects, selectedProjectIds],
+  );
+
   function toggleProject(id: string) {
     setSelectedProjectIds((prev) =>
       prev.includes(id) ? prev.filter((pid) => pid !== id) : [...prev, id],
     );
+  }
+
+  function removeProject(id: string) {
+    setSelectedProjectIds((prev) => prev.filter((pid) => pid !== id));
   }
 
   return (
@@ -119,35 +136,98 @@ export function InviteMemberForm({
           <Field
             label="Add to projects"
             htmlFor="invite_projects"
-            hint="Studio access is always included. Select any projects they should join."
+            hint="Studio access is always included. Pick projects from the menu."
           >
-            <div
-              id="invite_projects"
-              className="lane-inset max-h-44 space-y-1 overflow-y-auto rounded-xl p-2"
-            >
-              {projects.map((project) => {
-                const checked = selectedProjectIds.includes(project.id);
-                return (
-                  <label
+            <Popover open={projectMenuOpen} onOpenChange={setProjectMenuOpen}>
+              <PopoverTrigger
+                render={
+                  <button
+                    id="invite_projects"
+                    type="button"
+                    className={cn(
+                      "relative inline-flex h-10 w-full min-w-0 items-center rounded-lg bg-muted/60 px-3 text-left text-sm font-medium tracking-tight ring-1 ring-border/40",
+                      "transition-[box-shadow,background-color,ring-color] hover:bg-muted/80",
+                      "focus-visible:bg-card focus-visible:ring-2 focus-visible:ring-ring/25 focus-visible:outline-none",
+                    )}
+                  />
+                }
+              >
+                <span className="min-w-0 flex-1 truncate pr-8 text-foreground">
+                  {selectedProjectIds.length === 0
+                    ? "Studio only"
+                    : `${selectedProjectIds.length} project${selectedProjectIds.length === 1 ? "" : "s"} selected`}
+                </span>
+                <ChevronDown
+                  aria-hidden
+                  className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
+                />
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-(--anchor-width) min-w-72 p-1.5">
+                <ul className="max-h-56 overflow-y-auto">
+                  <li>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm",
+                        selectedProjectIds.length === 0
+                          ? "bg-primary/12 font-semibold text-primary"
+                          : "text-foreground hover:bg-muted",
+                      )}
+                      onClick={() => setSelectedProjectIds([])}
+                    >
+                      <span className="min-w-0 flex-1 truncate">Studio only</span>
+                      {selectedProjectIds.length === 0 ? (
+                        <Check className="size-3.5 shrink-0" aria-hidden />
+                      ) : null}
+                    </button>
+                  </li>
+                  {projects.map((project) => {
+                    const active = selectedProjectIds.includes(project.id);
+                    return (
+                      <li key={project.id}>
+                        <button
+                          type="button"
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm",
+                            active
+                              ? "bg-primary/12 font-semibold text-primary"
+                              : "text-foreground hover:bg-muted",
+                          )}
+                          onClick={() => toggleProject(project.id)}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                          {active ? (
+                            <Check className="size-3.5 shrink-0" aria-hidden />
+                          ) : null}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </PopoverContent>
+            </Popover>
+
+            {selectedProjects.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {selectedProjects.map((project) => (
+                  <Badge
                     key={project.id}
-                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] hover:bg-background/60"
+                    variant="secondary"
+                    className="h-7 gap-1 rounded-full pr-1 pl-2.5"
                   >
-                    <input
-                      type="checkbox"
-                      className="size-3.5 rounded border-border accent-primary"
-                      checked={checked}
-                      onChange={() => toggleProject(project.id)}
-                    />
-                    <span className="min-w-0 truncate text-foreground">{project.name}</span>
-                  </label>
-                );
-              })}
-            </div>
-            <p className="mt-1.5 text-[11px] text-muted-foreground">
-              {selectedProjectIds.length === 0
-                ? "Studio only — no project membership yet"
-                : `${selectedProjectIds.length} project${selectedProjectIds.length === 1 ? "" : "s"} selected`}
-            </p>
+                    <span className="max-w-40 truncate">{project.name}</span>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${project.name}`}
+                      className="inline-flex size-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground"
+                      onClick={() => removeProject(project.id)}
+                    >
+                      <X className="size-3" aria-hidden />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
           </Field>
           {showProjectRole ? (
             <Field label="Project role" htmlFor="invite_project_role">
