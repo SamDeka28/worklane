@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { SoftCard, StudioToolbar, WorkSurface } from "@/components/studio/chrome";
+import { AvatarMark, SoftCard, StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import { EmptyState } from "@/components/studio/empty-state";
 import { StatusChip } from "@/components/studio/status-chip";
 import { listProjectBoard } from "@/modules/delivery/queries";
