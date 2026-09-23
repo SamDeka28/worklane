@@ -48,6 +48,7 @@ export const RESERVED_ORG_SLUGS = new Set([
   "onboarding",
   "app",
   "portal",
+  "invite",
 ]);
 
 export const DEMO_ORGANIZATION: Organization = {

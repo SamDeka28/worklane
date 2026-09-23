@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { firstOrgPath } from "@/modules/identity/org";
+import { claimPendingInvitationsForUser } from "@/modules/team/actions";
 import { getSessionUser } from "@/shared/db/require-user";
 
 export const metadata = {
@@ -18,6 +19,15 @@ export default async function OnboardingPage({
 
   const query = await searchParams;
   if (query.empty === "1") {
+    const claimed = await claimPendingInvitationsForUser();
+    if (claimed.length > 0) {
+      const first = claimed[0];
+      if (first.projectId) {
+        redirect(`/${first.orgSlug}/projects/${first.projectId}?joined=1`);
+      }
+      redirect(`/${first.orgSlug}?joined=1`);
+    }
+
     return (
       <div className="flex min-h-svh items-center justify-center px-6">
         <div className="max-w-md">

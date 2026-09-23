@@ -149,3 +149,17 @@ export async function removeAvatarAction(orgSlug: string) {
   revalidatePath(`/${orgSlug}/profile`);
   return { ok: true as const };
 }
+
+/** Mark first-join welcome as seen for the current membership. */
+export async function markMemberWelcomedAction(orgSlug: string) {
+  const ctx = await requireOrg(orgSlug);
+  if (!ctx.needsWelcome) return { ok: true as const };
+
+  const { error } = await ctx.supabase.rpc("mark_member_welcomed", {
+    p_organization_id: ctx.org.id,
+  });
+  if (error) return { error: error.message };
+
+  revalidatePath(`/${orgSlug}`);
+  return { ok: true as const };
+}

@@ -423,34 +423,14 @@ export async function getInvitationByToken(token: string) {
   };
 }
 
-export async function acceptInvitationAction(token: string) {
-  const { requireUser } = await import("@/shared/db/require-user");
-  const { user } = await requireUser();
-  const admin = createAdminSupabaseClient();
-  if (!admin) return { error: "Server admin is not configured" };
+type InvitationRow = NonNullable<Awaited<ReturnType<typeof getInvitationByToken>>>;
 
-  const invite = await getInvitationByToken(token);
-  if (!invite || !invite.org) return { error: "Invite not found" };
-  if (invite.acceptedAt) {
-    return {
-      ok: true as const,
-      alreadyAccepted: true as const,
-      orgSlug: invite.org.slug,
-      orgName: invite.org.name,
-      projectId: invite.projectId,
-    };
-  }
-  if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
-    return { error: "Invite expired" };
-  }
-
+async function fulfillInvitation(
+  admin: NonNullable<ReturnType<typeof createAdminSupabaseClient>>,
+  invite: InvitationRow,
+  user: { id: string; email?: string | null; user_metadata?: Record<string, unknown> },
+) {
   const userEmail = (user.email ?? "").trim().toLowerCase();
-  if (!userEmail || userEmail !== invite.email.toLowerCase()) {
-    return {
-      error: `Sign in as ${invite.email} to accept this invite`,
-      expectedEmail: invite.email,
-    };
-  }
 
   const { error: memberError } = await admin.from("organization_members").upsert(
     {
@@ -498,23 +478,113 @@ export async function acceptInvitationAction(token: string) {
   await admin.from("profiles").upsert({
     id: user.id,
     email: userEmail,
-    display_name: user.user_metadata?.full_name ?? userEmail.split("@")[0],
+    display_name:
+      (typeof user.user_metadata?.full_name === "string"
+        ? user.user_metadata.full_name
+        : null) ?? userEmail.split("@")[0],
   });
 
-  revalidatePath(`/${invite.org.slug}`);
-  revalidatePath(`/${invite.org.slug}/projects`);
-  revalidatePath(`/${invite.org.slug}/team`);
-  revalidatePath(`/${invite.org.slug}/partners`);
+  revalidatePath(`/${invite.org!.slug}`);
+  revalidatePath(`/${invite.org!.slug}/projects`);
+  revalidatePath(`/${invite.org!.slug}/team`);
+  revalidatePath(`/${invite.org!.slug}/partners`);
   if (invite.projectId) {
-    revalidatePath(`/${invite.org.slug}/projects/${invite.projectId}`);
+    revalidatePath(`/${invite.org!.slug}/projects/${invite.projectId}`);
   }
 
   return {
     ok: true as const,
-    orgSlug: invite.org.slug,
-    orgName: invite.org.name,
+    orgSlug: invite.org!.slug,
+    orgName: invite.org!.name,
     projectId: invite.projectId,
   };
+}
+
+export async function acceptInvitationAction(token: string) {
+  const { requireUser } = await import("@/shared/db/require-user");
+  const { user } = await requireUser();
+  const admin = createAdminSupabaseClient();
+  if (!admin) return { error: "Server admin is not configured" };
+
+  const invite = await getInvitationByToken(token);
+  if (!invite || !invite.org) return { error: "Invite not found" };
+  if (invite.acceptedAt) {
+    return {
+      ok: true as const,
+      alreadyAccepted: true as const,
+      orgSlug: invite.org.slug,
+      orgName: invite.org.name,
+      projectId: invite.projectId,
+    };
+  }
+  if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
+    return { error: "Invite expired" };
+  }
+
+  const userEmail = (user.email ?? "").trim().toLowerCase();
+  if (!userEmail || userEmail !== invite.email.toLowerCase()) {
+    return {
+      error: `Sign in as ${invite.email} to accept this invite`,
+      expectedEmail: invite.email,
+    };
+  }
+
+  return fulfillInvitation(admin, invite, user);
+}
+
+/** Claim open invites for the signed-in email (e.g. Google sign-in that skipped /invite). */
+export async function claimPendingInvitationsForUser() {
+  const { getSessionUser } = await import("@/shared/db/require-user");
+  const { user } = await getSessionUser();
+  if (!user?.email) return [] as { orgSlug: string; orgName: string; projectId: string | null }[];
+
+  const admin = createAdminSupabaseClient();
+  if (!admin) return [];
+
+  const userEmail = user.email.trim().toLowerCase();
+  const { data: rows } = await admin
+    .from("organization_invitations")
+    .select(
+      "id, email, role, organization_id, project_id, project_role, partner_id, permissions, expires_at, accepted_at, organizations ( id, slug, name )",
+    )
+    .ilike("email", userEmail)
+    .is("accepted_at", null)
+    .order("created_at", { ascending: false });
+
+  const claimed: { orgSlug: string; orgName: string; projectId: string | null }[] = [];
+
+  for (const row of rows ?? []) {
+    if (row.expires_at && new Date(row.expires_at as string).getTime() < Date.now()) {
+      continue;
+    }
+    const org = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations;
+    if (!org) continue;
+
+    const invite: InvitationRow = {
+      id: row.id as string,
+      email: row.email as string,
+      role: row.role as string,
+      organizationId: row.organization_id as string,
+      projectId: (row.project_id as string | null) ?? null,
+      projectRole: (row.project_role as string | null) ?? null,
+      partnerId: (row.partner_id as string | null) ?? null,
+      permissions: row.permissions ?? null,
+      expiresAt: (row.expires_at as string | null) ?? null,
+      acceptedAt: (row.accepted_at as string | null) ?? null,
+      org: { id: org.id as string, slug: org.slug as string, name: org.name as string },
+    };
+
+    const result = await fulfillInvitation(admin, invite, user);
+    if ("ok" in result && result.ok) {
+      claimed.push({
+        orgSlug: result.orgSlug,
+        orgName: result.orgName,
+        projectId: result.projectId,
+      });
+    }
+  }
+
+  return claimed;
 }
 
 async function profileLabel(userId: string) {

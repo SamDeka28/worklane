@@ -25,6 +25,8 @@ export type OrgContext = {
   role: OrgRole;
   userId: string;
   canWrite: boolean;
+  /** True until the member dismisses the first-join welcome. */
+  needsWelcome: boolean;
   permissions: MemberPermissions;
   supabase: SupabaseClient;
   user: {
@@ -104,7 +106,7 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
   const [{ data: membership }, { data: profile }] = await Promise.all([
     supabase
       .from("organization_members")
-      .select("role, status, permissions")
+      .select("role, status, permissions, welcomed_at")
       .eq("organization_id", orgRow.id)
       .eq("user_id", user.id)
       .eq("status", "active")
@@ -141,6 +143,7 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
     role,
     userId: user.id,
     canWrite: roleCanWrite && (role === "owner" || role === "admin" || moduleWrite),
+    needsWelcome: !membership.welcomed_at,
     permissions,
     supabase,
     user: {
@@ -187,6 +190,16 @@ export async function requireModuleWrite(
 export async function firstOrgPath(): Promise<string> {
   const orgs = await listMyOrgs();
   if (orgs.length === 0) {
+    // Google / generic sign-in often skips /invite/[token] — claim open invites by email.
+    const { claimPendingInvitationsForUser } = await import("@/modules/team/actions");
+    const claimed = await claimPendingInvitationsForUser();
+    if (claimed.length > 0) {
+      const first = claimed[0];
+      if (first.projectId) {
+        return `/${first.orgSlug}/projects/${first.projectId}?joined=1`;
+      }
+      return `/${first.orgSlug}?joined=1`;
+    }
     return "/onboarding?empty=1";
   }
   try {

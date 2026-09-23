@@ -59,7 +59,13 @@ export default async function OrgLayout({
       </div>
       <CommandPalette org={ctx.org} permissions={ctx.permissions} />
       <Suspense fallback={null}>
-        <JoinedStudioModal orgName={ctx.org.name} />
+        <JoinedStudioModal
+          orgName={ctx.org.name}
+          orgSlug={ctx.org.slug}
+          role={ctx.role}
+          permissions={ctx.permissions}
+          needsWelcome={ctx.needsWelcome}
+        />
       </Suspense>
     </div>
   );

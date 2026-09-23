@@ -1,4 +1,5 @@
 import { AuthCard } from "@/components/auth/auth-card";
+import { inviteTokenFromQuery } from "@/shared/auth/invite-params";
 
 export const metadata = {
   title: "Sign in",
@@ -10,7 +11,7 @@ export default async function LoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const query = await searchParams;
-  const inviteToken = typeof query.invite === "string" ? query.invite : undefined;
+  const inviteToken = inviteTokenFromQuery(query);
   const defaultEmail = typeof query.email === "string" ? query.email : undefined;
 
   return (
