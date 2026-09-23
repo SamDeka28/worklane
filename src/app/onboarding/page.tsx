@@ -36,8 +36,8 @@ export default async function OnboardingPage({
           </p>
           <h1 className="mt-2 text-2xl font-medium tracking-tight">No studio yet</h1>
           <p className="mt-3 text-sm leading-6 text-muted-foreground">
-            Your account exists but no organization was attached. Sign out and create a new account,
-            or ask an owner to invite you.
+            Your account exists but no organization was attached. Open the invite
+            link from your email while signed in, or ask an owner to resend the invite.
           </p>
         </div>
       </div>

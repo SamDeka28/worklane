@@ -394,9 +394,39 @@ export async function resendInvitationAction(orgSlug: string, invitationId: stri
 }
 
 export async function getInvitationByToken(token: string) {
+  const tokenHash = hashToken(token);
+
+  // Prefer RPC so invite pages work without SUPABASE_SERVICE_ROLE_KEY (e.g. Vercel).
+  const { createServerSupabaseClient } = await import("@/shared/db/supabase/server");
+  const supabase = await createServerSupabaseClient();
+  if (supabase) {
+    const { data, error } = await supabase.rpc("preview_organization_invitation", {
+      p_token_hash: tokenHash,
+    });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!error && row) {
+      return {
+        id: row.id as string,
+        email: row.email as string,
+        role: row.role as string,
+        organizationId: row.organization_id as string,
+        projectId: (row.project_id as string | null) ?? null,
+        projectRole: (row.project_role as string | null) ?? null,
+        partnerId: (row.partner_id as string | null) ?? null,
+        permissions: row.permissions ?? null,
+        expiresAt: (row.expires_at as string | null) ?? null,
+        acceptedAt: (row.accepted_at as string | null) ?? null,
+        org: {
+          id: row.org_id as string,
+          slug: row.org_slug as string,
+          name: row.org_name as string,
+        },
+      };
+    }
+  }
+
   const admin = createAdminSupabaseClient();
   if (!admin) return null;
-  const tokenHash = hashToken(token);
   const { data, error } = await admin
     .from("organization_invitations")
     .select(
@@ -502,24 +532,43 @@ async function fulfillInvitation(
 
 export async function acceptInvitationAction(token: string) {
   const { requireUser } = await import("@/shared/db/require-user");
-  const { user } = await requireUser();
+  const { user, supabase } = await requireUser();
+  const tokenHash = hashToken(token);
+
+  const { data: rpcRows, error: rpcError } = await supabase.rpc(
+    "accept_organization_invitation",
+    { p_token_hash: tokenHash },
+  );
+
+  if (!rpcError) {
+    const row = Array.isArray(rpcRows) ? rpcRows[0] : rpcRows;
+    if (row?.org_slug) {
+      const orgSlug = row.org_slug as string;
+      const projectId = (row.project_id as string | null) ?? null;
+      revalidatePath(`/${orgSlug}`);
+      revalidatePath(`/${orgSlug}/projects`);
+      revalidatePath(`/${orgSlug}/team`);
+      if (projectId) revalidatePath(`/${orgSlug}/projects/${projectId}`);
+      return {
+        ok: true as const,
+        alreadyAccepted: Boolean(row.already_member),
+        orgSlug,
+        orgName: row.org_name as string,
+        projectId,
+      };
+    }
+  }
+
+  // Fallback when RPC missing / older DB — needs service role.
   const admin = createAdminSupabaseClient();
-  if (!admin) return { error: "Server admin is not configured" };
+  if (!admin) {
+    return {
+      error: rpcError?.message || "Could not accept invite. Try again or contact the studio owner.",
+    };
+  }
 
   const invite = await getInvitationByToken(token);
   if (!invite || !invite.org) return { error: "Invite not found" };
-  if (invite.acceptedAt) {
-    return {
-      ok: true as const,
-      alreadyAccepted: true as const,
-      orgSlug: invite.org.slug,
-      orgName: invite.org.name,
-      projectId: invite.projectId,
-    };
-  }
-  if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now()) {
-    return { error: "Invite expired" };
-  }
 
   const userEmail = (user.email ?? "").trim().toLowerCase();
   if (!userEmail || userEmail !== invite.email.toLowerCase()) {
@@ -529,14 +578,48 @@ export async function acceptInvitationAction(token: string) {
     };
   }
 
-  return fulfillInvitation(admin, invite, user);
+  if (invite.expiresAt && new Date(invite.expiresAt).getTime() < Date.now() && !invite.acceptedAt) {
+    return { error: "Invite expired" };
+  }
+
+  // Re-attach even if invite was already marked accepted (account recreated).
+  const result = await fulfillInvitation(admin, invite, user);
+  if ("ok" in result && result.ok) {
+    return {
+      ...result,
+      alreadyAccepted: Boolean(invite.acceptedAt),
+    };
+  }
+  return result;
 }
 
-/** Claim open invites for the signed-in email (e.g. Google sign-in that skipped /invite). */
+/** Claim open (or orphaned) invites for the signed-in email. */
 export async function claimPendingInvitationsForUser() {
   const { getSessionUser } = await import("@/shared/db/require-user");
-  const { user } = await getSessionUser();
-  if (!user?.email) return [] as { orgSlug: string; orgName: string; projectId: string | null }[];
+  const { user, supabase } = await getSessionUser();
+  if (!user?.email || !supabase) {
+    return [] as { orgSlug: string; orgName: string; projectId: string | null }[];
+  }
+
+  const { data: rpcRows, error: rpcError } = await supabase.rpc(
+    "claim_my_organization_invitations",
+  );
+
+  if (!rpcError && rpcRows) {
+    const rows = Array.isArray(rpcRows) ? rpcRows : [rpcRows];
+    const claimed = rows
+      .filter((row) => row?.org_slug)
+      .map((row) => ({
+        orgSlug: row.org_slug as string,
+        orgName: row.org_name as string,
+        projectId: (row.project_id as string | null) ?? null,
+      }));
+    for (const c of claimed) {
+      revalidatePath(`/${c.orgSlug}`);
+      revalidatePath(`/${c.orgSlug}/team`);
+    }
+    return claimed;
+  }
 
   const admin = createAdminSupabaseClient();
   if (!admin) return [];
@@ -548,23 +631,42 @@ export async function claimPendingInvitationsForUser() {
       "id, email, role, organization_id, project_id, project_role, partner_id, permissions, expires_at, accepted_at, organizations ( id, slug, name )",
     )
     .ilike("email", userEmail)
-    .is("accepted_at", null)
     .order("created_at", { ascending: false });
 
   const claimed: { orgSlug: string; orgName: string; projectId: string | null }[] = [];
+  const seenOrgs = new Set<string>();
 
   for (const row of rows ?? []) {
-    if (row.expires_at && new Date(row.expires_at as string).getTime() < Date.now()) {
-      continue;
-    }
     const org = Array.isArray(row.organizations) ? row.organizations[0] : row.organizations;
     if (!org) continue;
+    const orgId = row.organization_id as string;
+    if (seenOrgs.has(orgId)) continue;
+
+    const { data: existing } = await admin
+      .from("organization_members")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
+    if (existing) {
+      seenOrgs.add(orgId);
+      continue;
+    }
+
+    if (
+      !row.accepted_at &&
+      row.expires_at &&
+      new Date(row.expires_at as string).getTime() < Date.now()
+    ) {
+      continue;
+    }
 
     const invite: InvitationRow = {
       id: row.id as string,
       email: row.email as string,
       role: row.role as string,
-      organizationId: row.organization_id as string,
+      organizationId: orgId,
       projectId: (row.project_id as string | null) ?? null,
       projectRole: (row.project_role as string | null) ?? null,
       partnerId: (row.partner_id as string | null) ?? null,
@@ -576,6 +678,7 @@ export async function claimPendingInvitationsForUser() {
 
     const result = await fulfillInvitation(admin, invite, user);
     if ("ok" in result && result.ok) {
+      seenOrgs.add(orgId);
       claimed.push({
         orgSlug: result.orgSlug,
         orgName: result.orgName,

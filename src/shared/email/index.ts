@@ -13,10 +13,19 @@ export type SendEmailResult =
   | { ok: false; error: string; skipped?: boolean };
 
 function appUrl() {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-  );
+  const explicit = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (explicit && !explicit.includes("localhost")) return explicit;
+  // Prefer stable production host on Vercel so invite emails are not localhost.
+  const production =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.replace(/\/$/, "") ||
+    process.env.NEXT_PUBLIC_VERCEL_URL?.replace(/\/$/, "");
+  if (production) {
+    return production.startsWith("http") ? production : `https://${production}`;
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.replace(/\/$/, "")}`;
+  }
+  return explicit || "http://localhost:3000";
 }
 
 export function getAppUrl() {
