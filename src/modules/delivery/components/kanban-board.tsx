@@ -371,42 +371,44 @@ export function KanbanBoard({
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col overflow-hidden", className)}>
       {orgMode ? (
-        <div className="flex shrink-0 flex-col gap-2.5 border-b border-border/40 px-3 py-2.5 sm:px-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <MobileFilters
-              title="Board filters"
-              description="Narrow cards by project or client."
-              activeCount={[filterProject, filterClient].filter(Boolean).length}
-            >
-              <div className="space-y-3">
-                <NativeSelect
-                  value={filterProject}
-                  onChange={(event) => setFilterProject(event.target.value)}
-                  className="h-9 w-full rounded-xl bg-muted text-sm"
-                >
-                  <option value="">All projects (by status)</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-                <NativeSelect
-                  value={filterClient}
-                  onChange={(event) => setFilterClient(event.target.value)}
-                  className="h-9 w-full rounded-xl bg-muted text-sm"
-                >
-                  <option value="">All clients</option>
-                  {clientOptions.map((client) => (
-                    <option key={client.id} value={client.id}>
-                      {client.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-            </MobileFilters>
+        <div className="flex shrink-0 items-center border-b border-border/40 px-3 py-2 sm:px-5 sm:py-2.5">
+          <MobileFilters
+            title="Board filters"
+            description="Narrow cards by project or client."
+            activeCount={[filterProject, filterClient].filter(Boolean).length}
+            className="shrink-0"
+            triggerClassName="h-8"
+          >
+            <div className="space-y-3">
+              <NativeSelect
+                value={filterProject}
+                onChange={(event) => setFilterProject(event.target.value)}
+                className="h-9 w-full rounded-xl bg-muted text-sm"
+              >
+                <option value="">All projects (by status)</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </NativeSelect>
+              <NativeSelect
+                value={filterClient}
+                onChange={(event) => setFilterClient(event.target.value)}
+                className="h-9 w-full rounded-xl bg-muted text-sm"
+              >
+                <option value="">All clients</option>
+                {clientOptions.map((client) => (
+                  <option key={client.id} value={client.id}>
+                    {client.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          </MobileFilters>
 
-            <div className="hidden min-w-0 flex-1 flex-wrap items-center gap-2 md:flex">
+          <div className="ml-4 flex min-w-0 flex-1 items-center gap-3 sm:ml-5 sm:gap-3.5">
+            <div className="hidden min-w-0 flex-wrap items-center gap-2 md:flex">
               <NativeSelect
                 value={filterProject}
                 onChange={(event) => setFilterProject(event.target.value)}
@@ -433,12 +435,6 @@ export function KanbanBoard({
               </NativeSelect>
             </div>
 
-            <p className="ml-auto text-sm font-bold tabular-nums text-muted-foreground md:hidden">
-              {filteredTasks.length}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
             {assignees.length > 0 ? (
               <AvatarFilterStack
                 people={assignees.map((member) => ({
@@ -449,14 +445,27 @@ export function KanbanBoard({
                 selectedIds={filterAssignees}
                 onToggle={toggleAssigneeFilter}
                 size="sm"
-                className="pr-1"
               />
             ) : null}
+
+            <NativeSelect
+              value={filterPriority}
+              onChange={(event) =>
+                setFilterPriority(event.target.value as "" | TaskPriority)
+              }
+              aria-label="Filter by priority"
+              className="h-8 w-[6.5rem] shrink-0 rounded-lg bg-muted/80 text-xs md:hidden"
+            >
+              <option value="">Priority</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </NativeSelect>
 
             <div
               role="tablist"
               aria-label="Filter by priority"
-              className="inline-flex items-center gap-0.5 rounded-xl bg-muted/80 p-1 ring-1 ring-foreground/6 dark:bg-muted/50"
+              className="hidden items-center gap-0.5 rounded-xl bg-muted/80 p-1 ring-1 ring-foreground/6 md:inline-flex dark:bg-muted/50"
             >
               {PRIORITY_TABS.map((tab) => {
                 const active = filterPriority === tab.value;
@@ -489,7 +498,7 @@ export function KanbanBoard({
               })}
             </div>
 
-            <p className="ml-auto hidden text-sm font-bold tabular-nums text-muted-foreground md:block">
+            <p className="ml-auto shrink-0 text-sm font-bold tabular-nums text-muted-foreground">
               {filteredTasks.length}
             </p>
           </div>

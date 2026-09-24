@@ -148,15 +148,16 @@ export function AvatarFilterStack({
 }) {
   if (people.length === 0) return null;
   const anySelected = selectedIds.size > 0;
-  const overlap = size === "sm" ? "-space-x-2" : "-space-x-2.5";
+  const box = size === "sm" ? "size-7" : "size-9";
+  const pull = size === "sm" ? "-ml-2" : "-ml-2.5";
 
   return (
     <div
       role="group"
       aria-label="Filter by assignee"
-      className={cn("flex shrink-0 items-center", overlap, className)}
+      className={cn("flex shrink-0 items-center", className)}
     >
-      {people.map((person) => {
+      {people.map((person, index) => {
         const selected = selectedIds.has(person.id);
         const dimmed = anySelected && !selected;
         return (
@@ -166,16 +167,22 @@ export function AvatarFilterStack({
             title={person.name}
             aria-pressed={selected}
             onClick={() => onToggle(person.id)}
+            style={{ zIndex: selected ? people.length + 1 : index + 1 }}
             className={cn(
-              "relative rounded-full transition-[transform,opacity,box-shadow] duration-150",
+              "relative box-border inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full border-2 p-0 leading-none",
+              box,
+              index > 0 && pull,
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              selected
-                ? "z-10 scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-background"
-                : "ring-2 ring-card hover:z-10 hover:scale-105",
-              dimmed && "opacity-35 hover:opacity-75",
+              selected ? "border-foreground bg-background" : "border-background bg-background",
+              dimmed && "opacity-40 hover:opacity-80",
             )}
           >
-            <AvatarMark name={person.name} src={person.src} size={size} />
+            <AvatarMark
+              name={person.name}
+              src={person.src}
+              size={size}
+              className="size-full max-h-full max-w-full rounded-full ring-0"
+            />
           </button>
         );
       })}
