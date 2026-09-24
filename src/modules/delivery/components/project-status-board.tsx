@@ -6,15 +6,18 @@ import {
   DndContext,
   type DragEndEvent,
   DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
 } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { BoardCanvas, BoardCardShell, BoardColumn, boardCollisionDetection } from "@/components/studio/board";
+import {
+  BoardCanvas,
+  BoardCardShell,
+  BoardColumn,
+  boardCollisionDetection,
+  useBoardDndSensors,
+} from "@/components/studio/board";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { setProjectStatusAction } from "@/modules/delivery/actions";
@@ -63,7 +66,7 @@ export function ProjectStatusBoard({
   const [items, setItems] = useState(() => group(rows));
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overStatus, setOverStatus] = useState<ProjectStatus | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useBoardDndSensors();
 
   useEffect(() => {
     setItems(group(rows));

@@ -7,9 +7,6 @@ import {
   type DragEndEvent,
   DragOverlay,
   MeasuringStrategy,
-  PointerSensor,
-  useSensor,
-  useSensors,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -26,6 +23,7 @@ import {
   BoardCanvas,
   BoardColumn as SoftBoardLane,
   boardCollisionDetection,
+  useBoardDndSensors,
 } from "@/components/studio/board";
 import { AvatarFilterStack } from "@/components/studio/avatar-mark";
 import { MobileFilters } from "@/components/studio/mobile-filters";
@@ -187,7 +185,7 @@ export function KanbanBoard({
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [activeHeight, setActiveHeight] = useState(76);
   const [modal, setModal] = useState<TaskModalState | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useBoardDndSensors();
 
   const filteredTasks = useMemo(() => {
     if (!orgMode) return tasks;
@@ -919,7 +917,6 @@ function SortableCard({
       }}
       className={cn(
         "list-none",
-        !disabled && "touch-none",
         (collapsed || isDragging) &&
           "pointer-events-none m-0 h-0 min-h-0 overflow-hidden border-0 p-0 opacity-0",
       )}

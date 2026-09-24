@@ -5,16 +5,13 @@ import {
   DndContext,
   type DragEndEvent,
   DragOverlay,
-  PointerSensor,
   closestCorners,
-  useSensor,
-  useSensors,
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { BoardCanvas, BoardCardShell, BoardColumn } from "@/components/studio/board";
+import { BoardCanvas, BoardCardShell, BoardColumn, useBoardDndSensors } from "@/components/studio/board";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { moveLeadStageAction } from "@/modules/crm/actions";
@@ -65,7 +62,7 @@ export function LeadBoard({
   const [pending, start] = useTransition();
   const [items, setItems] = useState(() => groupLeads(leads, stages));
   const [activeId, setActiveId] = useState<string | null>(null);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useBoardDndSensors();
   const stageSlugs = useMemo(() => new Set(stages.map((stage) => stage.slug)), [stages]);
 
   useEffect(() => {

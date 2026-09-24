@@ -4,9 +4,13 @@ import type { CSSProperties, ReactNode } from "react";
 import {
   type CollisionDetection,
   closestCorners,
+  MouseSensor,
   pointerWithin,
   rectIntersection,
+  TouchSensor,
   useDroppable,
+  useSensor,
+  useSensors,
 } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 
@@ -31,6 +35,18 @@ export const boardCollisionDetection: CollisionDetection = (args) => {
   if (rectHits.length > 0) return rectHits;
   return closestCorners(args);
 };
+
+/** Mouse: short drag. Touch: long-press so board scroll is not captured. */
+export function useBoardDndSensors() {
+  return useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 8 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 280, tolerance: 10 },
+    }),
+  );
+}
 
 export function BoardCanvas({
   children,
