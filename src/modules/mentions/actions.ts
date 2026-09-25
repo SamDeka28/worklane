@@ -18,7 +18,7 @@ export async function listMentionCatalogAction(orgSlug: string): Promise<Mention
     can("partners")
       ? ctx.supabase
           .from("partners")
-          .select("id, name")
+          .select("id, name, user_id")
           .eq("organization_id", orgId)
           .eq("active", true)
           .order("name")
@@ -67,6 +67,7 @@ export async function listMentionCatalogAction(orgSlug: string): Promise<Mention
   ]);
 
   const rows = (result: { data: Record<string, unknown>[] | null } | null) => result?.data ?? [];
+  const avatarByUser = new Map(members.map((member) => [member.userId, member.avatarUrl] as const));
 
   return [
     ...members
@@ -75,8 +76,14 @@ export async function listMentionCatalogAction(orgSlug: string): Promise<Mention
         id: member.userId,
         label: member.displayName || member.email?.split("@")[0] || "Teammate",
         type: "member",
+        avatarUrl: member.avatarUrl,
       })),
-    ...rows(partners).map((row) => ({ id: row.id as string, label: row.name as string, type: "partner" })),
+    ...rows(partners).map((row) => ({
+      id: row.id as string,
+      label: row.name as string,
+      type: "partner",
+      avatarUrl: row.user_id ? (avatarByUser.get(row.user_id as string) ?? null) : null,
+    })),
     ...rows(clients).map((row) => ({ id: row.id as string, label: row.name as string, type: "client" })),
     ...rows(leads).map((row) => ({ id: row.id as string, label: row.name as string, type: "lead" })),
     ...rows(projects).map((row) => ({ id: row.id as string, label: row.name as string, type: "project" })),

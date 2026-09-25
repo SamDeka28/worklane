@@ -8,6 +8,7 @@ export type MentionItem = {
   type: string;
   /** When true, selecting runs onCreateMention instead of inserting immediately. */
   create?: boolean;
+  avatarUrl?: string | null;
 };
 
 export type CreateMentionFn = (
@@ -38,6 +39,35 @@ const TYPE_SECTION: Record<string, string> = {
 };
 
 const TYPE_BADGE: Record<string, string> = { member: "person" };
+
+function initials(label: string) {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  const letters = parts.length > 1 ? parts[0][0] + parts[parts.length - 1][0] : label.slice(0, 2);
+  return letters.toUpperCase();
+}
+
+function personAvatar(item: MentionItem, tone: string): HTMLElement {
+  const wrap = document.createElement("span");
+  wrap.className = `flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full text-[10px] font-bold ${tone}`;
+  const fallback = () => {
+    wrap.textContent = initials(item.label);
+  };
+  if (item.avatarUrl) {
+    const img = document.createElement("img");
+    img.src = item.avatarUrl;
+    img.alt = "";
+    img.referrerPolicy = "no-referrer";
+    img.className = "size-full object-cover";
+    img.onerror = () => {
+      img.remove();
+      fallback();
+    };
+    wrap.appendChild(img);
+  } else {
+    fallback();
+  }
+  return wrap;
+}
 
 const PER_TYPE_EMPTY_QUERY = 4;
 const PER_TYPE = 6;
@@ -269,9 +299,14 @@ function renderMentionList(
     button.setAttribute("aria-selected", String(active));
     button.className = `flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors hover:bg-muted ${active ? "bg-muted" : ""}`;
     const tone = TYPE_TONE[item.type] ?? "bg-muted text-muted-foreground";
-    const typeBadge = document.createElement("span");
-    typeBadge.className = `shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone}`;
-    typeBadge.textContent = item.create ? "New" : (TYPE_BADGE[item.type] ?? item.type);
+    const typeBadge =
+      !item.create && (item.type === "member" || item.type === "partner")
+        ? personAvatar(item, tone)
+        : document.createElement("span");
+    if (!typeBadge.className) {
+      typeBadge.className = `shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tone}`;
+      typeBadge.textContent = item.create ? "New" : (TYPE_BADGE[item.type] ?? item.type);
+    }
     const name = document.createElement("span");
     name.className = "min-w-0 flex-1 truncate text-sm font-medium";
     name.textContent = item.create
