@@ -9,12 +9,13 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { BoardCanvas, BoardCardShell, BoardColumn, useBoardDndSensors } from "@/components/studio/board";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { moveLeadStageAction } from "@/modules/crm/actions";
+import { openLead } from "@/modules/crm/components/crm-url";
 import {
   isWonStage,
   stageLabel,
@@ -49,16 +50,15 @@ export function LeadBoard({
   stages,
   canWrite,
   showMoney = true,
-  activeLeadId,
 }: {
   orgSlug: string;
   leads: LeadRecord[];
   stages: LeadStageRecord[];
   canWrite: boolean;
   showMoney?: boolean;
-  activeLeadId?: string;
 }) {
   const router = useRouter();
+  const activeLeadId = useSearchParams().get("lead");
   const [pending, start] = useTransition();
   const [items, setItems] = useState(() => groupLeads(leads, stages));
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -155,9 +155,7 @@ export function LeadBoard({
                     showMoney={showMoney}
                     disabled={!canWrite || pending}
                     active={activeLeadId === lead.id}
-                    onOpen={() =>
-                      router.push(`/${orgSlug}/crm?view=board&lead=${lead.id}`)
-                    }
+                    onOpen={() => openLead(lead.id)}
                   />
                 ))}
               </SortableContext>

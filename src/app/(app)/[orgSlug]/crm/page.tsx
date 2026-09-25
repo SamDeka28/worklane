@@ -15,7 +15,7 @@ import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { LeadBoard } from "@/modules/crm/components/lead-board";
 import { CreateLeadDialog } from "@/modules/crm/components/lead-forms";
-import { CrmLeadSheet } from "@/modules/crm/components/crm-lead-sheet";
+import { CrmLeadSheet, LeadOpenLink } from "@/modules/crm/components/crm-lead-sheet";
 import { LeadJourneyConfig } from "@/modules/crm/components/lead-journey-config";
 import { getLead, listLeads, listLeadStages } from "@/modules/crm/queries";
 import {
@@ -129,7 +129,6 @@ export default async function CrmPage({
               stages={stages}
               canWrite={ctx.canWrite}
               showMoney={seeMoney}
-              activeLeadId={leadId}
             />
           )}
         </div>
@@ -183,7 +182,8 @@ export default async function CrmPage({
               {leads.map((lead) => (
                 <DenseRow key={lead.id}>
                   <DenseCell className="min-w-0 flex-1">
-                    <Link
+                    <LeadOpenLink
+                      leadId={lead.id}
                       href={`/${orgSlug}/crm?view=list&lead=${lead.id}`}
                       className="block min-w-0"
                     >
@@ -204,7 +204,7 @@ export default async function CrmPage({
                             })
                           : null}
                       </p>
-                    </Link>
+                    </LeadOpenLink>
                   </DenseCell>
                   <DenseCell align="right" width="hidden w-28 sm:block">
                     <StatusChip tone={stageTone(lead.stage, stages)}>
@@ -234,10 +234,10 @@ export default async function CrmPage({
 
       <CrmLeadSheet
         orgSlug={orgSlug}
-        lead={selected}
+        leads={leads}
+        initialLead={selected}
         stages={stages}
         canWrite={ctx.canWrite}
-        view={view}
         showMoney={seeMoney}
       />
     </WorkSurface>

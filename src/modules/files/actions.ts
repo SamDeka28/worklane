@@ -94,3 +94,7 @@ export async function softDeleteFileAction(orgSlug: string, fileId: string) {
 export async function listTaskFilesAction(orgSlug: string, taskId: string) {
   return listFilesForEntity(orgSlug, "task", taskId);
 }
+
+export async function listLeadFilesAction(orgSlug: string, leadId: string) {
+  return listFilesForEntity(orgSlug, "lead", leadId);
+}

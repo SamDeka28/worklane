@@ -1,38 +1,77 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { openLead, setCrmUrl } from "@/modules/crm/components/crm-url";
 import { LeadDetailSheet } from "@/modules/crm/components/lead-forms";
 import type { LeadRecord, LeadStageRecord } from "@/modules/crm/types";
 
 export function CrmLeadSheet({
   orgSlug,
-  lead,
+  leads,
+  initialLead,
   stages,
   canWrite,
-  view,
   showMoney = true,
 }: {
   orgSlug: string;
-  lead: LeadRecord | null;
+  leads: LeadRecord[];
+  /** Server-fetched deep-link lead (may be outside the filtered list). */
+  initialLead: LeadRecord | null;
   stages: LeadStageRecord[];
   canWrite: boolean;
-  view: "list" | "board";
   showMoney?: boolean;
 }) {
-  const router = useRouter();
-  const base = view === "board" ? `/${orgSlug}/crm?view=board` : `/${orgSlug}/crm`;
+  const leadId = useSearchParams().get("lead");
+  const selected = leadId
+    ? (leads.find((lead) => lead.id === leadId) ??
+      (initialLead?.id === leadId ? initialLead : null))
+    : null;
+
+  // Keep the last lead mounted so the sheet can animate closed.
+  const [shown, setShown] = useState<LeadRecord | null>(selected);
+  if (selected && selected !== shown) setShown(selected);
 
   return (
     <LeadDetailSheet
       orgSlug={orgSlug}
-      lead={lead}
+      lead={selected ?? shown}
       stages={stages}
-      open={Boolean(lead)}
+      open={Boolean(selected)}
       onOpenChange={(next) => {
-        if (!next) router.replace(base);
+        if (!next) setCrmUrl({ lead: null });
       }}
       canWrite={canWrite}
       showMoney={showMoney}
     />
+  );
+}
+
+/** List-row link that opens the lead sheet without a server navigation. */
+export function LeadOpenLink({
+  leadId,
+  href,
+  className,
+  children,
+}: {
+  leadId: string;
+  href: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={className}
+      onClick={(event) => {
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+        event.preventDefault();
+        openLead(leadId);
+      }}
+    >
+      {children}
+    </Link>
   );
 }

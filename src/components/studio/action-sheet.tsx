@@ -36,6 +36,7 @@ export function ActionSheet({
   open,
   onOpenChange,
   side = "right",
+  width = "default",
   footer,
   children,
 }: {
@@ -53,6 +54,8 @@ export function ActionSheet({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   side?: "right" | "bottom";
+  /** `wide` fits two-column forms on desktop; collapses to one column on small screens. */
+  width?: "default" | "wide";
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -87,7 +90,11 @@ export function ActionSheet({
         className={cn(
           "flex flex-col gap-0 overflow-hidden border-0 p-0 shadow-lift",
           side === "right" &&
-            "data-[side=right]:inset-y-2 data-[side=right]:right-2 data-[side=right]:h-auto data-[side=right]:w-[min(100%,42rem)] data-[side=right]:max-w-none data-[side=right]:rounded-[2rem] sm:data-[side=right]:w-[min(100%-1rem,42rem)]",
+            "data-[side=right]:inset-y-2 data-[side=right]:right-2 data-[side=right]:h-auto data-[side=right]:max-w-none data-[side=right]:rounded-[2rem]",
+          side === "right" &&
+            (width === "wide"
+              ? "data-[side=right]:w-[calc(100%-1rem)] data-[side=right]:sm:max-w-none data-[side=right]:lg:w-[min(100%-1rem,64rem)]"
+              : "data-[side=right]:w-[min(100%,42rem)] sm:data-[side=right]:w-[min(100%-1rem,42rem)]"),
           side === "bottom" &&
             "data-[side=bottom]:inset-x-2 data-[side=bottom]:bottom-2 data-[side=bottom]:h-[min(92vh,56rem)] data-[side=bottom]:max-h-[min(92vh,56rem)] data-[side=bottom]:rounded-[2rem] data-[side=bottom]:border-0",
         )}
