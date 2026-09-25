@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { EMAIL_LOGO_CID, EMAIL_LOGO_PNG_BASE64 } from "./logo";
 
 export type SendEmailInput = {
   to: string | string[];
@@ -74,6 +75,17 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       html: input.html,
       text: input.text,
       replyTo: input.replyTo,
+      attachments: input.html.includes(`cid:${EMAIL_LOGO_CID}`)
+        ? [
+            {
+              filename: "worklane.png",
+              content: Buffer.from(EMAIL_LOGO_PNG_BASE64, "base64"),
+              contentType: "image/png",
+              cid: EMAIL_LOGO_CID,
+              contentDisposition: "inline",
+            },
+          ]
+        : undefined,
     });
     return { ok: true, messageId: info.messageId };
   } catch (error) {

@@ -3,6 +3,8 @@
  * consistently in Gmail, Apple Mail, and Outlook (no external CSS, no flexbox).
  */
 
+import { EMAIL_LOGO_CID } from "./logo";
+
 const BRAND = "#5B4BDB";
 const INK = "#111827";
 const BODY = "#374151";
@@ -86,8 +88,8 @@ function layout(input: {
           <td style="padding:0 4px 20px">
             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td width="22" height="22" bgcolor="${BRAND}" style="border-radius:6px;font-size:0;line-height:0">&nbsp;</td>
-                <td style="padding-left:8px;font-size:15px;font-weight:700;letter-spacing:-0.01em;color:${INK}">Worklane</td>
+                <td width="28" height="28" style="font-size:0;line-height:0"><img src="cid:${EMAIL_LOGO_CID}" width="28" height="28" alt="Worklane" style="display:block;width:28px;height:28px;border:0;border-radius:7px"></td>
+                <td style="padding-left:10px;font-size:15px;font-weight:700;letter-spacing:-0.01em;color:${INK}">Worklane</td>
               </tr>
             </table>
           </td>
