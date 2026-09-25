@@ -3,10 +3,14 @@ import { EMAIL_LOGO_CID, EMAIL_LOGO_PNG_BASE64 } from "./logo";
 
 export type SendEmailInput = {
   to: string | string[];
+  cc?: string[];
   subject: string;
+  /** Display name shown instead of the default sender name; the address is unchanged. */
+  fromName?: string;
   html: string;
   text?: string;
   replyTo?: string;
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
 };
 
 export type SendEmailResult =
@@ -63,29 +67,35 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     };
   }
 
-  const from =
-    process.env.EMAIL_FROM?.trim() ||
-    `Worklane <${process.env.SMTP_USER}>`;
+  const defaultFrom = process.env.EMAIL_FROM?.trim() || `Worklane <${process.env.SMTP_USER}>`;
+  const fromAddress = defaultFrom.match(/<([^>]+)>/)?.[1] ?? defaultFrom;
+  const from = input.fromName
+    ? `"${input.fromName.replace(/["\\\r\n]/g, "")}" <${fromAddress}>`
+    : defaultFrom;
 
   try {
     const info = await transport.sendMail({
       from,
       to: Array.isArray(input.to) ? input.to.join(", ") : input.to,
+      cc: input.cc?.length ? input.cc.join(", ") : undefined,
       subject: input.subject,
       html: input.html,
       text: input.text,
       replyTo: input.replyTo,
-      attachments: input.html.includes(`cid:${EMAIL_LOGO_CID}`)
-        ? [
-            {
-              filename: "worklane.png",
-              content: Buffer.from(EMAIL_LOGO_PNG_BASE64, "base64"),
-              contentType: "image/png",
-              cid: EMAIL_LOGO_CID,
-              contentDisposition: "inline",
-            },
-          ]
-        : undefined,
+      attachments: [
+        ...(input.html.includes(`cid:${EMAIL_LOGO_CID}`)
+          ? [
+              {
+                filename: "worklane.png",
+                content: Buffer.from(EMAIL_LOGO_PNG_BASE64, "base64"),
+                contentType: "image/png",
+                cid: EMAIL_LOGO_CID,
+                contentDisposition: "inline" as const,
+              },
+            ]
+          : []),
+        ...(input.attachments ?? []),
+      ],
     });
     return { ok: true, messageId: info.messageId };
   } catch (error) {
@@ -97,6 +107,10 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
 }
 
 export {
+  documentEmailHtml,
+  documentEmailText,
+  documentUpdateEmailHtml,
+  documentUpdateEmailText,
   escapeHtml,
   inviteEmailHtml,
   inviteEmailText,

@@ -11,14 +11,18 @@ import {
   BetweenVerticalEnd,
   Bold,
   Grid2X2X,
+  IndentDecrease,
+  IndentIncrease,
   Italic,
   Link2,
   List,
+  ListChecks,
   ListOrdered,
   Minus,
   Paperclip,
   Quote,
   Redo2,
+  RemoveFormatting,
   Strikethrough,
   Table2,
   Underline as UnderlineIcon,
@@ -36,6 +40,13 @@ import {
   DOCUMENT_FONTS,
   FONT_SIZE_STEPS,
 } from "@/components/editor/document-typography";
+import {
+  bumpIndent,
+  getBlockLineHeight,
+  INDENT_STEP,
+  LINE_SPACING_STEPS,
+  setBlockLineHeight,
+} from "@/components/editor/indentable-blocks";
 import { cn } from "@/lib/utils";
 
 function ToolbarButton({
@@ -276,6 +287,11 @@ export function DocumentToolbar({
   const knownSize = (FONT_SIZE_STEPS as readonly string[]).includes(fontSize)
     ? fontSize
     : "__custom__";
+  const headingLevel = editor.isActive("heading")
+    ? String(editor.getAttributes("heading").level ?? 1)
+    : "p";
+  const blockStyle = ["1", "2", "3"].includes(headingLevel) ? headingLevel : "p";
+  const lineHeight = getBlockLineHeight(editor);
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-0.5 px-2.5 py-1.5 sm:justify-start">
@@ -346,17 +362,21 @@ export function DocumentToolbar({
 
       <ToolbarDivider />
 
-      {([1, 2, 3] as const).map((level) => (
-        <ToolbarButton
-          key={level}
-          label={`Heading ${level}`}
-          active={editor.isActive("heading", { level })}
-          onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
-          className="px-2 text-[11px] font-semibold"
-        >
-          H{level}
-        </ToolbarButton>
-      ))}
+      <ToolbarSelect
+        label="Paragraph style"
+        value={blockStyle}
+        className="max-w-[8rem]"
+        onChange={(value) => {
+          const chain = editor.chain().focus();
+          if (value === "p") chain.setParagraph().run();
+          else chain.setHeading({ level: Number(value) as 1 | 2 | 3 }).run();
+        }}
+      >
+        <option value="p">Normal text</option>
+        <option value="1">Heading 1</option>
+        <option value="2">Heading 2</option>
+        <option value="3">Heading 3</option>
+      </ToolbarSelect>
 
       <ToolbarDivider />
 
@@ -436,6 +456,19 @@ export function DocumentToolbar({
       >
         <AlignJustify className="size-3.5" />
       </ToolbarButton>
+      <ToolbarSelect
+        label="Line spacing"
+        value={lineHeight}
+        className="max-w-[4.75rem]"
+        onChange={(value) => setBlockLineHeight(editor, value || null)}
+      >
+        <option value="">Auto</option>
+        {LINE_SPACING_STEPS.map((step) => (
+          <option key={step} value={step}>
+            {step}
+          </option>
+        ))}
+      </ToolbarSelect>
 
       <ToolbarDivider />
 
@@ -454,6 +487,37 @@ export function DocumentToolbar({
         <ListOrdered className="size-3.5" />
       </ToolbarButton>
       <ToolbarButton
+        label="Checklist"
+        active={editor.isActive("taskList")}
+        onClick={() => editor.chain().focus().toggleTaskList().run()}
+      >
+        <ListChecks className="size-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Decrease indent (⇧Tab)"
+        onClick={() => {
+          if (editor.isActive("listItem") || editor.isActive("taskItem")) {
+            editor.chain().focus().liftListItem(editor.isActive("taskItem") ? "taskItem" : "listItem").run();
+          } else {
+            bumpIndent(editor, -INDENT_STEP);
+          }
+        }}
+      >
+        <IndentDecrease className="size-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Increase indent (Tab)"
+        onClick={() => {
+          if (editor.isActive("listItem") || editor.isActive("taskItem")) {
+            editor.chain().focus().sinkListItem(editor.isActive("taskItem") ? "taskItem" : "listItem").run();
+          } else {
+            bumpIndent(editor, INDENT_STEP);
+          }
+        }}
+      >
+        <IndentIncrease className="size-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
         label="Quote"
         active={editor.isActive("blockquote")}
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
@@ -465,6 +529,12 @@ export function DocumentToolbar({
         onClick={() => editor.chain().focus().setHorizontalRule().run()}
       >
         <Minus className="size-3.5" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Clear formatting"
+        onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()}
+      >
+        <RemoveFormatting className="size-3.5" />
       </ToolbarButton>
 
       <ToolbarDivider />

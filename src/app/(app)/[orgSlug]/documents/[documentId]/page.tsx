@@ -5,11 +5,14 @@ import { listMilestones, listProjects, listTasks } from "@/modules/delivery/quer
 import { DocumentEditor } from "@/modules/documents/components/document-editor";
 import {
   getDocument,
+  listDocumentFeedback,
   listDocumentRefs,
+  listDocumentSends,
   listDocumentVersions,
   listSignaturesForVersion,
 } from "@/modules/documents/queries";
 import { requireOrg } from "@/modules/identity/org";
+import { listClientBillingContacts } from "@/modules/invoices/queries";
 
 export default async function DocumentDetailPage({
   params,
@@ -29,13 +32,19 @@ export default async function DocumentDetailPage({
   const version = versions.find((row) => row.id === versionId) ?? versions[0];
   if (!version) notFound();
 
-  const [signatures, clients, projects, refs, primaryContacts] = await Promise.all([
-    listSignaturesForVersion(orgSlug, version.id),
-    listClients(orgSlug),
-    listProjects(orgSlug),
-    listDocumentRefs(orgSlug, documentId),
-    listPrimaryContactsForOrg(orgSlug),
-  ]);
+  const [signatures, clients, projects, refs, primaryContacts, sends, clientContacts, feedback] =
+    await Promise.all([
+      listSignaturesForVersion(orgSlug, version.id),
+      listClients(orgSlug),
+      listProjects(orgSlug),
+      listDocumentRefs(orgSlug, documentId),
+      listPrimaryContactsForOrg(orgSlug),
+      ctx.canWrite ? listDocumentSends(orgSlug, documentId) : Promise.resolve([]),
+      ctx.canWrite && document.clientId
+        ? listClientBillingContacts(orgSlug, document.clientId)
+        : Promise.resolve([]),
+      listDocumentFeedback(orgSlug, documentId),
+    ]);
 
   const milestones = document.projectId
     ? await listMilestones(orgSlug, document.projectId)
@@ -52,6 +61,7 @@ export default async function DocumentDetailPage({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <DocumentEditor
             orgSlug={orgSlug}
+            orgName={ctx.org.name}
             document={document}
             version={version}
             versions={versions.map((row) => ({
@@ -98,6 +108,12 @@ export default async function DocumentDetailPage({
             projectName={project?.name ?? null}
             currency={currency === "INR" ? "INR" : "USD"}
             signatures={signatures}
+            sends={sends}
+            feedback={feedback}
+            recipients={clientContacts.flatMap((contact) =>
+              contact.email ? [{ name: contact.name, email: contact.email }] : [],
+            )}
+            senderName={ctx.user.displayName}
           />
         </div>
       </div>

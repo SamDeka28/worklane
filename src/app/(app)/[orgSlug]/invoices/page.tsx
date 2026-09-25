@@ -6,12 +6,13 @@ import { EmptyState } from "@/components/studio/empty-state";
 import { StatusChip } from "@/components/studio/status-chip";
 import { listClients } from "@/modules/clients/queries";
 import { CreateInvoiceDialog } from "@/modules/invoices/components/invoice-forms";
-import { loadOrgInvoiceConfig } from "@/modules/invoices/config";
+import { InvoiceSettingsDialog } from "@/modules/invoices/components/invoice-settings-form";
+import { loadOrgInvoiceConfig, resolveInvoiceBrand } from "@/modules/invoices/config";
 import { listInvoices } from "@/modules/invoices/queries";
 import { dueOnFromDays } from "@/modules/invoices/settings";
 import { ensureDefaultInvoiceTemplates } from "@/modules/invoices/templates";
 import { invoiceSubtotalMinor } from "@/modules/invoices/totals";
-import { INVOICE_STATUS_LABELS } from "@/modules/invoices/types";
+import { INVOICE_DISPLAY_LABELS, invoiceDisplayStatus } from "@/modules/invoices/types";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { formatMoney } from "@/shared/money";
 
@@ -25,11 +26,12 @@ export default async function InvoicesPage({
   requireModuleAccess(ctx, "finance");
   if (!ctx.org.modules.finance) notFound();
 
-  const [invoices, clients, config, templates] = await Promise.all([
+  const [invoices, clients, config, templates, brand] = await Promise.all([
     listInvoices(orgSlug),
     listClients(orgSlug),
     loadOrgInvoiceConfig(orgSlug),
     ensureDefaultInvoiceTemplates(orgSlug),
+    resolveInvoiceBrand(orgSlug),
   ]);
   const clientName = new Map(clients.map((c) => [c.id, c.name]));
   const defaultDueOn =
@@ -42,12 +44,14 @@ export default async function InvoicesPage({
         subtitle="Draft, issue to ledger, then send"
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href={`/${orgSlug}/settings#invoices`}
-              className="text-sm text-muted-foreground hover:underline"
-            >
-              Configure
-            </Link>
+            <InvoiceSettingsDialog
+              orgSlug={orgSlug}
+              orgId={ctx.org.id}
+              config={config}
+              logoUrl={brand.logoUrl ?? null}
+              templates={templates}
+              canWrite={ctx.canWrite}
+            />
             {ctx.canWrite ? (
               <CreateInvoiceDialog
                 orgSlug={orgSlug}
@@ -80,6 +84,7 @@ export default async function InvoicesPage({
             <ul className="divide-y divide-border/60">
               {invoices.map((invoice) => {
                 const total = invoiceSubtotalMinor(invoice.lines);
+                const status = invoiceDisplayStatus(invoice);
                 return (
                   <li key={invoice.id}>
                     <Link
@@ -91,16 +96,20 @@ export default async function InvoicesPage({
                           <span className="font-medium tabular-nums">{invoice.number}</span>
                           <StatusChip
                             tone={
-                              invoice.status === "paid"
+                              status === "paid"
                                 ? "paid"
-                                : invoice.status === "overdue"
+                                : status === "overdue"
                                   ? "overdue"
-                                  : invoice.status === "void"
+                                  : status === "void"
                                     ? "cancelled"
-                                    : "due"
+                                    : status === "draft"
+                                      ? "planning"
+                                      : status === "partially_paid"
+                                        ? "partial"
+                                        : "due"
                             }
                           >
-                            {INVOICE_STATUS_LABELS[invoice.status]}
+                            {INVOICE_DISPLAY_LABELS[status]}
                           </StatusChip>
                         </span>
                         <p className="mt-0.5 text-xs text-muted-foreground">

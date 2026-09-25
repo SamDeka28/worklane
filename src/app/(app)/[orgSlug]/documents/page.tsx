@@ -18,6 +18,7 @@ import { listClients } from "@/modules/clients/queries";
 import { listProjects } from "@/modules/delivery/queries";
 import { CreateDocumentDialog } from "@/modules/documents/components/document-forms";
 import { listDocuments } from "@/modules/documents/queries";
+import { DOCUMENT_KIND_SHORT, DOCUMENT_KINDS } from "@/modules/documents/types";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { JOURNEY } from "@/shared/journey-copy";
 
@@ -75,12 +76,13 @@ export default async function DocumentsPage({
         <FilterChip href={`${base}?kind=all`} active={kind === "all"}>
           All
         </FilterChip>
-        <FilterChip href={`${base}?kind=proposal`} active={kind === "proposal"}>
-          Proposals
-        </FilterChip>
-        <FilterChip href={`${base}?kind=sow`} active={kind === "sow"}>
-          SOWs
-        </FilterChip>
+        {DOCUMENT_KINDS.filter(
+          (k) => k === "proposal" || k === "sow" || documents.some((d) => d.kind === k),
+        ).map((k) => (
+          <FilterChip key={k} href={`${base}?kind=${k}`} active={kind === k}>
+            {DOCUMENT_KIND_SHORT[k]}
+          </FilterChip>
+        ))}
       </FilterChips>
       <IndexBody>
         {documents.length > 0 ? (
@@ -132,7 +134,7 @@ export default async function DocumentsPage({
                         {hierarchy || "No client linked"}
                       </p>
                       <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] capitalize text-muted-foreground sm:hidden">
-                        <span>{doc.kind}</span>
+                        <span>{DOCUMENT_KIND_SHORT[doc.kind]}</span>
                         <span aria-hidden>·</span>
                         <span>{doc.status}</span>
                         <span aria-hidden>·</span>
@@ -143,9 +145,9 @@ export default async function DocumentsPage({
                   <DenseCell
                     align="right"
                     width="hidden w-24 sm:block"
-                    className="text-sm capitalize text-muted-foreground"
+                    className="truncate text-sm text-muted-foreground"
                   >
-                    {doc.kind}
+                    {DOCUMENT_KIND_SHORT[doc.kind]}
                   </DenseCell>
                   <DenseCell
                     align="right"

@@ -220,13 +220,18 @@ export type InvoiceEmailInput = {
   amountLabel: string;
   issuedOn?: string | null;
   dueOn?: string | null;
-  viewUrl: string;
+  viewUrl?: string | null;
   memo?: string | null;
+  paymentInstructions?: string | null;
+  reminder?: boolean;
 };
 
 export function invoiceEmailHtml(input: InvoiceEmailInput) {
   const greeting = input.clientName ? `Hi ${input.clientName},` : "Hello,";
   const dueText = input.dueOn ? ` Payment is due by ${formatEmailDate(input.dueOn)}.` : "";
+  const intro = input.reminder
+    ? `This is a friendly reminder that invoice ${input.number} from ${input.orgName} is still open.${dueText}`
+    : `Thank you for your business. Your invoice from ${input.orgName} is attached as a PDF.${dueText}`;
   const rows = [
     { label: "Invoice", value: input.number },
     ...(input.issuedOn ? [{ label: "Issued", value: formatEmailDate(input.issuedOn) }] : []),
@@ -237,12 +242,12 @@ export function invoiceEmailHtml(input: InvoiceEmailInput) {
   return layout({
     preheader: `Invoice ${input.number} for ${input.amountLabel}${input.dueOn ? `, due ${formatEmailDate(input.dueOn)}` : ""}.`,
     eyebrow: input.orgName,
-    title: `Invoice ${input.number}`,
-    content: `${paragraphs(`${greeting}\n\nThank you for your business. Please find your invoice from ${input.orgName} below.${dueText}`)}
-${input.memo ? paragraphs(input.memo) : ""}
+    title: input.reminder ? `Reminder: invoice ${input.number}` : `Invoice ${input.number}`,
+    content: `${paragraphs(`${greeting}\n\n${intro}`)}
+${input.memo && !input.reminder ? paragraphs(input.memo) : ""}
 ${detailRows(rows)}
-${button(input.viewUrl, "View invoice")}
-${fallbackLink(input.viewUrl)}`,
+${input.paymentInstructions ? paragraphs(`How to pay\n${input.paymentInstructions}`) : ""}
+${input.viewUrl ? `${button(input.viewUrl, "View invoice")}\n${fallbackLink(input.viewUrl)}` : ""}`,
     footer: `Sent on behalf of ${escapeHtml(input.orgName)} via Worklane. If you have questions about this invoice, please contact ${escapeHtml(input.orgName)} directly.`,
   });
 }
@@ -251,16 +256,96 @@ export function invoiceEmailText(input: InvoiceEmailInput) {
   return [
     input.clientName ? `Hi ${input.clientName},` : "Hello,",
     "",
-    `Thank you for your business. Please find invoice ${input.number} from ${input.orgName}.`,
-    ...(input.memo ? ["", input.memo.trim()] : []),
+    input.reminder
+      ? `This is a friendly reminder that invoice ${input.number} from ${input.orgName} is still open.`
+      : `Thank you for your business. Invoice ${input.number} from ${input.orgName} is attached as a PDF.`,
+    ...(input.memo && !input.reminder ? ["", input.memo.trim()] : []),
     "",
     `Invoice: ${input.number}`,
     ...(input.issuedOn ? [`Issued: ${formatEmailDate(input.issuedOn)}`] : []),
     ...(input.dueOn ? [`Due: ${formatEmailDate(input.dueOn)}`] : []),
     `Amount due: ${input.amountLabel}`,
-    "",
-    `View invoice: ${input.viewUrl}`,
+    ...(input.paymentInstructions ? ["", "How to pay:", input.paymentInstructions.trim()] : []),
+    ...(input.viewUrl ? ["", `View invoice: ${input.viewUrl}`] : []),
     "",
     `${input.orgName}`,
+  ].join("\n");
+}
+
+export type DocumentEmailInput = {
+  orgName: string;
+  senderName?: string | null;
+  kindLabel: string;
+  title: string;
+  message: string;
+  viewUrl: string;
+  pixelUrl?: string | null;
+};
+
+export function documentEmailHtml(input: DocumentEmailInput) {
+  const pixel = input.pixelUrl
+    ? `<img src="${escapeHtml(input.pixelUrl)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;opacity:0">`
+    : "";
+  const card = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px;border:1px solid ${LINE};border-radius:10px;background:${PANEL};border-collapse:separate">
+  <tr>
+    <td style="padding:18px 20px">
+      <p style="margin:0 0 4px;font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${MUTED}">${escapeHtml(input.kindLabel)}</p>
+      <p style="margin:0 0 14px;font-size:17px;line-height:24px;font-weight:600;color:${INK}">${escapeHtml(input.title)}</p>
+      ${button(input.viewUrl, `View ${input.kindLabel.toLowerCase()}`)}
+    </td>
+  </tr>
+</table>`;
+
+  return layout({
+    preheader: `${input.orgName} shared ${input.title} with you.`,
+    eyebrow: input.orgName,
+    title: input.title,
+    content: `${paragraphs(input.message)}
+${card}
+${fallbackLink(input.viewUrl)}
+${pixel}`,
+    footer: `Sent by ${escapeHtml(input.senderName || input.orgName)} at ${escapeHtml(input.orgName)} via Worklane. Reply to this email to reach them directly.`,
+  });
+}
+
+export function documentEmailText(input: DocumentEmailInput) {
+  return [
+    input.message.trim(),
+    "",
+    `${input.kindLabel}: ${input.title}`,
+    `View it here: ${input.viewUrl}`,
+  ].join("\n");
+}
+
+export type DocumentUpdateEmailInput = {
+  orgName: string;
+  heading: string;
+  message: string;
+  viewUrl: string;
+  buttonLabel: string;
+  rows?: { label: string; value: string }[];
+};
+
+export function documentUpdateEmailHtml(input: DocumentUpdateEmailInput) {
+  return layout({
+    preheader: input.message.split("\n")[0]?.slice(0, 140) ?? input.heading,
+    eyebrow: input.orgName,
+    title: input.heading,
+    content: `${paragraphs(input.message)}
+${input.rows?.length ? detailRows(input.rows) : ""}
+${button(input.viewUrl, input.buttonLabel)}
+${fallbackLink(input.viewUrl)}`,
+    footer: `Sent on behalf of ${escapeHtml(input.orgName)} via Worklane. Reply to this email to reach them directly.`,
+  });
+}
+
+export function documentUpdateEmailText(input: DocumentUpdateEmailInput) {
+  return [
+    input.heading,
+    "",
+    input.message.trim(),
+    ...(input.rows?.length ? ["", ...input.rows.map((row) => `${row.label}: ${row.value}`)] : []),
+    "",
+    `${input.buttonLabel}: ${input.viewUrl}`,
   ].join("\n");
 }

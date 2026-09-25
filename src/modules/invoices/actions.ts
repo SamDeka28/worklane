@@ -1,22 +1,31 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireWritableOrg } from "@/modules/identity/org";
+import { requireModuleWrite, requireWritableOrg } from "@/modules/identity/org";
 import { notifyOwners } from "@/modules/notifications/service";
+import { allocatePartnersForReceipt } from "@/modules/partners/allocate";
 import {
   brandToSnapshot,
   loadOrgInvoiceConfig,
   resolveInvoiceBrand,
 } from "@/modules/invoices/config";
-import { getInvoice } from "@/modules/invoices/queries";
-import { renderInvoicePdfBuffer } from "@/modules/invoices/pdf";
+import { getInvoice, listInvoicePayments } from "@/modules/invoices/queries";
+import { invoicePaidMinor, renderInvoicePdf } from "@/modules/invoices/render";
 import {
   dueOnFromDays,
+  parseInvoiceBusiness,
   parseOrgInvoiceSettings,
   plainToDoc,
   type OrgInvoiceSettings,
 } from "@/modules/invoices/settings";
 import { getInvoiceTemplate } from "@/modules/invoices/templates";
+import {
+  EMPTY_BILL_TO,
+  INVOICE_PAYMENT_METHODS,
+  extraFieldsFromForm,
+  parseBillTo,
+  type InvoiceBillTo,
+} from "@/modules/invoices/types";
 import {
   formatInvoiceNumber,
   invoiceMoneyLabel,
@@ -27,6 +36,61 @@ import { netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/mone
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
   return value === "INR" || value === "USD" ? value : fallback;
+}
+
+function field(formData: FormData, key: string, max = 500): string {
+  return String(formData.get(key) ?? "").trim().slice(0, max);
+}
+
+function billToFromForm(formData: FormData): InvoiceBillTo {
+  return {
+    name: field(formData, "bill_to_name", 200),
+    contactName: field(formData, "bill_to_contact", 200),
+    email: field(formData, "bill_to_email", 200),
+    phone: field(formData, "bill_to_phone", 60),
+    address: field(formData, "bill_to_address", 500),
+    taxId: field(formData, "bill_to_tax_id", 80),
+    extras: extraFieldsFromForm(formData, "bill_to_extra"),
+  };
+}
+
+async function defaultBillTo(
+  supabase: Awaited<ReturnType<typeof requireWritableOrg>>["supabase"],
+  orgId: string,
+  client: { id: string; name: string; billing?: unknown },
+): Promise<InvoiceBillTo> {
+  const saved = parseBillTo(client.billing);
+  if (saved?.name) return { ...EMPTY_BILL_TO, ...saved };
+
+  const [{ data: contact }, { data: previous }] = await Promise.all([
+    supabase
+      .from("contacts")
+      .select("name, email, phone")
+      .eq("organization_id", orgId)
+      .eq("client_id", client.id)
+      .order("is_primary", { ascending: false })
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("invoices")
+      .select("bill_to")
+      .eq("organization_id", orgId)
+      .eq("client_id", client.id)
+      .not("bill_to", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const last = parseBillTo(previous?.bill_to);
+  return {
+    ...EMPTY_BILL_TO,
+    ...(last ?? {}),
+    name: last?.name || client.name,
+    contactName: last?.contactName || (contact?.name as string | undefined) || "",
+    email: last?.email || (contact?.email as string | undefined) || "",
+    phone: last?.phone || (contact?.phone as string | undefined) || "",
+  };
 }
 
 function parseDoc(formData: FormData, key: string): Record<string, unknown> | null {
@@ -49,7 +113,7 @@ export async function createDraftInvoiceAction(orgSlug: string, formData: FormDa
 
   const { data: client } = await ctx.supabase
     .from("clients")
-    .select("id, name, currency")
+    .select("id, name, currency, billing")
     .eq("id", clientId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -76,6 +140,12 @@ export async function createDraftInvoiceAction(orgSlug: string, formData: FormDa
   const memoDoc =
     parseDoc(formData, "memo_doc") || template?.memoDoc || plainToDoc(memo ?? "") || null;
 
+  const billTo = await defaultBillTo(ctx.supabase, ctx.org.id, {
+    id: client.id as string,
+    name: client.name as string,
+    billing: client.billing,
+  });
+
   const { data: invoice, error } = await ctx.supabase
     .from("invoices")
     .insert({
@@ -91,6 +161,9 @@ export async function createDraftInvoiceAction(orgSlug: string, formData: FormDa
       memo,
       memo_doc: memoDoc,
       template_id: template?.id ?? null,
+      bill_to: billTo,
+      reference: field(formData, "reference", 120) || null,
+      payment_instructions: config.defaultPaymentInstructions.trim() || null,
       created_by: ctx.userId,
     })
     .select("id")
@@ -341,23 +414,178 @@ export async function updateInvoiceAction(
     return { error: "Only draft invoices can be edited" };
   }
 
+  const columns: Record<string, [string, number]> = {
+    due_on: ["due_on", 10],
+    terms: ["terms", 4000],
+    memo: ["memo", 4000],
+    project_id: ["project_id", 64],
+    template_id: ["template_id", 64],
+    reference: ["reference", 120],
+    payment_instructions: ["payment_instructions", 2000],
+  };
+  const patch: Record<string, unknown> = {};
+  for (const [key, [column, max]] of Object.entries(columns)) {
+    if (formData.has(key)) patch[column] = field(formData, key, max) || null;
+  }
+  if (formData.has("terms")) patch.terms_doc = parseDoc(formData, "terms_doc");
+  if (formData.has("memo")) patch.memo_doc = parseDoc(formData, "memo_doc");
+  if (Object.keys(patch).length === 0) return { ok: true as const };
+
   const { error } = await ctx.supabase
     .from("invoices")
-    .update({
-      due_on: String(formData.get("due_on") ?? "").trim() || null,
-      terms: String(formData.get("terms") ?? "").trim() || null,
-      terms_doc: parseDoc(formData, "terms_doc"),
-      memo: String(formData.get("memo") ?? "").trim() || null,
-      memo_doc: parseDoc(formData, "memo_doc"),
-      project_id: String(formData.get("project_id") ?? "").trim() || null,
-      template_id: String(formData.get("template_id") ?? "").trim() || null,
-    })
+    .update(patch)
     .eq("id", invoiceId)
     .eq("organization_id", ctx.org.id);
 
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
   return { ok: true as const };
+}
+
+export async function updateInvoiceBillToAction(
+  orgSlug: string,
+  invoiceId: string,
+  formData: FormData,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const { data: invoice } = await ctx.supabase
+    .from("invoices")
+    .select("id, status, issued_at, client_id")
+    .eq("id", invoiceId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!invoice) return { error: "Invoice not found" };
+  if (invoice.status !== "draft" || invoice.issued_at) {
+    return { error: "Only draft invoices can be edited" };
+  }
+
+  const billTo = billToFromForm(formData);
+  if (!billTo.name) return { error: "Billed-to name is required" };
+  if (billTo.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(billTo.email)) {
+    return { error: "Enter a valid email" };
+  }
+
+  const { error } = await ctx.supabase
+    .from("invoices")
+    .update({ bill_to: billTo })
+    .eq("id", invoiceId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+
+  let savedToClient = false;
+  if (formData.get("save_to_client") === "on") {
+    const { error: clientError } = await ctx.supabase
+      .from("clients")
+      .update({ billing: billTo })
+      .eq("id", invoice.client_id as string)
+      .eq("organization_id", ctx.org.id);
+    savedToClient = !clientError;
+  }
+
+  revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
+  return { ok: true as const, savedToClient };
+}
+
+export async function recordInvoicePaymentAction(
+  orgSlug: string,
+  invoiceId: string,
+  formData: FormData,
+) {
+  const ctx = await requireModuleWrite(orgSlug, "finance");
+  const invoice = await getInvoice(orgSlug, invoiceId);
+  if (!invoice) return { error: "Invoice not found" };
+  if (!invoice.issuedAt) return { error: "Issue the invoice before recording a payment" };
+  if (invoice.status === "void") return { error: "Void invoices cannot take payments" };
+
+  let amountMinor: bigint;
+  try {
+    amountMinor = parseMajorToMinor(field(formData, "amount"), invoice.currency);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Invalid amount" };
+  }
+  if (amountMinor <= BigInt(0)) return { error: "Amount must be more than zero" };
+
+  const payments = await listInvoicePayments(orgSlug, invoice);
+  const balance = invoiceSubtotalMinor(invoice.lines) - invoicePaidMinor(payments);
+  if (balance <= BigInt(0)) return { error: "This invoice is already paid in full" };
+  if (amountMinor > balance) {
+    return {
+      error: `That's more than the balance due (${invoiceMoneyLabel(balance, invoice.currency)})`,
+    };
+  }
+
+  const methodRaw = field(formData, "method");
+  const method = (INVOICE_PAYMENT_METHODS as readonly string[]).includes(methodRaw)
+    ? methodRaw
+    : "other";
+  const paidOn = field(formData, "paid_on") || new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn)) return { error: "Choose a valid payment date" };
+
+  const { data, error } = await ctx.supabase.rpc("post_invoice_receipt", {
+    p_invoice_id: invoiceId,
+    p_amount_minor: amountMinor.toString(),
+    p_paid_on: paidOn,
+    p_method: method,
+    p_reference: field(formData, "reference", 200) || null,
+  });
+  if (error) return { error: error.message };
+
+  const row = Array.isArray(data) ? data[0] : data;
+  const paymentId = (row as { payment_id?: string } | null)?.payment_id;
+  if (paymentId) {
+    const { data: allocations } = await ctx.supabase
+      .from("payment_allocations")
+      .select("id, charge_id, amount_minor")
+      .eq("payment_id", paymentId)
+      .eq("organization_id", ctx.org.id);
+    try {
+      await allocatePartnersForReceipt(ctx, {
+        paymentId,
+        allocations: (allocations ?? []).map((allocation) => ({
+          id: allocation.id as string,
+          chargeId: allocation.charge_id as string,
+          amountMinor: BigInt(allocation.amount_minor),
+        })),
+      });
+    } catch (allocError) {
+      return {
+        error:
+          allocError instanceof Error
+            ? allocError.message
+            : "Payment recorded, but partner earnings failed",
+      };
+    }
+  }
+
+  const label = invoiceMoneyLabel(amountMinor, invoice.currency);
+  const fullyPaid = amountMinor === balance;
+  await ctx.supabase.from("activities").insert({
+    organization_id: ctx.org.id,
+    actor_id: ctx.userId,
+    verb: "payment_recorded",
+    entity_type: "invoice",
+    entity_id: invoiceId,
+    metadata: { number: invoice.number, amount_minor: amountMinor.toString() },
+  });
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "finance",
+    title: (actor) =>
+      fullyPaid
+        ? `${actor} marked invoice ${invoice.number} as paid`
+        : `${actor} recorded ${label} on invoice ${invoice.number}`,
+    body: fullyPaid ? `${label} received · paid in full` : `${label} received`,
+    href: `/${orgSlug}/invoices/${invoiceId}`,
+    entity: { type: "invoice", id: invoiceId },
+    actionLabel: "Open invoice",
+  });
+
+  revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
+  revalidatePath(`/${orgSlug}/invoices`);
+  revalidatePath(`/${orgSlug}/finance`);
+  return { ok: true as const, fullyPaid };
 }
 
 export async function applyInvoiceTemplateAction(
@@ -539,6 +767,20 @@ export async function issueInvoiceAction(
   }
   const brandSnapshot = brandToSnapshot(brand);
 
+  let billTo = invoice.billTo;
+  if (!billTo?.name) {
+    const { data: client } = await ctx.supabase
+      .from("clients")
+      .select("id, name, billing")
+      .eq("id", invoice.clientId)
+      .maybeSingle();
+    billTo = await defaultBillTo(ctx.supabase, ctx.org.id, {
+      id: invoice.clientId,
+      name: (client?.name as string | undefined) ?? "Client",
+      billing: client?.billing,
+    });
+  }
+
   const { error } = await ctx.supabase
     .from("invoices")
     .update({
@@ -546,6 +788,7 @@ export async function issueInvoiceAction(
       issued_on: issuedOn,
       issued_at: new Date().toISOString(),
       brand_snapshot: brandSnapshot,
+      bill_to: billTo,
     })
     .eq("id", invoiceId)
     .eq("organization_id", ctx.org.id);
@@ -558,18 +801,9 @@ export async function issueInvoiceAction(
     .eq("id", ctx.org.id);
 
   try {
-    const { data: client } = await ctx.supabase
-      .from("clients")
-      .select("name")
-      .eq("id", invoice.clientId)
-      .maybeSingle();
     const fresh = await getInvoice(orgSlug, invoiceId);
     if (fresh) {
-      const buffer = await renderInvoicePdfBuffer({
-        invoice: fresh,
-        clientName: client?.name ?? "Client",
-        brand,
-      });
+      const { buffer } = await renderInvoicePdf(orgSlug, fresh);
       const storagePath = `${ctx.org.id}/invoice/${invoiceId}/${crypto.randomUUID()}.pdf`;
       const { error: uploadError } = await ctx.supabase.storage
         .from("org-files")
@@ -642,9 +876,13 @@ export async function markInvoiceSentAction(orgSlug: string, invoiceId: string) 
   if (!invoice.issued_at) return { error: "Issue the invoice before marking sent" };
   if (invoice.status === "void") return { error: "Void invoice cannot be sent" };
 
+  const keepsStatus = invoice.status === "paid" || invoice.status === "partially_paid";
   const { error } = await ctx.supabase
     .from("invoices")
-    .update({ status: "sent" })
+    .update({
+      sent_at: new Date().toISOString(),
+      ...(keepsStatus ? {} : { status: "sent" }),
+    })
     .eq("id", invoiceId)
     .eq("organization_id", ctx.org.id);
 
@@ -658,6 +896,10 @@ export async function voidInvoiceAction(orgSlug: string, invoiceId: string) {
   const invoice = await getInvoice(orgSlug, invoiceId);
   if (!invoice) return { error: "Invoice not found" };
   if (invoice.status === "void") return { error: "Already void" };
+  const payments = await listInvoicePayments(orgSlug, invoice);
+  if (invoicePaidMinor(payments) > BigInt(0)) {
+    return { error: "This invoice has payments. Void them in Finance first." };
+  }
 
   for (const line of invoice.lines) {
     if (!line.chargeId) continue;
@@ -742,10 +984,24 @@ export async function saveOrgInvoiceSettingsAction(orgSlug: string, formData: Fo
     defaultTaxBps,
     defaultTerms: String(formData.get("default_terms") ?? ""),
     defaultMemo: String(formData.get("default_memo") ?? ""),
+    defaultPaymentInstructions: String(
+      formData.get("default_payment_instructions") ?? previous.defaultPaymentInstructions,
+    ),
+    business: formData.has("business_legal_name")
+      ? parseInvoiceBusiness({
+          legalName: formData.get("business_legal_name"),
+          address: formData.get("business_address"),
+          email: formData.get("business_email"),
+          phone: formData.get("business_phone"),
+          taxId: formData.get("business_tax_id"),
+          website: formData.get("business_website"),
+          extras: extraFieldsFromForm(formData, "business_extra"),
+        })
+      : previous.business,
     brand: {
       accentHex,
       logoFileId: clearLogo ? null : logoFileId ?? previous.brand.logoFileId,
-      showOrgAddress: String(formData.get("show_org_address") ?? "") === "on",
+      showBusinessDetails: String(formData.get("show_business_details") ?? "") === "on",
       layout,
     },
   };
@@ -839,8 +1095,12 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
   if (!invoice.issuedAt) return { error: "Issue the invoice before sending" };
   if (invoice.status === "void") return { error: "Void invoice cannot be sent" };
 
+  if (invoice.status === "paid") return { error: "This invoice is already paid" };
+
+  const reminder = String(formData?.get("kind") ?? "") === "reminder";
   const to =
     String(formData?.get("to") ?? "").trim() ||
+    invoice.billTo?.email?.trim() ||
     (await (async () => {
       const { data } = await ctx.supabase
         .from("contacts")
@@ -854,43 +1114,57 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
       return (data?.email as string | null) ?? "";
     })());
 
-  if (!to) return { error: "Add a client contact email, or pass a recipient" };
+  if (!to) return { error: "Add an email under Billed to, or enter a recipient" };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { error: "Enter a valid recipient email" };
 
-  const { data: client } = await ctx.supabase
-    .from("clients")
-    .select("name")
-    .eq("id", invoice.clientId)
-    .maybeSingle();
+  const { buffer, clientName, brand, paidMinor } = await renderInvoicePdf(orgSlug, invoice);
+  const balance = invoiceSubtotalMinor(invoice.lines) - paidMinor;
 
-  const { getAppUrl, invoiceEmailHtml, invoiceEmailText, sendEmail } = await import(
-    "@/shared/email"
-  );
+  const { invoiceEmailHtml, invoiceEmailText, sendEmail } = await import("@/shared/email");
   const emailInput = {
-    orgName: ctx.org.name,
-    clientName: (client?.name as string | undefined) ?? null,
+    orgName: brand.business.legalName || ctx.org.name,
+    clientName: invoice.billTo?.contactName || invoice.billTo?.name || clientName,
     number: invoice.number,
-    amountLabel: invoiceMoneyLabel(invoiceSubtotalMinor(invoice.lines), invoice.currency),
+    amountLabel: invoiceMoneyLabel(balance > BigInt(0) ? balance : BigInt(0), invoice.currency),
     issuedOn: invoice.issuedOn,
     dueOn: invoice.dueOn,
-    viewUrl: `${getAppUrl()}/${orgSlug}/invoices/${invoiceId}/pdf`,
-    memo: invoice.memo,
+    memo: String(formData?.get("message") ?? "").trim() || invoice.memo,
+    paymentInstructions: invoice.paymentInstructions,
+    reminder,
   };
   const mailed = await sendEmail({
     to,
-    subject: `Invoice ${invoice.number} from ${ctx.org.name} – ${emailInput.amountLabel}`,
+    subject: reminder
+      ? `Reminder: invoice ${invoice.number} from ${emailInput.orgName} – ${emailInput.amountLabel} due`
+      : `Invoice ${invoice.number} from ${emailInput.orgName} – ${emailInput.amountLabel}`,
     html: invoiceEmailHtml(emailInput),
     text: invoiceEmailText(emailInput),
+    replyTo: brand.business.email || undefined,
+    attachments: [
+      { filename: `${invoice.number}.pdf`, content: buffer, contentType: "application/pdf" },
+    ],
   });
 
   if (!mailed.ok) return { error: mailed.error };
 
   await markInvoiceSentAction(orgSlug, invoiceId);
+  await ctx.supabase.from("activities").insert({
+    organization_id: ctx.org.id,
+    actor_id: ctx.userId,
+    verb: reminder ? "reminded" : "sent",
+    entity_type: "invoice",
+    entity_id: invoiceId,
+    metadata: { number: invoice.number, to },
+  });
   await notifyOwners({
     organizationId: ctx.org.id,
     orgName: ctx.org.name,
     actorId: ctx.userId,
     category: "finance",
-    title: (actor) => `${actor} sent invoice ${invoice.number} to ${emailInput.clientName ?? to}`,
+    title: (actor) =>
+      reminder
+        ? `${actor} sent a reminder for invoice ${invoice.number}`
+        : `${actor} sent invoice ${invoice.number} to ${emailInput.clientName ?? to}`,
     body: `${emailInput.amountLabel} · emailed to ${to}`,
     href: `/${orgSlug}/invoices/${invoiceId}`,
     entity: { type: "invoice", id: invoiceId },

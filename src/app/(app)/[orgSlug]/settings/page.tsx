@@ -3,12 +3,6 @@ import { StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import { listClients } from "@/modules/clients/queries";
 import { OrgSettingsForm } from "@/modules/identity/components/org-settings-form";
 import { requireOrg } from "@/modules/identity/org";
-import {
-  InvoiceSettingsForm,
-  InvoiceTemplatesPanel,
-} from "@/modules/invoices/components/invoice-settings-form";
-import { loadOrgInvoiceConfig, resolveInvoiceBrand } from "@/modules/invoices/config";
-import { ensureDefaultInvoiceTemplates } from "@/modules/invoices/templates";
 import { listPartners } from "@/modules/partners/queries";
 import {
   CreateShareGrantForm,
@@ -50,14 +44,6 @@ export default async function SettingsPage({
     ctx.org.modules.portal ? listPartners(orgSlug) : Promise.resolve([]),
     ctx.org.modules.portal ? listShareGrants(orgSlug) : Promise.resolve([]),
   ]);
-
-  const [invoiceConfig, templates, brand] = ctx.org.modules.finance
-    ? await Promise.all([
-        loadOrgInvoiceConfig(orgSlug),
-        ensureDefaultInvoiceTemplates(orgSlug),
-        resolveInvoiceBrand(orgSlug),
-      ])
-    : [null, [], null];
 
   return (
     <WorkSurface>
@@ -124,34 +110,21 @@ export default async function SettingsPage({
           </div>
 
           <div className="space-y-6 xl:col-span-7" id="invoices">
-            {ctx.org.modules.finance && invoiceConfig ? (
-              <>
-                <FormSection
-                  title="Invoices"
-                  hint="Numbering, defaults, brand, and layout"
+            <FormSection
+              title="Invoices"
+              hint="Numbering, defaults, branding and templates live with your invoices."
+            >
+              {ctx.org.modules.finance ? (
+                <Link
+                  href={`/${orgSlug}/invoices?settings=1`}
+                  className="text-sm font-semibold text-foreground underline-offset-2 hover:underline"
                 >
-                  <InvoiceSettingsForm
-                    orgSlug={orgSlug}
-                    orgId={ctx.org.id}
-                    config={invoiceConfig}
-                    logoUrl={brand?.logoUrl ?? null}
-                    canWrite={ctx.canWrite}
-                  />
-                </FormSection>
-                <FormSection
-                  title="Templates"
-                  hint="Presets applied when creating drafts"
-                >
-                  <InvoiceTemplatesPanel
-                    orgSlug={orgSlug}
-                    templates={templates}
-                    canWrite={ctx.canWrite}
-                  />
-                </FormSection>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">Finance module is off.</p>
-            )}
+                  Open invoice settings
+                </Link>
+              ) : (
+                <p className="text-sm text-muted-foreground">Finance module is off.</p>
+              )}
+            </FormSection>
           </div>
         </div>
       </div>

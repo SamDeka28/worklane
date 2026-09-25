@@ -1,16 +1,22 @@
 import { cache } from "react";
 import { requireOrg } from "@/modules/identity/org";
-import type {
-  DocumentKind,
-  DocumentRecord,
-  DocumentSignature,
-  DocumentStatus,
-  DocumentVersion,
+import {
+  FEEDBACK_COLUMNS,
+  mapFeedback,
+  type DocumentFeedback,
+  type DocumentSend,
+} from "@/modules/documents/sends";
+import {
+  asDocumentKind,
+  type DocumentKind,
+  type DocumentRecord,
+  type DocumentSignature,
+  type DocumentStatus,
+  type DocumentVersion,
 } from "@/modules/documents/types";
 
 function asKind(value: string): DocumentKind {
-  if (value === "sow" || value === "other") return value;
-  return "proposal";
+  return asDocumentKind(value);
 }
 
 function asStatus(value: string): DocumentStatus {
@@ -301,4 +307,69 @@ export async function listDocumentsForProjectSurface(
       mentionedVia: "link" | "tag" | "both";
     }
   >;
+}
+
+export async function listDocumentSends(
+  orgSlug: string,
+  documentId: string,
+): Promise<DocumentSend[]> {
+  const ctx = await requireOrg(orgSlug);
+  const { data, error } = await ctx.supabase
+    .from("document_sends")
+    .select(
+      "id, recipient_email, recipient_name, cc, subject, sent_at, sent_by, track_opens, open_count, first_opened_at, last_opened_at, view_count, first_viewed_at, last_viewed_at, revoked_at",
+    )
+    .eq("organization_id", ctx.org.id)
+    .eq("document_id", documentId)
+    .order("sent_at", { ascending: false })
+    .limit(20);
+  if (error) throw new Error(error.message);
+  const rows = data ?? [];
+
+  const senderIds = [...new Set(rows.map((row) => row.sent_by as string | null).filter(Boolean))];
+  const names = new Map<string, string>();
+  if (senderIds.length > 0) {
+    const { data: profiles } = await ctx.supabase
+      .from("profiles")
+      .select("id, display_name, email")
+      .in("id", senderIds as string[]);
+    for (const profile of profiles ?? []) {
+      const name = (profile.display_name as string | null) ?? (profile.email as string | null);
+      if (name) names.set(profile.id as string, name);
+    }
+  }
+
+  return rows.map((row) => ({
+    id: row.id as string,
+    recipientEmail: row.recipient_email as string,
+    recipientName: (row.recipient_name as string | null) ?? null,
+    cc: (row.cc as string[] | null) ?? [],
+    subject: row.subject as string,
+    sentAt: row.sent_at as string,
+    sentByName: row.sent_by ? (names.get(row.sent_by as string) ?? null) : null,
+    trackOpens: Boolean(row.track_opens),
+    openCount: Number(row.open_count ?? 0),
+    firstOpenedAt: (row.first_opened_at as string | null) ?? null,
+    lastOpenedAt: (row.last_opened_at as string | null) ?? null,
+    viewCount: Number(row.view_count ?? 0),
+    firstViewedAt: (row.first_viewed_at as string | null) ?? null,
+    lastViewedAt: (row.last_viewed_at as string | null) ?? null,
+    revokedAt: (row.revoked_at as string | null) ?? null,
+  }));
+}
+
+export async function listDocumentFeedback(
+  orgSlug: string,
+  documentId: string,
+): Promise<DocumentFeedback[]> {
+  const ctx = await requireOrg(orgSlug);
+  const { data, error } = await ctx.supabase
+    .from("document_feedback")
+    .select(FEEDBACK_COLUMNS)
+    .eq("organization_id", ctx.org.id)
+    .eq("document_id", documentId)
+    .order("created_at", { ascending: true })
+    .limit(300);
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => mapFeedback(row as Record<string, unknown>));
 }

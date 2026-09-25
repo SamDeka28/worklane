@@ -19,6 +19,32 @@ const colorAttrs = {
       return { style: `color: ${attributes.color}` };
     },
   },
+  /**
+   * "none" hides cell borders; "bottom" keeps only a rule under the cell (signature lines);
+   * "band" is a borderless, generously padded block (cover and callout bands).
+   */
+  borderStyle: {
+    default: null as "none" | "bottom" | "band" | null,
+    parseHTML: (element: HTMLElement) => {
+      const value = element.getAttribute("data-border");
+      return value === "none" || value === "bottom" || value === "band" ? value : null;
+    },
+    renderHTML: (attributes: { borderStyle?: string | null }) => {
+      if (attributes.borderStyle === "none") {
+        return { "data-border": "none", style: "border-color: transparent" };
+      }
+      if (attributes.borderStyle === "band") {
+        return { "data-border": "band", style: "border-color: transparent" };
+      }
+      if (attributes.borderStyle === "bottom") {
+        return {
+          "data-border": "bottom",
+          style: "border-color: transparent; border-bottom-color: #334155",
+        };
+      }
+      return {};
+    },
+  },
 };
 
 /** Table cells that keep fill / text color when pasting from Word, Docs, etc. */

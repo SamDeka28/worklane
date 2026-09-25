@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { createDocumentAction } from "@/modules/documents/actions";
+import { DOCUMENT_TEMPLATES, getDocumentTemplate } from "@/modules/documents/templates";
+import { DOCUMENT_KIND_LABEL, DOCUMENT_KINDS } from "@/modules/documents/types";
 
 export function CreateDocumentDialog({
   orgSlug,
@@ -32,11 +34,13 @@ export function CreateDocumentDialog({
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
   const [pending, start] = useTransition();
+  const [templateId, setTemplateId] = useState("proposal");
+  const selectedTemplate = getDocumentTemplate(templateId);
 
   return (
     <ActionSheet
       title="New document"
-        description="Set title and context: we seed a starter template you can edit in the studio."
+        description="Pick a template and context: client and project are filled in for you."
       triggerLabel={triggerLabel}
       triggerVariant={triggerVariant}
       open={open}
@@ -61,11 +65,26 @@ export function CreateDocumentDialog({
         <Field label="Title" htmlFor="doc_title" required>
           <Input id="doc_title" name="title" required placeholder="Website redesign proposal" />
         </Field>
-        <Field label="Kind" htmlFor="doc_kind">
-          <NativeSelect id="doc_kind" name="kind" defaultValue="proposal">
-            <option value="proposal">Proposal</option>
-            <option value="sow">SOW</option>
-            <option value="other">Other</option>
+        <Field label="Template" htmlFor="doc_template" hint={selectedTemplate?.description}>
+          <NativeSelect
+            id="doc_template"
+            name="template_id"
+            value={templateId}
+            onChange={(event) => setTemplateId(event.target.value)}
+          >
+            {DOCUMENT_KINDS.map((kind) => {
+              const options = DOCUMENT_TEMPLATES.filter((t) => t.kind === kind);
+              if (options.length === 0) return null;
+              return (
+                <optgroup key={kind} label={DOCUMENT_KIND_LABEL[kind]}>
+                  {options.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </NativeSelect>
         </Field>
         <Field label="Client" htmlFor="doc_client">

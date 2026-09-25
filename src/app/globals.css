@@ -1041,3 +1041,200 @@
 .ProseMirror.resize-cursor {
   cursor: col-resize;
 }
+
+/* Document studio typography: print-like hierarchy for proposals, contracts and reports. */
+.doc-wysiwyg {
+  color: #334155;
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.doc-wysiwyg p {
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: inherit;
+}
+
+.doc-wysiwyg h1 {
+  color: #0f172a;
+  font-size: 2rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0 0 0.75rem;
+}
+
+.doc-wysiwyg h2 {
+  color: #0f172a;
+  font-size: 1.2rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+  margin: 2.25rem 0 0.9rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.doc-wysiwyg h3 {
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.4;
+  margin: 1.4rem 0 0.4rem;
+}
+
+.doc-wysiwyg blockquote {
+  margin: 1rem 0;
+  padding: 0.85rem 1.1rem;
+  border-left: 3px solid #1e40af;
+  border-radius: 0 0.5rem 0.5rem 0;
+  background: #f1f5ff;
+  color: #1e293b;
+}
+
+.doc-wysiwyg blockquote p {
+  margin: 0;
+}
+
+.doc-wysiwyg hr {
+  margin: 2rem 0;
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+}
+
+.doc-wysiwyg li::marker {
+  color: #1e40af;
+}
+
+.doc-wysiwyg table {
+  font-size: 13px;
+  margin: 1rem 0;
+}
+
+.doc-wysiwyg td,
+.doc-wysiwyg th {
+  border-color: #e2e8f0;
+  padding: 0.55rem 0.8rem;
+}
+
+.doc-wysiwyg th {
+  background: #f1f5f9;
+}
+
+.doc-wysiwyg td p,
+.doc-wysiwyg th p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.doc-wysiwyg td p + p,
+.doc-wysiwyg th p + p {
+  margin-top: 0.15rem;
+}
+
+.doc-wysiwyg td[data-border="band"],
+.doc-wysiwyg th[data-border="band"] {
+  padding: 2rem 2.25rem 1.9rem;
+}
+
+.doc-wysiwyg td[data-border="band"] h1 {
+  margin: 0.35rem 0 0.5rem;
+}
+
+.doc-wysiwyg td[data-border="band"] p {
+  font-size: 14px;
+}
+
+.doc-wysiwyg td[data-border="none"] {
+  padding: 0.7rem 0.9rem;
+}
+
+.doc-wysiwyg .tableWrapper:has(td[data-border="band"]) {
+  margin-top: 0;
+}
+
+/* Document studio: paginated pages on a neutral canvas. */
+.doc-canvas {
+  --doc-canvas: #ebe9e4;
+}
+
+:is(
+    [data-theme="dark"],
+    [data-theme="dark-modern"],
+    [data-theme="github-dark"],
+    [data-theme="one-dark"],
+    [data-theme="dracula"],
+    [data-theme="nord"],
+    [data-theme="monokai"],
+    [data-theme="solarized-dark"]
+  )
+  .doc-canvas {
+  --doc-canvas: #1c1c21;
+}
+
+.ProseMirror.rm-with-pagination {
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.ProseMirror.rm-with-pagination p.is-editor-empty::before {
+  color: #94a3b8;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+.ProseMirror.rm-with-pagination .rm-page-header,
+.ProseMirror.rm-with-pagination .rm-page-footer {
+  cursor: default !important;
+  font-size: 11px;
+  color: #94a3b8;
+  user-select: none;
+}
+
+.ProseMirror.rm-with-pagination table tbody {
+  width: 100%;
+  table-layout: fixed;
+  max-height: none;
+}
+
+.ProseMirror.rm-with-pagination table tr td,
+.ProseMirror.rm-with-pagination table tr th {
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.ProseMirror ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.15rem;
+}
+
+.ProseMirror ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.ProseMirror ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  margin-top: 0.45em;
+  user-select: none;
+}
+
+.ProseMirror ul[data-type="taskList"] li > label input {
+  width: 0.95rem;
+  height: 0.95rem;
+  cursor: pointer;
+  accent-color: #2563eb;
+}
+
+.ProseMirror ul[data-type="taskList"] li > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: #94a3b8;
+  text-decoration: line-through;
+}

@@ -42,9 +42,10 @@ export async function resolveInvoiceBrand(
       accentHex: snap.accentHex,
       logoFileId: snap.logoFileId,
       logoUrl,
-      showOrgAddress: snap.showOrgAddress,
+      showBusinessDetails: snap.showBusinessDetails,
       layout: snap.layout,
       orgName: snap.orgName,
+      business: snap.business,
     };
   }
 
@@ -57,9 +58,10 @@ export async function resolveInvoiceBrand(
     accentHex: config.brand.accentHex,
     logoFileId: config.brand.logoFileId,
     logoUrl,
-    showOrgAddress: config.brand.showOrgAddress,
+    showBusinessDetails: config.brand.showBusinessDetails,
     layout: config.brand.layout,
     orgName: ctx.org.name,
+    business: config.business,
   };
 }
 
@@ -69,7 +71,8 @@ export function brandToSnapshot(brand: InvoiceBrand): InvoiceBrandSnapshot {
     accentHex: brand.accentHex,
     logoFileId: brand.logoFileId,
     orgName: brand.orgName,
-    showOrgAddress: brand.showOrgAddress,
+    showBusinessDetails: brand.showBusinessDetails,
+    business: brand.business,
   };
 }
 

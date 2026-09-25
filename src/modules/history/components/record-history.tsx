@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AvatarMark } from "@/components/studio/avatar-mark";
 import { cn } from "@/lib/utils";
+import { DOCUMENT_KIND_LABEL } from "@/modules/documents/types";
 import { formatDay } from "@/modules/finance/presentation";
 import { listRecordEventsAction } from "@/modules/history/actions";
 import type { RecordChange, RecordEntityType, RecordEvent } from "@/modules/history/types";
@@ -18,6 +19,7 @@ const KIND_LABEL: Record<string, string> = {
   bug: "Bug",
   feature: "Feature",
   chore: "Chore",
+  ...DOCUMENT_KIND_LABEL,
 };
 
 const FIELD_LABEL: Record<string, string> = {

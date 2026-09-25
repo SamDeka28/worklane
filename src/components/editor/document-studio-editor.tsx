@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -11,9 +12,14 @@ import Highlight from "@tiptap/extension-highlight";
 import { TextStyleKit } from "@tiptap/extension-text-style";
 import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
+import { TaskItem, TaskList } from "@tiptap/extension-list";
+import { CharacterCount } from "@tiptap/extensions";
+import { PAGE_SIZES, PaginationPlus } from "tiptap-pagination-plus";
 import { cn } from "@/lib/utils";
 import { docToPlainText } from "@/components/editor/doc-text";
 import { DocumentBubbleMenu } from "@/components/editor/document-bubble-menu";
+import { DocumentContextMenu } from "@/components/editor/document-context-menu";
+import { DOCUMENT_PROSE } from "@/components/editor/document-prose";
 import { DocumentFontSize } from "@/components/editor/document-typography";
 import { DocumentToolbar } from "@/components/editor/document-toolbar";
 import {
@@ -37,20 +43,13 @@ import { uploadFileAction } from "@/modules/files/actions";
 
 export type { MentionItem };
 
-const DOCUMENT_PROSE =
-  "doc-wysiwyg max-w-none caret-primary focus:outline-none " +
-  "[&_h1]:mb-4 [&_h1]:text-[2rem] [&_h1]:font-semibold [&_h1]:leading-tight [&_h1]:tracking-tight " +
-  "[&_h2]:mb-3 [&_h2]:mt-8 [&_h2]:text-[1.5rem] [&_h2]:font-semibold [&_h2]:leading-snug " +
-  "[&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-[1.2rem] [&_h3]:font-semibold " +
-  "[&_p]:mb-3 [&_p]:text-[15px] [&_p]:leading-7 [&_p]:text-foreground/90 " +
-  "[&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 " +
-  "[&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground " +
-  "[&_hr]:my-8 [&_hr]:border-border/60 " +
-  "[&_mark]:rounded-sm [&_mark]:px-0.5 [&_mark]:py-px " +
-  "[&_table]:my-4 [&_table]:w-full [&_table]:border-collapse [&_table]:text-[13px] " +
-  "[&_td]:border [&_td]:border-border/60 [&_td]:px-3 [&_td]:py-2 [&_td]:align-top " +
-  "[&_th]:border [&_th]:border-border/60 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold " +
-  "[&_.ProseMirror-selectednode]:outline [&_.ProseMirror-selectednode]:outline-sky-300";
+const PAGE_SIZE_OPTIONS = {
+  A4: { label: "A4", size: PAGE_SIZES.A4 },
+  LETTER: { label: "Letter", size: PAGE_SIZES.LETTER },
+  LEGAL: { label: "Legal", size: PAGE_SIZES.LEGAL },
+} as const;
+
+type PageSizeKey = keyof typeof PAGE_SIZE_OPTIONS;
 
 export function DocumentStudioEditor({
   value,
@@ -65,6 +64,8 @@ export function DocumentStudioEditor({
   onEditorReady,
   pagePadding,
   onPagePaddingChange,
+  focusTitle,
+  focusActions,
   className,
 }: {
   value?: JSONContent | null;
@@ -79,10 +80,19 @@ export function DocumentStudioEditor({
   onEditorReady?: (editor: Editor | null) => void;
   pagePadding?: PageMargins;
   onPagePaddingChange?: (next: PageMargins) => void;
+  /** Shown in the top bar while in full-screen focus mode. */
+  focusTitle?: string;
+  /** Extra controls (e.g. Save) for the focus-mode top bar. */
+  focusActions?: ReactNode;
   className?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [pageSize, setPageSize] = useState<PageSizeKey>("A4");
+  const [pageCount, setPageCount] = useState(1);
+  const [wordCount, setWordCount] = useState(0);
+  const pageWidth = PAGE_SIZE_OPTIONS[pageSize].size.pageWidth + 2;
   const createRef = useRef(onCreateMention);
   createRef.current = onCreateMention;
   const allMentions = useMentionCatalog(orgSlug, mentions, editable);
@@ -119,6 +129,22 @@ export function DocumentStudioEditor({
       TableRow,
       StyledTableHeader,
       StyledTableCell,
+      TaskList,
+      TaskItem.configure({ nested: true }),
+      CharacterCount,
+      PaginationPlus.configure({
+        ...PAGE_SIZE_OPTIONS.A4.size,
+        pageGap: 28,
+        pageBreakBackground: "var(--doc-canvas)",
+        pageGapBorderSize: 1,
+        pageGapBorderColor: "rgba(15, 23, 42, 0.1)",
+        contentMarginTop: 8,
+        contentMarginBottom: 8,
+        headerLeft: "",
+        headerRight: "",
+        footerLeft: "",
+        footerRight: "Page {page}",
+      }),
       configureTypedMention(mentionsRef, createRef),
     ],
     [placeholder],
@@ -131,8 +157,7 @@ export function DocumentStudioEditor({
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: cn(DOCUMENT_PROSE, "min-h-[66rem]"),
-        style: `padding:${(pagePadding ?? DEFAULT_PAGE_MARGINS).top}px ${(pagePadding ?? DEFAULT_PAGE_MARGINS).right}px ${(pagePadding ?? DEFAULT_PAGE_MARGINS).bottom}px ${(pagePadding ?? DEFAULT_PAGE_MARGINS).left}px`,
+        class: cn(DOCUMENT_PROSE, "bg-white"),
       },
       transformPastedHTML(html) {
         return html
@@ -167,10 +192,56 @@ export function DocumentStudioEditor({
 
   useEffect(() => {
     if (!editor) return;
-    const el = editor.view.dom as HTMLElement;
     const pad = pagePadding ?? DEFAULT_PAGE_MARGINS;
-    el.style.padding = `${pad.top}px ${pad.right}px ${pad.bottom}px ${pad.left}px`;
-  }, [editor, pagePadding]);
+    const size = PAGE_SIZE_OPTIONS[pageSize].size;
+    editor
+      .chain()
+      .updatePageSize(size)
+      .updateMargins({ top: pad.top, bottom: pad.bottom, left: pad.left, right: pad.right })
+      .run();
+  }, [editor, pagePadding, pageSize]);
+
+  useEffect(() => {
+    if (!editor) return;
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const pages = editor.view.dom.querySelector("[data-rm-pagination]");
+        setPageCount(Math.max(1, pages?.children.length ?? 1));
+        setWordCount(editor.storage.characterCount.words());
+      });
+    };
+    measure();
+    editor.on("transaction", measure);
+    return () => {
+      cancelAnimationFrame(frame);
+      editor.off("transaction", measure);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const mod = event.metaKey || event.ctrlKey;
+      if (mod && event.shiftKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setFocusMode((current) => !current);
+      } else if (event.key === "Escape" && focusMode && !event.defaultPrevented) {
+        setFocusMode(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focusMode]);
+
+  useEffect(() => {
+    if (!focusMode) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [focusMode]);
 
   const attach = useCallback(
     async (file: File) => {
@@ -218,7 +289,32 @@ export function DocumentStudioEditor({
   const margins = pagePadding ?? DEFAULT_PAGE_MARGINS;
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col overflow-hidden", className)}>
+    <div
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden",
+        focusMode ? "fixed inset-0 z-50 bg-background" : cn("h-full", className),
+      )}
+      role={focusMode ? "dialog" : undefined}
+      aria-modal={focusMode || undefined}
+      aria-label={focusMode ? "Full-screen editor" : undefined}
+    >
+      {focusMode ? (
+        <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border/40 bg-card px-4">
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
+            {focusTitle ?? "Document"}
+          </p>
+          {focusActions}
+          <button
+            type="button"
+            onClick={() => setFocusMode(false)}
+            className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted-foreground ring-1 ring-border/60 transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Minimize2 className="size-3.5" />
+            Exit full screen
+            <kbd className="ml-1 rounded bg-muted px-1 text-[10px]">Esc</kbd>
+          </button>
+        </div>
+      ) : null}
       {editable ? (
         <div className="sticky top-0 z-20 shrink-0 border-b border-border/40 bg-card/95 shadow-sm backdrop-blur-md">
           <DocumentToolbar
@@ -245,24 +341,63 @@ export function DocumentStudioEditor({
       ) : null}
 
       {editable ? <DocumentBubbleMenu editor={editor} /> : null}
+      {editable ? <DocumentContextMenu editor={editor} /> : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[#ebe9e4] dark:bg-black/25">
-        <div className="mx-auto flex w-full max-w-[54rem] justify-center px-3 py-6 sm:px-8 sm:py-10">
+      <div className="doc-canvas min-h-0 flex-1 overflow-auto bg-[var(--doc-canvas)]">
+        <div className="sticky top-0 z-10 flex min-w-fit justify-center bg-[var(--doc-canvas)] px-6 pt-3">
+          <div data-theme="light" className="lane-paper shrink-0" style={{ width: pageWidth }}>
+            <EditorPageRuler
+              editor={editor}
+              margins={margins}
+              onMarginsChange={(next) => onPagePaddingChange?.(next)}
+              editable={editable && Boolean(onPagePaddingChange)}
+            />
+          </div>
+        </div>
+        <div className="flex min-w-fit justify-center px-6 pt-3 pb-16">
           <div
             data-theme="light"
-            className="lane-paper w-full overflow-hidden rounded-[3px] bg-white text-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_12px_40px_rgba(0,0,0,0.14)] ring-1 ring-black/5"
+            className="lane-paper shrink-0 text-slate-900"
+            style={{ width: pageWidth }}
           >
-            <div className="sticky top-0 z-[5]">
-              <EditorPageRuler
-                editor={editor}
-                margins={margins}
-                onMarginsChange={(next) => onPagePaddingChange?.(next)}
-                editable={editable && Boolean(onPagePaddingChange)}
-              />
-            </div>
             <EditorContent editor={editor} />
           </div>
         </div>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-4 border-t border-border/40 bg-card px-4 py-1.5 text-xs text-muted-foreground">
+        <span className="tabular-nums">
+          {pageCount} page{pageCount === 1 ? "" : "s"}
+        </span>
+        <span className="tabular-nums">
+          {wordCount.toLocaleString()} word{wordCount === 1 ? "" : "s"}
+        </span>
+        <span className="hidden text-muted-foreground/70 sm:inline">
+          Right-click for more options
+        </span>
+        <label className="ml-auto inline-flex items-center gap-1.5">
+          Page size
+          <select
+            value={pageSize}
+            onChange={(event) => setPageSize(event.target.value as PageSizeKey)}
+            className="h-6 rounded-md bg-transparent px-1 font-medium text-foreground ring-1 ring-border/50 outline-none hover:bg-muted"
+          >
+            {(Object.keys(PAGE_SIZE_OPTIONS) as PageSizeKey[]).map((key) => (
+              <option key={key} value={key}>
+                {PAGE_SIZE_OPTIONS[key].label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          onClick={() => setFocusMode((current) => !current)}
+          title={`${focusMode ? "Exit" : "Enter"} full screen (${typeof navigator !== "undefined" && /Mac/.test(navigator.userAgent) ? "⌘⇧F" : "Ctrl+Shift+F"})`}
+          className="inline-flex h-6 items-center gap-1.5 rounded-md px-1.5 font-medium text-foreground ring-1 ring-border/50 hover:bg-muted"
+        >
+          {focusMode ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+          {focusMode ? "Exit full screen" : "Full screen"}
+        </button>
       </div>
     </div>
   );

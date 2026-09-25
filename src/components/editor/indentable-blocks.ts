@@ -23,6 +23,11 @@ function indentAttrs() {
       parseHTML: (element: HTMLElement) => parsePx(element.style.textIndent),
       renderHTML: () => ({}),
     },
+    lineHeight: {
+      default: null,
+      parseHTML: (element: HTMLElement) => element.style.lineHeight || null,
+      renderHTML: () => ({}),
+    },
   };
 }
 
@@ -36,11 +41,13 @@ function indentStyle(attrs: {
   indentLeft?: number;
   indentRight?: number;
   indentFirst?: number;
+  lineHeight?: string | null;
 }) {
   const styles: string[] = [];
   if (attrs.indentLeft) styles.push(`margin-left: ${attrs.indentLeft}px`);
   if (attrs.indentRight) styles.push(`margin-right: ${attrs.indentRight}px`);
   if (attrs.indentFirst) styles.push(`text-indent: ${attrs.indentFirst}px`);
+  if (attrs.lineHeight) styles.push(`line-height: ${attrs.lineHeight}`);
   return styles.length ? { style: styles.join("; ") } : {};
 }
 
@@ -133,7 +140,24 @@ function clampIndentFirst(value: number) {
   return Math.min(INDENT_MAX, Math.max(-INDENT_MAX, Math.round(value)));
 }
 
-function bumpIndent(editor: Editor, delta: number): boolean {
+export const LINE_SPACING_STEPS = ["1", "1.15", "1.5", "2"] as const;
+
+export function getBlockLineHeight(editor: Editor): string {
+  const type = activeBlockType(editor);
+  if (!type) return "";
+  return (editor.getAttributes(type).lineHeight as string | null) ?? "";
+}
+
+export function setBlockLineHeight(editor: Editor, value: string | null): boolean {
+  return editor
+    .chain()
+    .focus()
+    .updateAttributes("paragraph", { lineHeight: value })
+    .updateAttributes("heading", { lineHeight: value })
+    .run();
+}
+
+export function bumpIndent(editor: Editor, delta: number): boolean {
   const type = activeBlockType(editor);
   if (!type) return false;
   if (editor.isActive("listItem")) return false;

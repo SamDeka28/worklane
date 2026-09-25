@@ -41,8 +41,8 @@ import {
   createProjectFromDocumentAction,
   createSowFromProposalAction,
   freezeDocumentVersionAction,
-  markDocumentSentAction,
   saveDocumentVersionAction,
+  updateDocumentKindAction,
   updateDocumentLinksAction,
 } from "@/modules/documents/actions";
 import { DocumentCreateSheets } from "@/modules/documents/components/document-create-sheets";
@@ -56,13 +56,25 @@ import {
   resolveDocumentForPreview,
   type PreviewCatalog,
 } from "@/modules/documents/resolve-preview";
-import { buildBasicDocumentTemplate } from "@/modules/documents/templates";
-import type {
-  DocumentKind,
-  DocumentRecord,
-  DocumentSignature,
-  DocumentStatus,
-  DocumentVersion,
+import { TemplateGallery } from "@/modules/documents/components/template-gallery";
+import {
+  DocumentSendDialog,
+  DocumentSendHistory,
+  type SendRecipient,
+} from "@/modules/documents/components/document-send-dialog";
+import type { DocumentFeedback, DocumentSend } from "@/modules/documents/sends";
+import {
+  DocumentReviewPanel,
+  openFeedbackCount,
+} from "@/modules/documents/components/document-review-panel";
+import type { DocumentTemplate } from "@/modules/documents/templates";
+import {
+  DOCUMENT_KIND_LABEL,
+  type DocumentKind,
+  type DocumentRecord,
+  type DocumentSignature,
+  type DocumentStatus,
+  type DocumentVersion,
 } from "@/modules/documents/types";
 import type { DocumentRefRow } from "@/modules/documents/queries";
 import { formatDay } from "@/modules/finance/presentation";
@@ -106,8 +118,14 @@ export function DocumentEditor({
   projectName,
   currency = "USD",
   signatures = [],
+  orgName,
+  sends = [],
+  feedback = [],
+  recipients = [],
+  senderName = null,
 }: {
   orgSlug: string;
+  orgName?: string;
   document: DocumentRecord;
   version: DocumentVersion;
   versions?: Array<{
@@ -125,6 +143,10 @@ export function DocumentEditor({
   projectName?: string | null;
   currency?: "USD" | "INR";
   signatures?: Pick<DocumentSignature, "id" | "signerName" | "signerEmail" | "signedAt">[];
+  sends?: DocumentSend[];
+  feedback?: DocumentFeedback[];
+  recipients?: SendRecipient[];
+  senderName?: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -150,6 +172,10 @@ export function DocumentEditor({
   const [createName, setCreateName] = useState("");
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [margins, setMargins] = useState(DEFAULT_PAGE_MARGINS);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const openFeedback = openFeedbackCount(feedback);
+  const [kind, setKind] = useState<DocumentKind>(document.kind);
   const createResolver = useRef<((item: MentionItem | null) => void) | null>(null);
 
   const previewCatalog = useMemo((): PreviewCatalog => {
@@ -173,6 +199,15 @@ export function DocumentEditor({
     () => resolveDocumentForPreview(doc, previewCatalog),
     [doc, previewCatalog],
   );
+
+  const sendRecipients = useMemo((): SendRecipient[] => {
+    const list = clientId === document.clientId ? [...recipients] : [];
+    const client = clients.find((c) => c.id === clientId);
+    if (client?.email && !list.some((r) => r.email === client.email)) {
+      list.unshift({ name: client.contactName ?? null, email: client.email });
+    }
+    return list;
+  }, [clientId, clients, document.clientId, recipients]);
 
   const scopedProjects = useMemo(
     () => (clientId ? projects.filter((p) => p.clientId === clientId) : projects),
@@ -248,20 +283,35 @@ export function DocumentEditor({
     editor.chain().focus().insertContent(table).run();
   }
 
-  function applyStarterTemplate() {
+  function applyTemplate(template: DocumentTemplate) {
     if (!canWrite || locked) return;
     const client = clients.find((c) => c.id === clientId);
     const project = projects.find((p) => p.id === projectId);
-    const next = buildBasicDocumentTemplate({
-      kind: document.kind,
+    const next = template.build({
       title: title.trim() || document.title,
+      orgName,
       client: client ? { id: client.id, label: client.name, type: "client" } : null,
       project: project ? { id: project.id, label: project.name, type: "project" } : null,
     });
     setDoc(next);
     setPlain("");
     editor?.commands.setContent(next, { emitUpdate: false });
-    toast.success("Designed template applied. Save when ready");
+    setGalleryOpen(false);
+
+    if (template.kind === kind) {
+      toast.success(`${template.name} applied. Save when ready`);
+      return;
+    }
+    start(async () => {
+      const result = await updateDocumentKindAction(orgSlug, document.id, template.kind);
+      if ("error" in result && result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setKind(template.kind);
+      toast.success(`${template.name} applied. Type set to ${KIND_LABEL[template.kind]}`);
+      router.refresh();
+    });
   }
 
   const displayClient =
@@ -283,6 +333,30 @@ export function DocumentEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">
+      {galleryOpen ? (
+        <TemplateGallery
+          open={galleryOpen}
+          onOpenChange={setGalleryOpen}
+          currentKind={kind}
+          pending={pending}
+          onApply={applyTemplate}
+        />
+      ) : null}
+      {canWrite ? (
+        <DocumentSendDialog
+          open={sendOpen}
+          onOpenChange={setSendOpen}
+          orgSlug={orgSlug}
+          orgName={orgName ?? ""}
+          documentId={document.id}
+          versionId={version.id}
+          title={title.trim() || document.title}
+          kindLabel={KIND_LABEL[kind]}
+          senderName={senderName}
+          recipients={sendRecipients}
+          getContent={() => previewDoc}
+        />
+      ) : null}
       <DocumentCreateSheets
         key={`${createType}-${createOpen}`}
         orgSlug={orgSlug}
@@ -308,6 +382,14 @@ export function DocumentEditor({
         <form
           id="document-studio-form"
           className="flex min-h-0 flex-1 flex-col"
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+              event.preventDefault();
+              if (canWrite && !locked && mode === "edit" && !pending) {
+                event.currentTarget.requestSubmit();
+              }
+            }
+          }}
           action={(formData) => {
             start(async () => {
               const result = await saveDocumentVersionAction(orgSlug, version.id, formData);
@@ -387,7 +469,7 @@ export function DocumentEditor({
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
               <div className="flex items-center gap-1.5">
-                <StatusChip tone="planning">{KIND_LABEL[document.kind]}</StatusChip>
+                <StatusChip tone="planning">{KIND_LABEL[kind]}</StatusChip>
                 <StatusChip tone={STATUS_TONE[document.status]}>
                   {STATUS_LABEL[document.status]}
                 </StatusChip>
@@ -464,6 +546,14 @@ export function DocumentEditor({
                 mode === "edit" && canWrite && !locked ? setMargins : undefined
               }
               placeholder="Write or paste from Word / Docs. Type @ to tag…"
+              focusTitle={title || "Untitled document"}
+              focusActions={
+                canWrite && !locked && mode === "edit" ? (
+                  <Button type="submit" size="sm" disabled={pending} className="rounded-xl px-4">
+                    {pending ? "Saving…" : "Save"}
+                  </Button>
+                ) : null
+              }
               className="h-full"
               onChange={(next, nextPlain) => {
                 if (mode === "preview") return;
@@ -568,10 +658,10 @@ export function DocumentEditor({
             <div className="-mx-1.5 grid gap-0.5">
               <RailAction
                 icon={LayoutTemplate}
-                label="Designed template"
-                hint={`Replaces the page with a ready-made ${KIND_LABEL[document.kind].toLowerCase()} layout`}
+                label="Template library"
+                hint="Proposal, SOW, MSA, NDA, brief, change order, report and more"
                 disabled={pending}
-                onClick={applyStarterTemplate}
+                onClick={() => setGalleryOpen(true)}
               />
               <RailAction
                 icon={Table2}
@@ -647,23 +737,36 @@ export function DocumentEditor({
           )}
         </RailCard>
 
+        {feedback.length > 0 || sends.length > 0 ? (
+          <RailCard
+            title={
+              openFeedback > 0 ? `Client review · ${openFeedback} open` : "Client review"
+            }
+            description={
+              feedback.length === 0
+                ? "Comments, suggested edits and change requests from the client appear here."
+                : undefined
+            }
+          >
+            <DocumentReviewPanel
+              orgSlug={orgSlug}
+              documentId={document.id}
+              feedback={feedback}
+              sends={sends}
+              canWrite={canWrite}
+            />
+          </RailCard>
+        ) : null}
+
         {canWrite ? (
           <RailCard title="Share">
             <div className="-mx-1.5 grid gap-0.5">
               <RailAction
                 icon={Mail}
                 label="Send by email"
-                hint="Opens your mail app and marks the document as sent"
+                hint="Write a message and send it from Worklane, with open tracking"
                 disabled={pending}
-                onClick={() => {
-                  const subject = encodeURIComponent(document.title);
-                  const body = encodeURIComponent(`Please review: ${window.location.href}`);
-                  window.location.href = `mailto:?subject=${subject}&body=${body}`;
-                  start(async () => {
-                    await markDocumentSentAction(orgSlug, document.id);
-                    router.refresh();
-                  });
-                }}
+                onClick={() => setSendOpen(true)}
               />
               <RailAction
                 icon={Link2}
@@ -714,7 +817,7 @@ export function DocumentEditor({
                   }}
                 />
               )}
-              {document.kind === "proposal" ? (
+              {kind === "proposal" ? (
                 <RailAction
                   icon={FileText}
                   label="Create statement of work"
@@ -753,6 +856,7 @@ export function DocumentEditor({
                 />
               ) : null}
             </div>
+            <DocumentSendHistory orgSlug={orgSlug} sends={sends} canWrite={canWrite} />
           </RailCard>
         ) : null}
 
@@ -794,11 +898,7 @@ export function DocumentEditor({
   );
 }
 
-const KIND_LABEL: Record<DocumentKind, string> = {
-  proposal: "Proposal",
-  sow: "Statement of work",
-  other: "Document",
-};
+const KIND_LABEL: Record<DocumentKind, string> = DOCUMENT_KIND_LABEL;
 
 const STATUS_LABEL: Record<DocumentStatus, string> = {
   draft: "Draft",

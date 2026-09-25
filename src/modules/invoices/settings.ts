@@ -1,13 +1,36 @@
 export const INVOICE_LAYOUTS = ["classic", "minimal", "bold"] as const;
 export type InvoiceLayout = (typeof INVOICE_LAYOUTS)[number];
 
+import { parseExtraFields, type InvoiceExtraField } from "@/modules/invoices/types";
+
+export type InvoiceBusiness = {
+  legalName: string;
+  address: string;
+  email: string;
+  phone: string;
+  taxId: string;
+  website: string;
+  extras: InvoiceExtraField[];
+};
+
+export const EMPTY_INVOICE_BUSINESS: InvoiceBusiness = {
+  legalName: "",
+  address: "",
+  email: "",
+  phone: "",
+  taxId: "",
+  website: "",
+  extras: [],
+};
+
 export type InvoiceBrand = {
   accentHex: string;
   logoFileId: string | null;
   logoUrl?: string | null;
-  showOrgAddress: boolean;
+  showBusinessDetails: boolean;
   layout: InvoiceLayout;
   orgName: string;
+  business: InvoiceBusiness;
 };
 
 export type InvoiceBrandSnapshot = {
@@ -15,7 +38,8 @@ export type InvoiceBrandSnapshot = {
   accentHex: string;
   logoFileId: string | null;
   orgName: string;
-  showOrgAddress: boolean;
+  showBusinessDetails: boolean;
+  business: InvoiceBusiness;
 };
 
 export type OrgInvoiceSettings = {
@@ -24,10 +48,12 @@ export type OrgInvoiceSettings = {
   defaultTaxBps: number;
   defaultTerms: string;
   defaultMemo: string;
+  defaultPaymentInstructions: string;
+  business: InvoiceBusiness;
   brand: {
     accentHex: string;
     logoFileId: string | null;
-    showOrgAddress: boolean;
+    showBusinessDetails: boolean;
     layout: InvoiceLayout;
   };
 };
@@ -38,13 +64,33 @@ export const DEFAULT_ORG_INVOICE_SETTINGS: OrgInvoiceSettings = {
   defaultTaxBps: 0,
   defaultTerms: "Payment due within 14 days of invoice date.",
   defaultMemo: "",
+  defaultPaymentInstructions: "",
+  business: EMPTY_INVOICE_BUSINESS,
   brand: {
     accentHex: "#1d4ed8",
     logoFileId: null,
-    showOrgAddress: false,
+    showBusinessDetails: true,
     layout: "classic",
   },
 };
+
+function asText(value: unknown, max = 500): string {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+export function parseInvoiceBusiness(raw: unknown): InvoiceBusiness {
+  if (!raw || typeof raw !== "object") return { ...EMPTY_INVOICE_BUSINESS };
+  const row = raw as Record<string, unknown>;
+  return {
+    legalName: asText(row.legalName, 200),
+    address: asText(row.address, 500),
+    email: asText(row.email, 200),
+    phone: asText(row.phone, 60),
+    taxId: asText(row.taxId, 80),
+    website: asText(row.website, 200),
+    extras: parseExtraFields(row.extras),
+  };
+}
 
 function isLayout(value: unknown): value is InvoiceLayout {
   return (
@@ -61,9 +107,10 @@ function asHex(value: unknown, fallback: string): string {
 
 export function parseOrgInvoiceSettings(raw: unknown): OrgInvoiceSettings {
   const base = DEFAULT_ORG_INVOICE_SETTINGS;
-  if (!raw || typeof raw !== "object") return { ...base, brand: { ...base.brand } };
+  const fallback = { ...base, business: { ...base.business }, brand: { ...base.brand } };
+  if (!raw || typeof raw !== "object") return fallback;
   const invoice = (raw as { invoice?: unknown }).invoice;
-  if (!invoice || typeof invoice !== "object") return { ...base, brand: { ...base.brand } };
+  if (!invoice || typeof invoice !== "object") return fallback;
   const row = invoice as Record<string, unknown>;
   const brandRaw =
     row.brand && typeof row.brand === "object"
@@ -92,13 +139,18 @@ export function parseOrgInvoiceSettings(raw: unknown): OrgInvoiceSettings {
       typeof row.defaultTerms === "string" ? row.defaultTerms : base.defaultTerms,
     defaultMemo:
       typeof row.defaultMemo === "string" ? row.defaultMemo : base.defaultMemo,
+    defaultPaymentInstructions:
+      typeof row.defaultPaymentInstructions === "string"
+        ? row.defaultPaymentInstructions
+        : base.defaultPaymentInstructions,
+    business: parseInvoiceBusiness(row.business),
     brand: {
       accentHex: asHex(brandRaw.accentHex, base.brand.accentHex),
       logoFileId:
         typeof brandRaw.logoFileId === "string" && brandRaw.logoFileId
           ? brandRaw.logoFileId
           : null,
-      showOrgAddress: Boolean(brandRaw.showOrgAddress ?? base.brand.showOrgAddress),
+      showBusinessDetails: Boolean(brandRaw.showBusinessDetails ?? base.brand.showBusinessDetails),
       layout: isLayout(brandRaw.layout) ? brandRaw.layout : base.brand.layout,
     },
   };
@@ -114,7 +166,8 @@ export function parseBrandSnapshot(raw: unknown): InvoiceBrandSnapshot | null {
     logoFileId:
       typeof row.logoFileId === "string" && row.logoFileId ? row.logoFileId : null,
     orgName: row.orgName.trim(),
-    showOrgAddress: Boolean(row.showOrgAddress),
+    showBusinessDetails: Boolean(row.showBusinessDetails),
+    business: parseInvoiceBusiness(row.business),
   };
 }
 

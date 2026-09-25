@@ -285,7 +285,7 @@ export const DELIVER: DocArticle[] = [
     slug: "documents",
     title: "Write proposals and SOWs",
     summary:
-      "Draft from a designed template, tag live project data with @, preview what the client sees, and link documents to work.",
+      "Draft from an industry-standard template (proposal, SOW, MSA, NDA, brief, change order, status report), tag live project data with @, preview what the client sees, and link documents to work.",
     category: "deliver",
     kind: "how-to",
     related: ["document-editor", "sign-and-version", "mentions"],
@@ -323,7 +323,7 @@ export const DELIVER: DocArticle[] = [
       { type: "h2", text: "Tables from project data" },
       {
         type: "p",
-        text: "In the right-hand **Tags & structure** panel, **Insert milestones table** adds a Milestone / Amount / Due / Status table from the linked project, and **Insert tasks table** does the same for tasks. **Apply designed template** re-inserts the starter layout.",
+        text: "In the right-hand **Tags & structure** panel, **Insert milestones table** adds a Milestone / Amount / Due / Status table from the linked project, and **Insert tasks table** does the same for tasks. **Template library** opens a gallery of full templates; choosing one replaces the page and, if it belongs to another type, changes the document's type too. Highlighted fields are placeholders to fill in.",
       },
       { type: "h2", text: "Save and link" },
       {

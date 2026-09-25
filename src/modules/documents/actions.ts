@@ -5,25 +5,35 @@ import { docToPlainText } from "@/components/editor/doc-text";
 import type { JSONContent } from "@tiptap/core";
 import { assertCanMutateVersion, buildLiveSnapshot } from "@/modules/documents/lock";
 import { extractDocumentRefs } from "@/modules/documents/refs";
-import { buildBasicDocumentTemplate } from "@/modules/documents/templates";
-import type { DocumentKind } from "@/modules/documents/types";
+import { buildBasicDocumentTemplate, getDocumentTemplate } from "@/modules/documents/templates";
+import { asDocumentKind, DOCUMENT_KIND_LABEL, type DocumentKind } from "@/modules/documents/types";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { notifyMentions } from "@/modules/mentions/notify";
-
-const EMPTY_DOC = buildBasicDocumentTemplate({
-  kind: "proposal",
-  title: "Proposal",
-});
+import {
+  documentPixelPath,
+  documentSendToken,
+  documentViewPath,
+} from "@/modules/documents/sends";
+import { hashShareToken } from "@/modules/portal/token";
+import {
+  documentEmailHtml,
+  documentEmailText,
+  documentUpdateEmailHtml,
+  documentUpdateEmailText,
+  getAppUrl,
+  isEmailConfigured,
+  sendEmail,
+} from "@/shared/email";
 
 function asKind(value: string): DocumentKind {
-  if (value === "sow" || value === "other") return value;
-  return "proposal";
+  return asDocumentKind(value);
 }
 
 export async function createDocumentAction(orgSlug: string, formData: FormData) {
   const ctx = await requireWritableOrg(orgSlug);
   const title = String(formData.get("title") ?? "").trim();
-  const kind = asKind(String(formData.get("kind") ?? "proposal"));
+  const template = getDocumentTemplate(String(formData.get("template_id") ?? ""));
+  const kind = template?.kind ?? asKind(String(formData.get("kind") ?? "proposal"));
   const clientId = String(formData.get("client_id") ?? "").trim() || null;
   const projectId = String(formData.get("project_id") ?? "").trim() || null;
   if (!title) return { error: "Title is required" };
@@ -74,12 +84,20 @@ export async function createDocumentAction(orgSlug: string, formData: FormData) 
     }
   }
 
-  const starter = buildBasicDocumentTemplate({
-    kind,
-    title,
-    client: clientMention,
-    project: projectMention,
-  });
+  const starter = template
+    ? template.build({
+        title,
+        orgName: ctx.org.name,
+        client: clientMention,
+        project: projectMention,
+      })
+    : buildBasicDocumentTemplate({
+        kind,
+        title,
+        orgName: ctx.org.name,
+        client: clientMention,
+        project: projectMention,
+      });
 
   const { data: document, error } = await ctx.supabase
     .from("documents")
@@ -713,19 +731,40 @@ export async function createSowFromProposalAction(orgSlug: string, documentId: s
   if (!source) return { error: "Document not found" };
   if (source.kind !== "proposal") return { error: "SOW can only be created from a proposal" };
 
-  const { data: version } = await ctx.supabase
-    .from("document_versions")
-    .select("content_doc")
-    .eq("document_id", documentId)
-    .order("version_number", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [{ data: client }, { data: project }] = await Promise.all([
+    source.client_id
+      ? ctx.supabase
+          .from("clients")
+          .select("id, name")
+          .eq("organization_id", ctx.org.id)
+          .eq("id", source.client_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    source.project_id
+      ? ctx.supabase
+          .from("projects")
+          .select("id, name")
+          .eq("organization_id", ctx.org.id)
+          .eq("id", source.project_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const sowTitle = `SOW · ${source.title}`;
+  const sowDoc = buildBasicDocumentTemplate({
+    kind: "sow",
+    title: sowTitle,
+    orgName: ctx.org.name,
+    client: client ? { id: client.id as string, label: client.name as string, type: "client" } : null,
+    project: project
+      ? { id: project.id as string, label: project.name as string, type: "project" }
+      : null,
+  });
 
   const { data: sow, error } = await ctx.supabase
     .from("documents")
     .insert({
       organization_id: ctx.org.id,
-      title: `SOW · ${source.title}`,
+      title: sowTitle,
       kind: "sow",
       status: "draft",
       client_id: source.client_id,
@@ -741,13 +780,41 @@ export async function createSowFromProposalAction(orgSlug: string, documentId: s
     organization_id: ctx.org.id,
     document_id: sow.id,
     version_number: 1,
-    content_doc: version?.content_doc ?? EMPTY_DOC,
+    content_doc: sowDoc,
     status: "draft",
     created_by: ctx.userId,
   });
+  await syncDocumentRefs(ctx, sow.id as string, sowDoc as Record<string, unknown>);
 
   revalidatePath(`/${orgSlug}/documents`);
   return { id: sow.id as string };
+}
+
+export async function updateDocumentKindAction(
+  orgSlug: string,
+  documentId: string,
+  kindRaw: string,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const kind = asKind(kindRaw);
+  const { data: document } = await ctx.supabase
+    .from("documents")
+    .select("id, status")
+    .eq("id", documentId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!document) return { error: "Document not found" };
+  if (document.status !== "draft") return { error: "Only drafts can change type" };
+
+  const { error } = await ctx.supabase
+    .from("documents")
+    .update({ kind })
+    .eq("id", documentId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+  revalidatePath(`/${orgSlug}/documents/${documentId}`);
+  revalidatePath(`/${orgSlug}/documents`);
+  return { ok: true as const };
 }
 
 export async function markDocumentSentAction(orgSlug: string, documentId: string) {
@@ -884,4 +951,227 @@ export async function createProjectFromDocumentAction(orgSlug: string, documentI
   revalidatePath(`/${orgSlug}/documents/${documentId}`);
   revalidatePath(`/${orgSlug}/projects`);
   return { id: project.id as string };
+}
+
+const EMAIL_PATTERN = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
+const MAX_CC = 5;
+const MAX_SNAPSHOT_BYTES = 900_000;
+
+export async function sendDocumentEmailAction(
+  orgSlug: string,
+  documentId: string,
+  formData: FormData,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (!isEmailConfigured()) {
+    return { error: "Email isn't set up on this workspace yet (SMTP_USER and SMTP_PASS)." };
+  }
+
+  const to = String(formData.get("to") ?? "").trim().toLowerCase();
+  const recipientName = String(formData.get("recipient_name") ?? "").trim().slice(0, 120) || null;
+  const cc = [
+    ...new Set(
+      String(formData.get("cc") ?? "")
+        .split(/[,;\s]+/)
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+  const subject = String(formData.get("subject") ?? "").trim().slice(0, 200);
+  const message = String(formData.get("message") ?? "").trim().slice(0, 5000);
+  const trackOpens = formData.get("track") === "on";
+  const versionId = String(formData.get("version_id") ?? "").trim() || null;
+  const rawContent = String(formData.get("content_doc") ?? "");
+
+  if (!EMAIL_PATTERN.test(to)) return { error: "Enter a valid recipient email" };
+  if (cc.length > MAX_CC) return { error: `Add at most ${MAX_CC} CC addresses` };
+  const badCc = cc.find((value) => !EMAIL_PATTERN.test(value));
+  if (badCc) return { error: `"${badCc}" isn't a valid email` };
+  if (!subject) return { error: "Subject is required" };
+  if (!message) return { error: "Write a short message" };
+  if (!rawContent || rawContent.length > MAX_SNAPSHOT_BYTES) {
+    return { error: "The document is too large to send" };
+  }
+
+  let content: JSONContent;
+  try {
+    content = JSON.parse(rawContent) as JSONContent;
+  } catch {
+    return { error: "Couldn't read the document content" };
+  }
+  if (content?.type !== "doc") return { error: "Couldn't read the document content" };
+
+  const { data: document } = await ctx.supabase
+    .from("documents")
+    .select("id, title, kind, status")
+    .eq("id", documentId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!document) return { error: "Document not found" };
+
+  const sendId = crypto.randomUUID();
+  const token = documentSendToken(sendId);
+  const { data: send, error: insertError } = await ctx.supabase
+    .from("document_sends")
+    .insert({
+      id: sendId,
+      organization_id: ctx.org.id,
+      document_id: documentId,
+      document_version_id: versionId,
+      token_hash: hashShareToken(token),
+      title: document.title as string,
+      recipient_email: to,
+      recipient_name: recipientName,
+      cc,
+      subject,
+      message,
+      content_doc: content,
+      track_opens: trackOpens,
+      sent_by: ctx.userId,
+    })
+    .select("id")
+    .single();
+  if (insertError || !send) return { error: insertError?.message ?? "Couldn't prepare the email" };
+
+  const appUrl = getAppUrl();
+  const emailInput = {
+    orgName: ctx.org.name,
+    senderName: ctx.user.displayName,
+    kindLabel: DOCUMENT_KIND_LABEL[asKind(String(document.kind ?? ""))],
+    title: document.title as string,
+    message,
+    viewUrl: `${appUrl}${documentViewPath(token)}`,
+    pixelUrl: trackOpens ? `${appUrl}${documentPixelPath(token)}` : null,
+  };
+  const result = await sendEmail({
+    to,
+    cc,
+    subject,
+    fromName: `${ctx.user.displayName ? `${ctx.user.displayName} at ` : ""}${ctx.org.name}`,
+    replyTo: ctx.user.email ?? undefined,
+    html: documentEmailHtml(emailInput),
+    text: documentEmailText(emailInput),
+  });
+  if (!result.ok) {
+    await ctx.supabase.from("document_sends").delete().eq("id", send.id);
+    return { error: result.error };
+  }
+
+  if (document.status === "draft") {
+    await ctx.supabase
+      .from("documents")
+      .update({ status: "sent" })
+      .eq("id", documentId)
+      .eq("organization_id", ctx.org.id);
+  }
+  revalidatePath(`/${orgSlug}/documents/${documentId}`);
+  revalidatePath(`/${orgSlug}/documents`);
+  return { ok: true as const, viewUrl: emailInput.viewUrl };
+}
+
+export async function revokeDocumentSendAction(orgSlug: string, sendId: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const { data, error } = await ctx.supabase
+    .from("document_sends")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", sendId)
+    .eq("organization_id", ctx.org.id)
+    .is("revoked_at", null)
+    .select("document_id")
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (data) revalidatePath(`/${orgSlug}/documents/${data.document_id}`);
+  return { ok: true as const };
+}
+
+export async function replyDocumentFeedbackAction(
+  orgSlug: string,
+  documentId: string,
+  formData: FormData,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const sendId = String(formData.get("send_id") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim().slice(0, 4000);
+  const notifyClient = formData.get("email_client") === "on";
+  if (!body) return { error: "Write a reply first" };
+
+  const { data: send } = await ctx.supabase
+    .from("document_sends")
+    .select("id, document_version_id, recipient_email, recipient_name, title, revoked_at")
+    .eq("id", sendId)
+    .eq("document_id", documentId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!send) return { error: "Pick which email this reply belongs to" };
+
+  const { error } = await ctx.supabase.from("document_feedback").insert({
+    organization_id: ctx.org.id,
+    document_id: documentId,
+    document_version_id: send.document_version_id,
+    send_id: send.id,
+    kind: "reply",
+    author_type: "studio",
+    author_name: ctx.user.displayName ?? ctx.org.name,
+    author_email: ctx.user.email,
+    author_user_id: ctx.userId,
+    body,
+  });
+  if (error) return { error: error.message };
+
+  let emailed = false;
+  if (notifyClient && !send.revoked_at && isEmailConfigured()) {
+    const input = {
+      orgName: ctx.org.name,
+      heading: `New reply on ${send.title}`,
+      message: `${ctx.user.displayName ?? ctx.org.name} replied:\n\n${body}`,
+      viewUrl: `${getAppUrl()}${documentViewPath(documentSendToken(send.id as string))}`,
+      buttonLabel: "Open and respond",
+    };
+    const result = await sendEmail({
+      to: send.recipient_email as string,
+      subject: `Re: ${send.title}`,
+      fromName: `${ctx.user.displayName ? `${ctx.user.displayName} at ` : ""}${ctx.org.name}`,
+      replyTo: ctx.user.email ?? undefined,
+      html: documentUpdateEmailHtml(input),
+      text: documentUpdateEmailText(input),
+    });
+    emailed = result.ok;
+  }
+
+  revalidatePath(`/${orgSlug}/documents/${documentId}`);
+  return { ok: true as const, emailed };
+}
+
+export async function resolveDocumentFeedbackAction(
+  orgSlug: string,
+  feedbackId: string,
+  resolved: boolean,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const { data, error } = await ctx.supabase
+    .from("document_feedback")
+    .update(
+      resolved
+        ? { resolved_at: new Date().toISOString(), resolved_by: ctx.userId }
+        : { resolved_at: null, resolved_by: null },
+    )
+    .eq("id", feedbackId)
+    .eq("organization_id", ctx.org.id)
+    .select("document_id")
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (data) revalidatePath(`/${orgSlug}/documents/${data.document_id}`);
+  return { ok: true as const };
+}
+
+export async function copyDocumentSendLinkAction(orgSlug: string, sendId: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const { data } = await ctx.supabase
+    .from("document_sends")
+    .select("id, revoked_at")
+    .eq("id", sendId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!data || data.revoked_at) return { error: "This link isn't available" };
+  return { ok: true as const, url: `${getAppUrl()}${documentViewPath(documentSendToken(sendId))}` };
 }
