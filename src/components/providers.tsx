@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { DEFAULT_THEME, THEME_IDS } from "@/shared/theme/themes";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -21,10 +22,11 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeProvider
-      attribute="class"
-      defaultTheme="dark"
-      forcedTheme="dark"
-      enableSystem={false}
+      attribute="data-theme"
+      themes={THEME_IDS}
+      defaultTheme={DEFAULT_THEME}
+      enableSystem
+      enableColorScheme={false}
       disableTransitionOnChange
     >
       <QueryClientProvider client={queryClient}>

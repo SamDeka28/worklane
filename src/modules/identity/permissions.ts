@@ -8,7 +8,8 @@ export type ProjectTabKey =
   | "work"
   | "documents"
   | "charges"
-  | "split";
+  | "split"
+  | "credentials";
 
 export type ModulePermission = {
   access: AccessLevel;
@@ -96,6 +97,7 @@ export const PROJECT_TAB_KEYS: ProjectTabKey[] = [
   "documents",
   "charges",
   "split",
+  "credentials",
 ];
 
 export const FULL_PERMISSIONS: MemberPermissions = {
@@ -110,6 +112,7 @@ export const FULL_PERMISSIONS: MemberPermissions = {
       documents: true,
       charges: true,
       split: true,
+      credentials: true,
     },
   },
   finance: { access: "write" },
@@ -129,6 +132,7 @@ export const PROGRESS_ONLY_PERMISSIONS: MemberPermissions = {
       documents: true,
       charges: false,
       split: false,
+      credentials: true,
     },
   },
   finance: { access: "none" },
@@ -148,6 +152,7 @@ export const PARTNER_DEFAULT_PERMISSIONS: MemberPermissions = {
       documents: true,
       charges: false,
       split: false,
+      credentials: false,
     },
   },
   finance: { access: "none" },
@@ -227,6 +232,11 @@ export function resolveMemberPermissions(input: {
       continue;
     }
     resolved[key] = structuredClone(mod);
+  }
+  // Mirrors SQL `can_use_credentials`: partners need the credentials tab granted explicitly.
+  const delivery = resolved.delivery;
+  if (input.role === "partner" && delivery && delivery.tabs?.credentials !== true) {
+    delivery.tabs = { ...delivery.tabs, credentials: false };
   }
   return resolved;
 }

@@ -8,6 +8,7 @@ import {
   HeaderNotificationsFallback,
 } from "@/components/shell/header-notifications";
 import { JoinedStudioModal } from "@/components/shell/joined-studio-modal";
+import { ThemeSync } from "@/components/shell/theme-sync";
 import { listMyOrgs, requireOrg } from "@/modules/identity/org";
 import { RESERVED_ORG_SLUGS } from "@/modules/identity/types";
 
@@ -62,6 +63,7 @@ export default async function OrgLayout({
         </main>
       </div>
       <CommandPalette org={ctx.org} permissions={ctx.permissions} />
+      <ThemeSync saved={ctx.theme} />
       <Suspense fallback={null}>
         <JoinedStudioModal
           orgName={ctx.org.name}

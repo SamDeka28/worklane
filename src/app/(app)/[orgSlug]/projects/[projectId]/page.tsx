@@ -41,6 +41,8 @@ import {
   listTasks,
   listWorkLogs,
 } from "@/modules/delivery/queries";
+import { CredentialsVault } from "@/modules/credentials/components/credentials-vault";
+import { listCredentialPeople, listProjectCredentials } from "@/modules/credentials/queries";
 import { CreateDocumentDialog } from "@/modules/documents/components/document-forms";
 import {
   listDocuments,
@@ -74,6 +76,7 @@ import {
   listProjectPartners,
   loadProjectPartnerEarnings,
 } from "@/modules/partners/queries";
+import { isSecretsConfigured } from "@/shared/crypto/secrets";
 import { netFromGross } from "@/shared/money";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -84,7 +87,15 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-const PROJECT_TABS = ["overview", "milestones", "work", "charges", "split", "documents"] as const;
+const PROJECT_TABS = [
+  "overview",
+  "milestones",
+  "work",
+  "charges",
+  "split",
+  "documents",
+  "credentials",
+] as const;
 type ProjectTab = (typeof PROJECT_TABS)[number];
 
 function resolveProjectTab(query: {
@@ -173,6 +184,7 @@ export default async function ProjectDetailPage({
   const needSplitFull = tab === "split";
   const needTeam = tab === "work" || tab === "split";
   const needComments = tab === "work";
+  const needCredentials = tab === "credentials";
 
   const [
     milestones,
@@ -191,6 +203,8 @@ export default async function ProjectDetailPage({
     projectFiles,
     partnerEarnings,
     comments,
+    credentials,
+    credentialPeople,
   ] = await Promise.all([
     needMilestones
       ? listMilestones(orgSlug, projectId)
@@ -244,6 +258,14 @@ export default async function ProjectDetailPage({
     needComments
       ? listTaskCommentsForProject(orgSlug, projectId).catch(() => [])
       : Promise.resolve([] as Awaited<ReturnType<typeof listTaskCommentsForProject>>),
+    needCredentials
+      ? listProjectCredentials(orgSlug, projectId)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listProjectCredentials>>),
+    needCredentials
+      ? listCredentialPeople(orgSlug, projectId)
+      : Promise.resolve({ team: [], always: [], all: [] } as Awaited<
+          ReturnType<typeof listCredentialPeople>
+        >),
   ]);
   const clientDocs = documents.filter((doc) => doc.clientId === project.clientId);
   const projectDocs = projectSurfaceDocs;
@@ -569,6 +591,12 @@ export default async function ProjectDetailPage({
           <SoftTab href={tabHref("documents")} active={tab === "documents"}>
             Documents
             {docsCount > 0 ? ` · ${docsCount}` : ""}
+          </SoftTab>
+        ) : null}
+        {canAccessProjectTab(ctx.permissions, "credentials") ? (
+          <SoftTab href={tabHref("credentials")} active={tab === "credentials"}>
+            Credentials
+            {credentials.length > 0 ? ` · ${credentials.length}` : ""}
           </SoftTab>
         ) : null}
       </div>
@@ -1199,6 +1227,21 @@ export default async function ProjectDetailPage({
                   />
                 ) : null
               }
+            />
+          </HubSection>
+        ) : null}
+
+        {tab === "credentials" ? (
+          <HubSection title="Credentials">
+            <CredentialsVault
+              orgSlug={orgSlug}
+              projectId={project.id}
+              credentials={credentials}
+              team={credentialPeople.team}
+              always={credentialPeople.always}
+              people={credentialPeople.all}
+              canCreate={ctx.canWrite}
+              configured={isSecretsConfigured()}
             />
           </HubSection>
         ) : null}

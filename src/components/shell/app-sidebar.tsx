@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { CreateOrganizationDialog } from "@/components/shell/create-organization-dialog";
+import { ThemeMenu } from "@/components/shell/theme-menu";
 import { AvatarMark } from "@/components/studio/chrome";
 import {
   DropdownMenu,
@@ -291,6 +292,7 @@ export function AppSidebar({
               >
                 Profile
               </DropdownMenuItem>
+              <ThemeMenu base={base} />
               <DropdownMenuItem
                 onClick={() => router.push(`${base}/settings`)}
               >

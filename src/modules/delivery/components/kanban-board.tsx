@@ -798,7 +798,7 @@ function KanbanColumn({
               {column.name}
             </h2>
           )}
-          <span className="rounded-md bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm ring-1 ring-white/10">
+          <span className="rounded-md bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm ring-1 ring-foreground/10">
             {tasks.length}
           </span>
           {manageLists && canWrite && canManageColumns ? (

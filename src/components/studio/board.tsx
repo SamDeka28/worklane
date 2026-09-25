@@ -144,7 +144,7 @@ export function BoardCardShell({
         type="button"
         onClick={onClick}
         className={cn(
-          "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-white/10 transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-md",
+          "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-foreground/10 transition-[box-shadow,transform] duration-150 hover:-translate-y-px hover:shadow-md",
           className,
         )}
       >
@@ -155,7 +155,7 @@ export function BoardCardShell({
   return (
     <div
       className={cn(
-        "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-white/10",
+        "w-full rounded-xl bg-card px-3.5 py-3 text-left shadow-sm ring-1 ring-foreground/10",
         className,
       )}
     >

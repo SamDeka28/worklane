@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { AppSidebar } from "@/components/shell/app-sidebar";
-// import { ThemeToggle } from "@/components/shell/theme-toggle";
+import { ThemeMenu } from "@/components/shell/theme-menu";
 import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
 import { signOutAction } from "@/modules/identity/actions";
 import type { Organization, OrgRole } from "@/modules/identity/types";
@@ -34,6 +34,7 @@ const TITLES: Record<string, string> = {
   team: "Team",
   settings: "Settings",
   profile: "Profile",
+  appearance: "Appearance",
   board: "Board",
 };
 
@@ -123,7 +124,6 @@ export function AppHeader({
         >
           <Search className="size-4" />
         </Button>
-        {/* <ThemeToggle /> */}
         {notificationsSlot}
         {canWrite ? (
           <DropdownMenu>
@@ -192,6 +192,7 @@ export function AppHeader({
               <DropdownMenuItem onClick={() => router.push(`${base}/profile`)}>
                 Profile
               </DropdownMenuItem>
+              <ThemeMenu base={base} />
               <DropdownMenuItem onClick={() => router.push(`${base}/settings`)}>
                 Studio settings
               </DropdownMenuItem>

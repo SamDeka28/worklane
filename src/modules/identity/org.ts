@@ -29,6 +29,8 @@ export type OrgContext = {
   needsWelcome: boolean;
   permissions: MemberPermissions;
   supabase: SupabaseClient;
+  /** Saved appearance theme id; null until the user picks one. */
+  theme: string | null;
   user: {
     email: string | null;
     displayName: string | null;
@@ -113,7 +115,7 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
       .maybeSingle(),
     supabase
       .from("profiles")
-      .select("email, display_name, avatar_url")
+      .select("email, display_name, avatar_url, theme")
       .eq("id", user.id)
       .maybeSingle(),
   ]);
@@ -146,6 +148,7 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
     needsWelcome: !membership.welcomed_at,
     permissions,
     supabase,
+    theme: (profile?.theme as string | null) ?? null,
     user: {
       email: (profile?.email as string | null) ?? user.email ?? null,
       displayName:

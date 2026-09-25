@@ -5,7 +5,10 @@ import { AuthVisualPanel } from "@/components/auth/auth-visual-panel";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="lane-auth relative flex min-h-dvh items-stretch justify-center overflow-hidden p-0 sm:items-center sm:p-6 lg:p-8">
+    <div
+      data-theme="dark"
+      className="lane-auth relative flex min-h-dvh items-stretch justify-center overflow-hidden p-0 sm:items-center sm:p-6 lg:p-8"
+    >
       <div className="lane-shell relative z-10 grid w-full max-w-[64rem] overflow-hidden rounded-none sm:rounded-[2rem] lg:min-h-[38rem] lg:grid-cols-2">
         <AuthVisualPanel />
 

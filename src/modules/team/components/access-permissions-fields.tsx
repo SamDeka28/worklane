@@ -48,6 +48,7 @@ const TAB_LABELS: Record<ProjectTabKey, string> = {
   documents: "Documents",
   charges: "Charges",
   split: "Split",
+  credentials: "Credentials",
 };
 
 function clonePermissions(value: MemberPermissions): MemberPermissions {
@@ -209,7 +210,7 @@ function AccessSegment({
 }) {
   return (
     <div
-      className="inline-flex rounded-xl bg-inset p-0.5 ring-1 ring-white/10"
+      className="inline-flex rounded-xl bg-inset p-0.5 ring-1 ring-foreground/10"
       role="radiogroup"
       aria-label={name}
     >
@@ -282,7 +283,7 @@ function DeleteToggle({
         "w-[3.75rem] rounded-xl px-2 py-1.5 text-xs font-semibold tracking-tight ring-1 transition-[background-color,color,box-shadow]",
         on
           ? "bg-destructive/20 text-destructive ring-destructive/40"
-          : "text-muted-foreground ring-white/10 hover:text-foreground",
+          : "text-muted-foreground ring-foreground/10 hover:text-foreground",
         disabled && "cursor-not-allowed opacity-35 hover:text-muted-foreground",
       )}
     >

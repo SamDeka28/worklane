@@ -84,14 +84,22 @@ export default async function SettingsPage({
           <div className="space-y-6 xl:col-span-5">
             <FormSection
               title="Your profile"
-              hint="Name and photo used across the studio"
+              hint="Name, photo, and theme used across the studio"
             >
-              <Link
-                href={`/${orgSlug}/profile`}
-                className="text-sm font-semibold text-foreground underline-offset-2 hover:underline"
-              >
-                Edit profile
-              </Link>
+              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                <Link
+                  href={`/${orgSlug}/profile`}
+                  className="text-sm font-semibold text-foreground underline-offset-2 hover:underline"
+                >
+                  Edit profile
+                </Link>
+                <Link
+                  href={`/${orgSlug}/appearance`}
+                  className="text-sm font-semibold text-foreground underline-offset-2 hover:underline"
+                >
+                  Appearance
+                </Link>
+              </div>
             </FormSection>
 
             <FormSection title="Studio" hint="Name and account">

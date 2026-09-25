@@ -242,10 +242,10 @@ export function TaskBoardCard({
   return (
     <div
       className={cn(
-        "group/card relative w-full rounded-xl bg-card shadow-sm ring-1 ring-white/10 transition-[box-shadow,transform,ring-color,background-color,color] duration-150",
+        "group/card relative w-full rounded-xl bg-card shadow-sm ring-1 ring-foreground/10 transition-[box-shadow,transform,ring-color,background-color,color] duration-150",
         onOpen &&
           !selected &&
-          "hover:-translate-y-px hover:shadow-md hover:ring-white/16",
+          "hover:-translate-y-px hover:shadow-md hover:ring-foreground/16",
         selected &&
           "bg-primary/10 ring-2 ring-primary/60 dark:bg-primary/15 dark:ring-primary",
         className,

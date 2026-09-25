@@ -594,7 +594,7 @@ export default async function DashboardPage({
                 {stageCounts.map((row) => (
                   <li
                     key={row.stage}
-                    className="rounded-xl bg-card px-3.5 py-3.5 ring-1 ring-white/10"
+                    className="rounded-xl bg-card px-3.5 py-3.5 ring-1 ring-foreground/10"
                   >
                     <p className="text-[11px] text-muted-foreground">{row.label}</p>
                     <p className="mt-1.5 text-2xl font-semibold tabular-nums">{row.count}</p>

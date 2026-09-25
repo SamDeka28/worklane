@@ -8,6 +8,7 @@ import {
   Handshake,
   Home,
   LogOut,
+  Palette,
   Plus,
   Receipt,
   Search,
@@ -71,6 +72,7 @@ export function CommandPalette({
       `${base}/partners`,
       `${base}/settings`,
       `${base}/profile`,
+      `${base}/appearance`,
     ];
     for (const href of routes) router.prefetch(href);
   }, [open, base, router]);
@@ -125,6 +127,9 @@ export function CommandPalette({
           </CommandItem>
           <CommandItem onSelect={() => go(`${base}/settings`)}>
             <Settings /> Settings
+          </CommandItem>
+          <CommandItem onSelect={() => go(`${base}/appearance`)}>
+            <Palette /> Appearance
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />
