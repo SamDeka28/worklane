@@ -198,6 +198,12 @@ export const SELL: DocArticle[] = [
           ["Documents", "Proposals and SOWs for this client, with **New** to draft one."],
         ],
       },
+      {
+        type: "callout",
+        tone: "tip",
+        title: "Billing details",
+        text: "A client's billing identity (legal name, tax ID, billing address, billing email) is saved from an invoice's **Billed to** section. Tick **Save as {client}'s billing details** once, and every new invoice for that client starts with it. See [Invoices](/docs/invoices).",
+      },
       { type: "h2", text: "Archive or delete" },
       {
         type: "p",

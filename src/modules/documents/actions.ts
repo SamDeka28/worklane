@@ -1,6 +1,8 @@
 "use server";
 
+import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { docToPlainText } from "@/components/editor/doc-text";
 import type { JSONContent } from "@tiptap/core";
 import { assertCanMutateVersion, buildLiveSnapshot } from "@/modules/documents/lock";
@@ -14,6 +16,11 @@ import {
   documentSendToken,
   documentViewPath,
 } from "@/modules/documents/sends";
+import {
+  buildSignedDocumentFiles,
+  signedContentFor,
+  signedDocumentAttachments,
+} from "@/modules/documents/signed-pdf";
 import { hashShareToken } from "@/modules/portal/token";
 import {
   documentEmailHtml,
@@ -166,6 +173,9 @@ export async function saveDocumentVersionAction(
     assertCanMutateVersion({ status: version.status, lockedAt: version.locked_at });
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Locked" };
+  }
+  if (version.status === "sent") {
+    return { error: "This version was sent to the client. Start a new revision to make changes." };
   }
 
   const { error } = await ctx.supabase
@@ -678,11 +688,257 @@ export async function freezeDocumentVersionAction(
   return { ok: true as const };
 }
 
+/** Adds your side's signature to a version the client has already signed (it stays locked). */
+export async function countersignDocumentVersionAction(
+  orgSlug: string,
+  versionId: string,
+  formData: FormData,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const signerName = String(formData.get("signer_name") ?? "").trim().slice(0, 120);
+  const signerEmail = String(formData.get("signer_email") ?? "").trim().slice(0, 200);
+  const signatureText = String(formData.get("signature_text") ?? "").trim().slice(0, 120);
+  if (!signerName || !signerEmail) return { error: "Name and email are required to sign" };
+  if (!signatureText) return { error: "Type your signature" };
+  if (formData.get("consent") !== "on") return { error: "Tick the box to confirm you agree" };
+
+  const { data: version } = await ctx.supabase
+    .from("document_versions")
+    .select("id, document_id, status, snapshot, content_doc")
+    .eq("id", versionId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!version) return { error: "Version not found" };
+  if (version.status !== "signed") return { error: "Only a signed version can be countersigned" };
+
+  const { data: existing } = await ctx.supabase
+    .from("document_signatures")
+    .select("method, send_id, signer_name")
+    .eq("document_version_id", versionId)
+    .eq("organization_id", ctx.org.id);
+  const clientSignature = (existing ?? []).find((sig) => sig.method === "portal");
+  if (!clientSignature) return { error: "The client hasn't signed this version yet" };
+  if ((existing ?? []).some((sig) => sig.method === "studio")) {
+    return { error: "This version has already been countersigned" };
+  }
+
+  // Hash the same stored copy the client signed so both fingerprints match.
+  const { data: signedSend } = clientSignature.send_id
+    ? await ctx.supabase
+        .from("document_sends")
+        .select("id, title, recipient_email, content_doc")
+        .eq("id", clientSignature.send_id)
+        .maybeSingle()
+    : { data: null };
+  const signedContent =
+    signedSend?.content_doc ??
+    (version.snapshot as { contentDoc?: unknown } | null)?.contentDoc ??
+    version.content_doc;
+  const contentHash = createHash("sha256").update(JSON.stringify(signedContent)).digest("hex");
+
+  const requestHeaders = await headers();
+  const ip =
+    requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    requestHeaders.get("x-real-ip") ||
+    null;
+  const signedAt = new Date().toISOString();
+  const { data: document } = await ctx.supabase
+    .from("documents")
+    .select("title, clients(name)")
+    .eq("id", version.document_id)
+    .maybeSingle();
+  const title = document?.title ?? signedSend?.title ?? "document";
+  const clientRef = document?.clients as { name: string } | { name: string }[] | null | undefined;
+  const clientName = (Array.isArray(clientRef) ? clientRef[0]?.name : clientRef?.name) ?? null;
+  const intentText = `I, ${signerName}, on behalf of ${ctx.org.name}, agree to the terms of "${title}" and adopt "${signatureText}" as my electronic signature.`;
+
+  const { error: sigError } = await ctx.supabase.from("document_signatures").insert({
+    organization_id: ctx.org.id,
+    document_version_id: versionId,
+    signer_name: signerName,
+    signer_email: signerEmail,
+    intent_text: intentText,
+    signed_at: signedAt,
+    user_agent: requestHeaders.get("user-agent")?.slice(0, 500) ?? null,
+    method: "studio",
+    signature_text: signatureText,
+    ip_address: ip,
+    content_hash: contentHash,
+  });
+  if (sigError) return { error: sigError.message };
+
+  await Promise.all([
+    ctx.supabase.from("document_feedback").insert({
+      organization_id: ctx.org.id,
+      document_id: version.document_id,
+      document_version_id: versionId,
+      send_id: signedSend?.id ?? null,
+      kind: "signed",
+      author_type: "studio",
+      author_name: signerName,
+      author_email: signerEmail,
+      author_user_id: ctx.userId,
+      body: intentText,
+    }),
+    ctx.supabase.from("activities").insert({
+      organization_id: ctx.org.id,
+      actor_id: ctx.userId,
+      verb: "countersigned",
+      entity_type: "document",
+      entity_id: version.document_id,
+      metadata: { version_id: versionId, signer_name: signerName, signer_email: signerEmail },
+    }),
+  ]);
+
+  if (signedSend && isEmailConfigured()) {
+    const attachments = await signedDocumentAttachments(ctx.supabase, {
+      versionId,
+      title,
+      orgName: ctx.org.name,
+      clientName,
+      content: signedContent,
+    });
+    const viewUrl = `${getAppUrl()}${documentViewPath(documentSendToken(signedSend.id))}`;
+    const input = {
+      orgName: ctx.org.name,
+      heading: `${title} is fully signed`,
+      message: `${signerName} has countersigned on behalf of ${ctx.org.name}, so the document is now signed by both sides. The fully signed PDF is attached, and you can view it any time from the link below.`,
+      viewUrl,
+      buttonLabel: "View signed copy",
+      rows: [
+        { label: "Client signature", value: clientSignature.signer_name },
+        { label: "Countersigned by", value: `${signerName} (${signerEmail})` },
+        { label: "Signed at", value: new Date(signedAt).toUTCString() },
+      ],
+    };
+    await sendEmail({
+      to: signedSend.recipient_email,
+      subject: `Fully signed: ${title}`,
+      fromName: ctx.org.name,
+      cc: signerEmail.toLowerCase() === signedSend.recipient_email.toLowerCase() ? undefined : [signerEmail],
+      html: documentUpdateEmailHtml(input),
+      text: documentUpdateEmailText(input),
+      attachments,
+    });
+    revalidatePath(documentViewPath(documentSendToken(signedSend.id)));
+  }
+
+  revalidatePath(`/${orgSlug}/documents/${version.document_id}`);
+  return { ok: true as const };
+}
+
+/** Emails the signed PDF (plus the certificate once both sides signed) to anyone, e.g. to resend it to the client. */
+export async function emailSignedCopyAction(orgSlug: string, versionId: string, formData: FormData) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (!isEmailConfigured()) {
+    return { error: "Email isn't set up on this workspace yet (SMTP_USER and SMTP_PASS)." };
+  }
+  const to = String(formData.get("to") ?? "").trim().toLowerCase();
+  const cc = [
+    ...new Set(
+      String(formData.get("cc") ?? "")
+        .split(/[,;\s]+/)
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+  const note = String(formData.get("message") ?? "").trim().slice(0, 2000);
+  if (!EMAIL_PATTERN.test(to)) return { error: "Enter a valid recipient email" };
+  if (cc.length > MAX_CC) return { error: `Add at most ${MAX_CC} CC addresses` };
+  const badCc = cc.find((value) => !EMAIL_PATTERN.test(value));
+  if (badCc) return { error: `"${badCc}" isn't a valid email` };
+
+  const { data: version } = await ctx.supabase
+    .from("document_versions")
+    .select("id, document_id, status, version_number")
+    .eq("id", versionId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!version) return { error: "Version not found" };
+  if (version.status !== "signed") return { error: "Only a signed version has a signed copy to send" };
+
+  const { data: document } = await ctx.supabase
+    .from("documents")
+    .select("title, clients(name)")
+    .eq("id", version.document_id)
+    .maybeSingle();
+  const title = document?.title ?? "Document";
+  const clientRef = document?.clients as { name: string } | { name: string }[] | null | undefined;
+  const clientName = (Array.isArray(clientRef) ? clientRef[0]?.name : clientRef?.name) ?? null;
+
+  const { content, signedSend } = await signedContentFor(ctx.supabase, versionId);
+  let built: Awaited<ReturnType<typeof buildSignedDocumentFiles>>;
+  try {
+    built = await buildSignedDocumentFiles(ctx.supabase, {
+      versionId,
+      title,
+      orgName: ctx.org.name,
+      clientName,
+      content,
+    });
+  } catch (error) {
+    console.error("signed copy pdf failed", error);
+    return { error: "Couldn't generate the PDF. Please try again." };
+  }
+  if (built.signatures.length === 0) return { error: "This version has no signatures yet" };
+
+  // Only the person the client link belongs to gets the link; anyone else just gets the PDFs.
+  const viewUrl =
+    signedSend && signedSend.recipientEmail.toLowerCase() === to
+      ? `${getAppUrl()}${documentViewPath(documentSendToken(signedSend.id))}`
+      : null;
+  const signedBy = built.signatures
+    .map((sig) => `${sig.signerName}${sig.party === "studio" ? ` (${ctx.org.name})` : ""}`)
+    .join(" and ");
+  const input = {
+    orgName: ctx.org.name,
+    heading: built.complete ? `Signed copy: ${title}` : `${title}: signed by the client`,
+    message: [
+      note,
+      built.complete
+        ? `Attached is the fully signed copy of "${title}", signed by ${signedBy}, along with the signature certificate.`
+        : `Attached is the copy of "${title}" signed by ${signedBy}. It's awaiting countersignature.`,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    viewUrl,
+    buttonLabel: "View signed copy",
+    rows: [
+      { label: "Document", value: `${title} · v${version.version_number}` },
+      ...built.signatures.map((sig) => ({
+        label: sig.party === "studio" ? `Signed for ${ctx.org.name}` : "Client signature",
+        value: `${sig.signerName} · ${new Date(sig.signedAt).toUTCString()}`,
+      })),
+    ],
+  };
+  const result = await sendEmail({
+    to,
+    cc: cc.filter((value) => value !== to),
+    subject: built.complete ? `Signed copy: ${title}` : `Signed by client: ${title}`,
+    fromName: ctx.org.name,
+    replyTo: ctx.user.email ?? undefined,
+    html: documentUpdateEmailHtml(input),
+    text: documentUpdateEmailText(input),
+    attachments: built.files,
+  });
+  if (!result.ok) return { error: result.error };
+
+  await ctx.supabase.from("activities").insert({
+    organization_id: ctx.org.id,
+    actor_id: ctx.userId,
+    verb: "signed_copy_sent",
+    entity_type: "document",
+    entity_id: version.document_id,
+    metadata: { version_id: versionId, to, cc },
+  });
+  return { ok: true as const, files: built.files.length };
+}
+
 export async function cloneDocumentVersionAction(orgSlug: string, versionId: string) {
   const ctx = await requireWritableOrg(orgSlug);
   const { data: version } = await ctx.supabase
     .from("document_versions")
-    .select("id, document_id, content_doc, version_number")
+    .select("id, document_id, content_doc, version_number, status")
     .eq("id", versionId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -711,10 +967,12 @@ export async function cloneDocumentVersionAction(orgSlug: string, versionId: str
     .single();
   if (error || !created) return { error: error?.message ?? "Could not clone" };
 
-  await ctx.supabase
-    .from("documents")
-    .update({ status: "draft" })
-    .eq("id", version.document_id);
+  if (version.status !== "sent") {
+    await ctx.supabase
+      .from("documents")
+      .update({ status: "draft" })
+      .eq("id", version.document_id);
+  }
 
   revalidatePath(`/${orgSlug}/documents/${version.document_id}`);
   return { id: created.id as string };
@@ -1057,6 +1315,29 @@ export async function sendDocumentEmailAction(
     return { error: result.error };
   }
 
+  if (versionId) {
+    let sourceDoc: Record<string, unknown> | null = null;
+    try {
+      const parsed = JSON.parse(String(formData.get("source_doc") ?? "")) as JSONContent;
+      if (parsed?.type === "doc") sourceDoc = parsed as Record<string, unknown>;
+    } catch {
+      sourceDoc = null;
+    }
+    await ctx.supabase
+      .from("document_versions")
+      .update({
+        ...(sourceDoc ? { content_doc: sourceDoc } : {}),
+        status: "sent",
+        snapshot: buildLiveSnapshot({
+          contentDoc: content as Record<string, unknown>,
+          frozenAt: new Date().toISOString(),
+        }),
+      })
+      .eq("id", versionId)
+      .eq("organization_id", ctx.org.id)
+      .eq("status", "draft");
+  }
+
   if (document.status === "draft") {
     await ctx.supabase
       .from("documents")
@@ -1174,4 +1455,179 @@ export async function copyDocumentSendLinkAction(orgSlug: string, sendId: string
     .maybeSingle();
   if (!data || data.revoked_at) return { error: "This link isn't available" };
   return { ok: true as const, url: `${getAppUrl()}${documentViewPath(documentSendToken(sendId))}` };
+}
+
+export async function publishDocumentRevisionAction(
+  orgSlug: string,
+  documentId: string,
+  formData: FormData,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const versionId = String(formData.get("version_id") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim().slice(0, 2000);
+  const notifyClient = formData.get("notify") === "on";
+  const rawContent = String(formData.get("content_doc") ?? "");
+  if (!rawContent || rawContent.length > MAX_SNAPSHOT_BYTES) {
+    return { error: "The document is too large to publish" };
+  }
+  let content: JSONContent;
+  let source: JSONContent | null = null;
+  try {
+    content = JSON.parse(rawContent) as JSONContent;
+    const parsedSource = JSON.parse(String(formData.get("source_doc") ?? "null")) as JSONContent | null;
+    if (parsedSource?.type === "doc") source = parsedSource;
+  } catch {
+    return { error: "Couldn't read the document content" };
+  }
+  if (content?.type !== "doc") return { error: "Couldn't read the document content" };
+  if (notifyClient && !isEmailConfigured()) {
+    return { error: "Email isn't set up yet. Untick the email option to publish without it." };
+  }
+
+  const [{ data: document }, { data: version }, { data: priorSends }] = await Promise.all([
+    ctx.supabase
+      .from("documents")
+      .select("id, title, kind")
+      .eq("id", documentId)
+      .eq("organization_id", ctx.org.id)
+      .maybeSingle(),
+    ctx.supabase
+      .from("document_versions")
+      .select("id, version_number, status, locked_at")
+      .eq("id", versionId)
+      .eq("document_id", documentId)
+      .eq("organization_id", ctx.org.id)
+      .maybeSingle(),
+    ctx.supabase
+      .from("document_sends")
+      .select("recipient_email, recipient_name, cc, track_opens, sent_at")
+      .eq("document_id", documentId)
+      .eq("organization_id", ctx.org.id)
+      .is("revoked_at", null)
+      .order("sent_at", { ascending: false }),
+  ]);
+  if (!document) return { error: "Document not found" };
+  if (!version) return { error: "Version not found" };
+  if (version.status !== "draft" || version.locked_at) {
+    return { error: "Only a draft revision can be published" };
+  }
+
+  const recipients = new Map<string, { name: string | null; cc: string[]; track: boolean }>();
+  for (const row of priorSends ?? []) {
+    const email = row.recipient_email as string;
+    if (!recipients.has(email)) {
+      recipients.set(email, {
+        name: (row.recipient_name as string | null) ?? null,
+        cc: (row.cc as string[] | null) ?? [],
+        track: Boolean(row.track_opens),
+      });
+    }
+  }
+  if (recipients.size === 0) {
+    return { error: "This document hasn't been sent yet. Use Send by email first." };
+  }
+
+  const kindLabel = DOCUMENT_KIND_LABEL[asKind(String(document.kind ?? ""))];
+  const title = document.title as string;
+  const subject = `Revised ${kindLabel === kindLabel.toUpperCase() ? kindLabel : kindLabel.toLowerCase()}: ${title}`;
+  const appUrl = getAppUrl();
+  const sendRows = [...recipients.entries()].map(([email, info]) => ({
+    id: crypto.randomUUID(),
+    email,
+    info,
+  }));
+
+  const { error: insertError } = await ctx.supabase.from("document_sends").insert(
+    sendRows.map((row) => ({
+      id: row.id,
+      organization_id: ctx.org.id,
+      document_id: documentId,
+      document_version_id: versionId,
+      token_hash: hashShareToken(documentSendToken(row.id)),
+      title,
+      recipient_email: row.email,
+      recipient_name: row.info.name,
+      cc: notifyClient ? row.info.cc : [],
+      subject,
+      message: note || null,
+      content_doc: content,
+      track_opens: notifyClient && row.info.track,
+      sent_by: ctx.userId,
+      delivery: notifyClient ? "email" : "link",
+    })),
+  );
+  if (insertError) return { error: insertError.message };
+
+  await ctx.supabase
+    .from("document_versions")
+    .update({
+      ...(source ? { content_doc: source as Record<string, unknown> } : {}),
+      status: "sent",
+      snapshot: buildLiveSnapshot({
+        contentDoc: content as Record<string, unknown>,
+        frozenAt: new Date().toISOString(),
+      }),
+    })
+    .eq("id", versionId)
+    .eq("organization_id", ctx.org.id)
+    .eq("status", "draft");
+
+  await ctx.supabase.from("document_feedback").insert(
+    sendRows.map((row) => ({
+      organization_id: ctx.org.id,
+      document_id: documentId,
+      document_version_id: versionId,
+      send_id: row.id,
+      kind: "revision",
+      author_type: "studio",
+      author_name: ctx.user.displayName ?? ctx.org.name,
+      author_email: ctx.user.email,
+      author_user_id: ctx.userId,
+      body: note,
+    })),
+  );
+
+  let emailed = 0;
+  const failures: string[] = [];
+  if (notifyClient) {
+    for (const row of sendRows) {
+      const token = documentSendToken(row.id);
+      const hello = row.info.name?.trim().split(/\s+/)[0];
+      const message = [
+        hello ? `Hi ${hello},` : "Hi,",
+        "",
+        note ||
+          `We've published version ${version.version_number} of "${title}". The changes are highlighted when you open it.`,
+      ].join("\n");
+      const emailInput = {
+        orgName: ctx.org.name,
+        senderName: ctx.user.displayName,
+        kindLabel,
+        title: `${title} (v${version.version_number})`,
+        message,
+        viewUrl: `${appUrl}${documentViewPath(token)}`,
+        pixelUrl: row.info.track ? `${appUrl}${documentPixelPath(token)}` : null,
+      };
+      const result = await sendEmail({
+        to: row.email,
+        cc: row.info.cc,
+        subject,
+        fromName: `${ctx.user.displayName ? `${ctx.user.displayName} at ` : ""}${ctx.org.name}`,
+        replyTo: ctx.user.email ?? undefined,
+        html: documentEmailHtml(emailInput),
+        text: documentEmailText(emailInput),
+      });
+      if (result.ok) emailed++;
+      else failures.push(row.email);
+    }
+  }
+
+  revalidatePath(`/${orgSlug}/documents/${documentId}`);
+  return {
+    ok: true as const,
+    recipients: sendRows.length,
+    emailed,
+    failures,
+    versionNumber: version.version_number as number,
+  };
 }

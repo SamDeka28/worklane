@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/react";
 import {
   BadgeCheck,
   CheckCircle2,
+  ChevronDown,
+  GitCompareArrows,
   History,
   MessageSquare,
   MessageSquarePlus,
@@ -33,12 +36,51 @@ import {
   postPortalFeedbackAction,
   signPortalDocumentAction,
 } from "@/modules/documents/portal-actions";
-import type { DocumentFeedback, SharedSignature } from "@/modules/documents/sends";
+import { diffTopLevelBlocks } from "@/modules/documents/diff";
+import type {
+  DocumentFeedback,
+  SharedRevision,
+  SharedSignature,
+} from "@/modules/documents/sends";
+import { SIGNATURE_FONT, SignatureBlocks } from "@/modules/documents/components/signature-blocks";
 
-const SIGNATURE_FONT =
-  '"Snell Roundhand", "Apple Chancery", "Segoe Script", "Brush Script MT", "Lucida Handwriting", cursive';
 
 type ComposerMode = "comment" | "suggestion";
+
+/** A studio reply is folded with addressed items once everything before it is resolved. */
+function isAnsweredReply(reply: DocumentFeedback, all: DocumentFeedback[]) {
+  const earlier = all.filter(
+    (item) => item.authorType === "client" && item.kind !== "signed" && item.createdAt <= reply.createdAt,
+  );
+  return earlier.length > 0 && earlier.every((item) => item.resolvedAt);
+}
+
+const noopSubscribe = () => () => {};
+
+/** Dates render in the reader's locale and timezone, so only format them in the browser. */
+function useHydrated() {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+}
+
+function LocalDate({ value, dateOnly }: { value: string; dateOnly?: boolean }) {
+  const hydrated = useHydrated();
+  if (!hydrated) return null;
+  return (
+    <>
+      {dateOnly
+        ? new Date(value).toLocaleDateString(undefined, {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+          })
+        : formatWhen(value)}
+    </>
+  );
+}
 
 function formatWhen(value: string) {
   return new Date(value).toLocaleString(undefined, {
@@ -57,10 +99,18 @@ export function SharedDocumentView({
   recipientEmail,
   sentAt,
   content,
+  versionNumber,
+  previousContent,
+  previousVersionNumber,
+  revisions,
+  displayedSendId,
+  isLatest,
   internalPreview,
   supersededAt,
   locked,
-  signature,
+  signatures,
+  clientSigned,
+  accepted,
   feedback,
 }: {
   token: string;
@@ -70,13 +120,22 @@ export function SharedDocumentView({
   recipientEmail: string;
   sentAt: string;
   content: JSONContent;
+  versionNumber: number | null;
+  previousContent: JSONContent | null;
+  previousVersionNumber: number | null;
+  revisions: SharedRevision[];
+  displayedSendId: string;
+  isLatest: boolean;
   internalPreview: boolean;
   supersededAt: string | null;
   locked: boolean;
-  signature: SharedSignature | null;
+  signatures: SharedSignature[];
+  clientSigned: boolean;
+  accepted: boolean;
   feedback: DocumentFeedback[];
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [pending, start] = useTransition();
   const [mode, setMode] = useState<ComposerMode>("comment");
   const [quote, setQuote] = useState<string | null>(null);
@@ -87,9 +146,33 @@ export function SharedDocumentView({
   const [signOpen, setSignOpen] = useState(false);
   const articleRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const latestRevisionNote = [...feedback].reverse().find((item) => item.kind === "revision");
+  const addressedFeedback = feedback.filter(
+    (item) =>
+      Boolean(item.resolvedAt) ||
+      ((item.kind === "reply" || item.kind === "revision") &&
+        item !== latestRevisionNote &&
+        isAnsweredReply(item, feedback)),
+  );
+  const openFeedback = feedback.filter((item) => !addressedFeedback.includes(item));
 
-  const canReview = !locked && !internalPreview;
-  const canSign = canReview && !supersededAt;
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }, [feedback.length]);
+
+  const diff = useMemo(
+    () => (previousContent ? diffTopLevelBlocks(previousContent, content) : null),
+    [previousContent, content],
+  );
+  const changeCount = diff ? diff.changed.length + diff.removed : 0;
+  const [showChanges, setShowChanges] = useState(false);
+  const latest = revisions[revisions.length - 1];
+  const canReview = !locked && !internalPreview && isLatest;
+  const canSign = !clientSigned && !accepted && !internalPreview && isLatest && !supersededAt;
+  const clientSignature = signatures.find((sig) => sig.party === "client");
+  const studioSignature = signatures.find((sig) => sig.party === "studio");
   const openItems = feedback.filter(
     (item) => item.authorType === "client" && item.kind !== "signed" && !item.resolvedAt,
   ).length;
@@ -160,11 +243,7 @@ export function SharedDocumentView({
     });
   }
 
-  const sentOn = new Date(sentAt).toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const hydrated = useHydrated();
 
   return (
     <div className="print:bg-white">
@@ -175,25 +254,58 @@ export function SharedDocumentView({
               {orgName}
               {recipientName ? ` · for ${recipientName}` : ""}
             </p>
-            <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
+            <div className="flex min-w-0 items-center gap-2">
+              <h1 className="truncate text-base font-semibold tracking-tight">{title}</h1>
+              {revisions.length > 1 ? (
+                <nav aria-label="Revisions" className="flex shrink-0 items-center gap-0.5 rounded-md bg-slate-100 p-0.5">
+                  {revisions.map((revision, index) => {
+                    const active =
+                      revision.sendId === displayedSendId ||
+                      (isLatest && index === revisions.length - 1);
+                    const label = revision.versionNumber ? `v${revision.versionNumber}` : `#${index + 1}`;
+                    return (
+                      <Link
+                        key={revision.sendId}
+                        href={index === revisions.length - 1 ? pathname : `${pathname}?rev=${revision.sendId}`}
+                        scroll={false}
+                        title={hydrated ? `Sent ${formatWhen(revision.sentAt)}${index === revisions.length - 1 ? " · latest" : ""}` : undefined}
+                        className={cn(
+                          "rounded px-1.5 py-px text-[11px] font-medium transition-colors",
+                          active ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800",
+                        )}
+                      >
+                        {label}
+                      </Link>
+                    );
+                  })}
+                </nav>
+              ) : null}
+            </div>
           </div>
-          <StatusPill locked={locked} signature={signature} openItems={openItems} />
+          <StatusPill
+            locked={locked}
+            clientSigned={Boolean(clientSignature)}
+            studioSigned={Boolean(studioSignature)}
+            openItems={openItems}
+          />
           <Button type="button" variant="ghost" size="sm" onClick={() => window.print()}>
             <Printer className="size-4" />
             <span className="hidden sm:inline">Print</span>
           </Button>
           {canReview ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => setChangesOpen(true)}
+            >
+              <RotateCcw className="size-4" />
+              Request changes
+            </Button>
+          ) : null}
+          {canReview || canSign ? (
             <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={pending}
-                onClick={() => setChangesOpen(true)}
-              >
-                <RotateCcw className="size-4" />
-                Request changes
-              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -202,7 +314,7 @@ export function SharedDocumentView({
                 title={supersededAt ? "A newer revision was sent; sign that one instead" : undefined}
               >
                 <PenLine className="size-4" />
-                Accept &amp; sign
+                {studioSignature ? "Sign" : "Accept & sign"}
               </Button>
             </>
           ) : null}
@@ -217,17 +329,56 @@ export function SharedDocumentView({
               and review actions are turned off.
             </Banner>
           ) : null}
-          {supersededAt && !locked ? (
+          {!isLatest ? (
             <Banner tone="amber" icon={History}>
-              A newer revision was sent on{" "}
-              {new Date(supersededAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}
-              . Please open the latest email to review and sign it. You can still comment here.
+              You&apos;re viewing an older revision
+              {versionNumber ? ` (v${versionNumber})` : ""}.{" "}
+              <Link href={pathname} scroll={false} className="font-medium underline underline-offset-2">
+                Open the latest{latest?.versionNumber ? ` (v${latest.versionNumber})` : ""}
+              </Link>{" "}
+              to comment or sign.
             </Banner>
           ) : null}
-          {locked && signature ? (
+          {diff ? (
+            <div className="mx-auto flex max-w-[816px] flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-sm text-emerald-900 print:hidden">
+              <GitCompareArrows className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {changeCount === 0
+                  ? `No changes to the content since v${previousVersionNumber ?? "previous"}.`
+                  : `Revised${versionNumber ? ` (v${versionNumber})` : ""}: ${diff.changed.length} section${diff.changed.length === 1 ? "" : "s"} changed${diff.removed ? `, ${diff.removed} removed` : ""} since v${previousVersionNumber ?? "previous"}.`}
+              </span>
+              {diff.changed.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setShowChanges((value) => !value)}
+                  className="rounded-md bg-white/80 px-2 py-0.5 text-xs font-medium ring-1 ring-emerald-200 hover:bg-white"
+                >
+                  {showChanges ? "Hide highlights" : "Highlight changes"}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {supersededAt && !locked && isLatest ? (
+            <Banner tone="amber" icon={History}>
+              A newer revision was shared with someone else on your team on{" "}
+              <LocalDate value={supersededAt} dateOnly />
+              , so signing happens on their copy. You can still comment here.
+            </Banner>
+          ) : null}
+          {clientSignature && studioSignature ? (
             <Banner tone="green" icon={BadgeCheck}>
-              Signed by {signature.signerName} on {formatWhen(signature.signedAt)}. This copy is
-              final.
+              Signed by {clientSignature.signerName} and countersigned by {studioSignature.signerName} for{" "}
+              {orgName}. This copy is final.
+            </Banner>
+          ) : clientSignature ? (
+            <Banner tone="green" icon={BadgeCheck}>
+              Signed by {clientSignature.signerName} on <LocalDate value={clientSignature.signedAt} />.
+              Waiting for {orgName} to countersign; you&apos;ll get an email when it&apos;s done.
+            </Banner>
+          ) : studioSignature ? (
+            <Banner tone="green" icon={PenLine}>
+              {studioSignature.signerName} signed this for {orgName} on{" "}
+              <LocalDate value={studioSignature.signedAt} />. Add your signature to complete it.
             </Banner>
           ) : locked ? (
             <Banner tone="green" icon={BadgeCheck}>
@@ -239,33 +390,62 @@ export function SharedDocumentView({
             ref={articleRef}
             className="mx-auto max-w-[816px] rounded-xl border border-slate-200 bg-white px-6 py-10 shadow-sm sm:px-14 sm:py-14 print:max-w-none print:border-0 print:p-0 print:shadow-none"
           >
-            <DocumentReader content={content} />
-            {signature ? <SignatureBlock signature={signature} /> : null}
+            <DocumentReader
+              content={content}
+              highlight={showChanges && diff ? diff.changed : undefined}
+            />
+            <SignatureBlocks
+              signatures={signatures}
+              orgName={orgName}
+              className="mt-12 border-t border-slate-200 pt-6"
+            />
           </article>
           <p className="text-center text-xs text-slate-500 print:hidden">
-            Shared with {recipientEmail} on {sentOn}
+            Shared with {recipientEmail} on <LocalDate value={sentAt} dateOnly />
             {canReview ? " · Select any text to comment on it or suggest an edit" : ""}
           </p>
         </div>
 
-        <aside className="print:hidden lg:sticky lg:top-[76px] lg:max-h-[calc(100svh-96px)] lg:self-start">
-          <div className="flex max-h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <aside className="print:hidden lg:sticky lg:top-[76px] lg:self-start">
+          <div className="flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:max-h-[calc(100svh-96px)]">
             <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3">
               <MessageSquare className="size-4 text-slate-500" />
               <h2 className="text-sm font-semibold">Comments</h2>
-              <span className="ml-auto text-xs text-slate-500">{feedback.length || ""}</span>
+              <span className="ml-auto text-xs text-slate-500">
+                {openFeedback.length > 0 ? `${openFeedback.length} open` : ""}
+              </span>
             </div>
-            <ol className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
-              {feedback.length === 0 ? (
-                <li className="py-6 text-center text-xs leading-relaxed text-slate-500">
-                  {canReview
-                    ? "Questions or changes? Leave a comment, or select text in the document to comment on a specific part."
-                    : "No comments."}
-                </li>
+            <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+              {addressedFeedback.length > 0 ? (
+                <details className="group mb-3 rounded-lg border border-slate-100 bg-slate-50/70">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 [&::-webkit-details-marker]:hidden">
+                    <CheckCircle2 className="size-3.5 text-emerald-600" />
+                    Addressed ({addressedFeedback.length})
+                    <ChevronDown className="ml-auto size-3.5 transition-transform group-open:rotate-180" />
+                  </summary>
+                  <ol className="space-y-2 px-2 pb-2">
+                    {addressedFeedback.map((item) => (
+                      <FeedbackItem key={item.id} item={item} orgName={orgName} />
+                    ))}
+                  </ol>
+                </details>
+              ) : null}
+              {openFeedback.length === 0 ? (
+                <p className="py-6 text-center text-xs leading-relaxed text-slate-500">
+                  {feedback.length > 0
+                    ? "Everything so far has been addressed."
+                    : canReview
+                      ? "Questions or changes? Leave a comment, or select text in the document to comment on a specific part."
+                      : "No comments."}
+                </p>
               ) : (
-                feedback.map((item) => <FeedbackItem key={item.id} item={item} orgName={orgName} />)
+                <ol className="space-y-3">
+                  {openFeedback.map((item) => (
+                    <FeedbackItem key={item.id} item={item} orgName={orgName} />
+                  ))}
+                </ol>
               )}
-            </ol>
+            </div>
             {canReview ? (
               <form
                 className="space-y-2 border-t border-slate-100 bg-slate-50/60 p-3"
@@ -394,14 +574,27 @@ export function SharedDocumentView({
 
 function StatusPill({
   locked,
-  signature,
+  clientSigned,
+  studioSigned,
   openItems,
 }: {
   locked: boolean;
-  signature: SharedSignature | null;
+  clientSigned: boolean;
+  studioSigned: boolean;
   openItems: number;
 }) {
-  const label = signature ? "Signed" : locked ? "Accepted" : openItems > 0 ? "In review" : "Awaiting signature";
+  const label =
+    clientSigned && studioSigned
+      ? "Fully signed"
+      : clientSigned
+        ? "Awaiting countersignature"
+        : studioSigned
+          ? "Awaiting your signature"
+          : locked
+            ? "Accepted"
+            : openItems > 0
+              ? "In review"
+              : "Awaiting signature";
   return (
     <span
       className={cn(
@@ -444,6 +637,7 @@ const KIND_BADGE: Record<DocumentFeedback["kind"], { label: string; className: s
   changes_requested: { label: "Changes requested", className: "bg-amber-50 text-amber-800" },
   reply: { label: "Reply", className: "bg-violet-50 text-violet-700" },
   signed: { label: "Signed", className: "bg-emerald-50 text-emerald-700" },
+  revision: { label: "New revision", className: "bg-sky-50 text-sky-700" },
 };
 
 function FeedbackItem({ item, orgName }: { item: DocumentFeedback; orgName: string }) {
@@ -466,7 +660,9 @@ function FeedbackItem({ item, orgName }: { item: DocumentFeedback; orgName: stri
           {badge.label}
         </span>
         {item.versionNumber ? <span className="text-slate-400">v{item.versionNumber}</span> : null}
-        <span className="ml-auto text-slate-400">{formatWhen(item.createdAt)}</span>
+        <span className="ml-auto text-slate-400">
+          <LocalDate value={item.createdAt} />
+        </span>
       </div>
       {item.quote ? (
         <p
@@ -485,6 +681,8 @@ function FeedbackItem({ item, orgName }: { item: DocumentFeedback; orgName: stri
       ) : null}
       {item.body && item.kind !== "signed" ? (
         <p className="whitespace-pre-wrap text-slate-700">{item.body}</p>
+      ) : item.kind === "revision" ? (
+        <p className="text-slate-500">Published an updated version{item.versionNumber ? ` (v${item.versionNumber})` : ""}.</p>
       ) : null}
       {item.resolvedAt ? (
         <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-700">
@@ -493,35 +691,6 @@ function FeedbackItem({ item, orgName }: { item: DocumentFeedback; orgName: stri
         </p>
       ) : null}
     </li>
-  );
-}
-
-function SignatureBlock({ signature }: { signature: SharedSignature }) {
-  return (
-    <section className="mt-12 border-t border-slate-200 pt-6">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
-        Signed electronically
-      </p>
-      <p className="mt-3 text-4xl leading-tight text-slate-900" style={{ fontFamily: SIGNATURE_FONT }}>
-        {signature.signatureText ?? signature.signerName}
-      </p>
-      <div className="mt-2 grid gap-x-8 gap-y-1 text-xs text-slate-600 sm:grid-cols-2">
-        <p>
-          <span className="text-slate-400">Name</span> {signature.signerName}
-        </p>
-        <p>
-          <span className="text-slate-400">Email</span> {signature.signerEmail}
-        </p>
-        <p>
-          <span className="text-slate-400">Signed</span> {new Date(signature.signedAt).toUTCString()}
-        </p>
-        {signature.contentHash ? (
-          <p className="truncate" title={signature.contentHash}>
-            <span className="text-slate-400">Fingerprint</span> {signature.contentHash.slice(0, 24)}…
-          </p>
-        ) : null}
-      </div>
-    </section>
   );
 }
 

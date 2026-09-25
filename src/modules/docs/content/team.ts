@@ -177,6 +177,11 @@ export const TEAM: DocArticle[] = [
         text: "The portal is an optional module. When it's enabled for your studio, a **Portal** section appears in **Studio settings** for people who can make changes.",
       },
       {
+        type: "callout",
+        tone: "note",
+        text: "This is different from the review link you get when you send a document. A document link opens just that document, where the client can comment, request changes, and sign. See [Client review](/docs/client-review). The portal is a read-only overview across everything you choose to share.",
+      },
+      {
         type: "steps",
         items: [
           { title: "Studio settings → Portal", body: "" },

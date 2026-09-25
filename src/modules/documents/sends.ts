@@ -13,6 +13,8 @@ export type DocumentSend = {
   sentAt: string;
   sentByName: string | null;
   trackOpens: boolean;
+  delivery: "email" | "link";
+  versionNumber: number | null;
   openCount: number;
   firstOpenedAt: string | null;
   lastOpenedAt: string | null;
@@ -22,7 +24,13 @@ export type DocumentSend = {
   revokedAt: string | null;
 };
 
-export type FeedbackKind = "comment" | "suggestion" | "changes_requested" | "reply" | "signed";
+export type FeedbackKind =
+  | "comment"
+  | "suggestion"
+  | "changes_requested"
+  | "reply"
+  | "signed"
+  | "revision";
 
 export type DocumentFeedback = {
   id: string;
@@ -40,6 +48,7 @@ export type DocumentFeedback = {
 };
 
 export type SharedSignature = {
+  party: "client" | "studio";
   signerName: string;
   signerEmail: string;
   signatureText: string | null;
@@ -47,7 +56,14 @@ export type SharedSignature = {
   contentHash: string | null;
 };
 
+export type SharedRevision = {
+  sendId: string;
+  versionNumber: number | null;
+  sentAt: string;
+};
+
 export type SharedDocument = {
+  /** The newest send in this recipient's chain; comments and signing always target it. */
   id: string;
   organizationId: string;
   documentId: string;
@@ -56,15 +72,27 @@ export type SharedDocument = {
   recipientName: string | null;
   recipientEmail: string;
   sentBy: string | null;
-  sentAt: string;
-  content: JSONContent;
   orgName: string;
   orgSlug: string;
-  /** A newer copy of this document was sent after this one; only the newest can be signed. */
+  /** The revision being shown (the latest unless an older one was picked). */
+  displayedSendId: string;
+  isLatest: boolean;
+  sentAt: string;
+  content: JSONContent;
+  versionNumber: number | null;
+  previousContent: JSONContent | null;
+  previousVersionNumber: number | null;
+  revisions: SharedRevision[];
+  /** Someone else at the client was sent a newer revision; only that one can be signed. */
   supersededAt: string | null;
-  /** The version is locked (signed or accepted), from this link or another. */
+  /** The latest version is locked (signed or accepted). */
   locked: boolean;
-  signature: SharedSignature | null;
+  /** Oldest first; either party may sign first, the other then signs the same locked version. */
+  signatures: SharedSignature[];
+  /** This link's recipient side has signed; the client can no longer sign here. */
+  clientSigned: boolean;
+  /** The latest version was accepted without signatures, so nothing is left to sign. */
+  accepted: boolean;
   feedback: DocumentFeedback[];
 };
 
@@ -111,97 +139,156 @@ export function documentPixelPath(token: string) {
   return `/portal/t/${token}`;
 }
 
-export async function loadSharedDocument(token: string): Promise<SharedDocument | null> {
+type ChainRow = {
+  id: string;
+  document_version_id: string | null;
+  sent_at: string;
+  title: string;
+  recipient_name: string | null;
+  sent_by: string | null;
+  content_doc: JSONContent;
+  document_versions: { version_number: number; status: string; locked_at: string | null } | null;
+};
+
+/**
+ * Resolves any link in a recipient's chain of sends to the newest revision, so old emails
+ * always open the current copy. `revisionSendId` shows an older revision read-only.
+ */
+export async function loadSharedDocument(
+  token: string,
+  revisionSendId?: string | null,
+): Promise<SharedDocument | null> {
   const admin = createAdminSupabaseClient();
   if (!admin || !token || token.length > 128) return null;
-  const { data } = await admin
+  const { data: entry } = await admin
     .from("document_sends")
-    .select(
-      "id, organization_id, document_id, document_version_id, title, recipient_name, recipient_email, sent_by, sent_at, content_doc, revoked_at, organizations(name, slug)",
-    )
+    .select("id, organization_id, document_id, recipient_email, revoked_at, organizations(name, slug)")
     .eq("token_hash", hashShareToken(token))
     .maybeSingle();
-  if (!data || data.revoked_at) return null;
-  const org = (Array.isArray(data.organizations) ? data.organizations[0] : data.organizations) as
+  if (!entry || entry.revoked_at) return null;
+  const org = (Array.isArray(entry.organizations) ? entry.organizations[0] : entry.organizations) as
     | { name: string; slug: string }
     | null;
-  const documentId = data.document_id as string;
-  const versionId = (data.document_version_id as string | null) ?? null;
-  const recipientEmail = data.recipient_email as string;
+  const documentId = entry.document_id as string;
+  const recipientEmail = entry.recipient_email as string;
 
-  const [{ data: newer }, { data: version }, { data: signatures }, { data: related }] =
-    await Promise.all([
-      admin
-        .from("document_sends")
-        .select("sent_at")
-        .eq("document_id", documentId)
-        .is("revoked_at", null)
-        .gt("sent_at", data.sent_at as string)
-        .order("sent_at", { ascending: false })
-        .limit(1),
-      versionId
-        ? admin
-            .from("document_versions")
-            .select("status, locked_at")
-            .eq("id", versionId)
-            .maybeSingle()
-        : Promise.resolve({ data: null }),
-      versionId
-        ? admin
-            .from("document_signatures")
-            .select("signer_name, signer_email, signature_text, signed_at, content_hash")
-            .eq("document_version_id", versionId)
-            .order("signed_at", { ascending: false })
-            .limit(1)
-        : Promise.resolve({ data: [] }),
-      admin
-        .from("document_sends")
-        .select("id")
-        .eq("document_id", documentId)
-        .eq("recipient_email", recipientEmail),
-    ]);
+  const { data: chainRows } = await admin
+    .from("document_sends")
+    .select(
+      "id, document_version_id, sent_at, title, recipient_name, sent_by, content_doc, document_versions(version_number, status, locked_at)",
+    )
+    .eq("document_id", documentId)
+    .eq("recipient_email", recipientEmail)
+    .is("revoked_at", null)
+    .order("sent_at", { ascending: true });
+  const chain = ((chainRows ?? []) as unknown[]).map((raw) => {
+    const row = raw as ChainRow & { document_versions: unknown };
+    const version = Array.isArray(row.document_versions)
+      ? row.document_versions[0]
+      : row.document_versions;
+    return { ...row, document_versions: (version ?? null) as ChainRow["document_versions"] };
+  });
+  if (chain.length === 0) return null;
 
-  const sendIds = (related ?? []).map((row) => row.id as string);
-  const { data: feedbackRows } = sendIds.length
-    ? await admin
-        .from("document_feedback")
-        .select(FEEDBACK_COLUMNS)
-        .eq("document_id", documentId)
-        .in("send_id", sendIds)
-        .order("created_at", { ascending: true })
-        .limit(300)
-    : { data: [] };
+  // One entry per version: re-sending the same version to the same person isn't a revision.
+  const byVersion = new Map<string, ChainRow>();
+  for (const row of chain) byVersion.set(row.document_version_id ?? row.id, row);
+  const revisions = [...byVersion.values()].sort((a, b) => a.sent_at.localeCompare(b.sent_at));
+  const latest = revisions[revisions.length - 1];
+  const displayed =
+    (revisionSendId && chain.find((row) => row.id === revisionSendId)) || latest;
+  const displayedKey = displayed.document_version_id ?? displayed.id;
+  const displayedIndex = revisions.findIndex(
+    (row) => (row.document_version_id ?? row.id) === displayedKey,
+  );
+  const previous = displayedIndex > 0 ? revisions[displayedIndex - 1] : null;
+  const versionId = latest.document_version_id;
+  const latestVersion = latest.document_versions;
 
-  const signature = (signatures ?? [])[0] as Record<string, unknown> | undefined;
+  const [{ data: newer }, { data: signatures }, { data: feedbackRows }] = await Promise.all([
+    admin
+      .from("document_sends")
+      .select("sent_at")
+      .eq("document_id", documentId)
+      .neq("recipient_email", recipientEmail)
+      .is("revoked_at", null)
+      .gt("sent_at", latest.sent_at)
+      .order("sent_at", { ascending: false })
+      .limit(1),
+    versionId
+      ? admin
+          .from("document_signatures")
+          .select("signer_name, signer_email, signature_text, signed_at, content_hash, method")
+          .eq("document_version_id", versionId)
+          .order("signed_at", { ascending: true })
+          .limit(10)
+      : Promise.resolve({ data: [] }),
+    admin
+      .from("document_feedback")
+      .select(FEEDBACK_COLUMNS)
+      .eq("document_id", documentId)
+      .in(
+        "send_id",
+        chain.map((row) => row.id),
+      )
+      .order("created_at", { ascending: true })
+      .limit(300),
+  ]);
+
+  const signatureList = ((signatures ?? []) as Record<string, unknown>[]).map(
+    (row): SharedSignature => ({
+      party: row.method === "portal" ? "client" : "studio",
+      signerName: row.signer_name as string,
+      signerEmail: row.signer_email as string,
+      signatureText: (row.signature_text as string | null) ?? null,
+      signedAt: row.signed_at as string,
+      contentHash: (row.content_hash as string | null) ?? null,
+    }),
+  );
   const locked =
-    Boolean(version?.locked_at) || version?.status === "signed" || version?.status === "accepted";
+    Boolean(latestVersion?.locked_at) ||
+    latestVersion?.status === "signed" ||
+    latestVersion?.status === "accepted";
 
   return {
-    id: data.id as string,
-    organizationId: data.organization_id as string,
+    id: latest.id,
+    organizationId: entry.organization_id as string,
     documentId,
     versionId,
-    title: data.title as string,
-    recipientName: (data.recipient_name as string | null) ?? null,
+    title: latest.title,
+    recipientName: latest.recipient_name ?? null,
     recipientEmail,
-    sentBy: (data.sent_by as string | null) ?? null,
-    sentAt: data.sent_at as string,
-    content: data.content_doc as JSONContent,
+    sentBy: latest.sent_by ?? null,
     orgName: org?.name ?? "",
     orgSlug: org?.slug ?? "",
+    displayedSendId: displayed.id,
+    isLatest: (displayed.document_version_id ?? displayed.id) === (latest.document_version_id ?? latest.id),
+    sentAt: displayed.sent_at,
+    content: displayed.content_doc,
+    versionNumber: displayed.document_versions?.version_number ?? null,
+    previousContent: previous?.content_doc ?? null,
+    previousVersionNumber: previous?.document_versions?.version_number ?? null,
+    revisions: revisions.map((row) => ({
+      sendId: row.id,
+      versionNumber: row.document_versions?.version_number ?? null,
+      sentAt: row.sent_at,
+    })),
     supersededAt: (newer?.[0]?.sent_at as string | undefined) ?? null,
     locked,
-    signature: signature
-      ? {
-          signerName: signature.signer_name as string,
-          signerEmail: signature.signer_email as string,
-          signatureText: (signature.signature_text as string | null) ?? null,
-          signedAt: signature.signed_at as string,
-          contentHash: (signature.content_hash as string | null) ?? null,
-        }
-      : null,
+    signatures: signatureList,
+    clientSigned: signatureList.some((sig) => sig.party === "client"),
+    accepted: latestVersion?.status === "accepted",
     feedback: (feedbackRows ?? []).map((row) => mapFeedback(row as Record<string, unknown>)),
   };
+}
+
+/** Counts a view against a specific send (the revision the client is actually looking at). */
+export async function trackDocumentSendById(sendId: string, kind: "open" | "view") {
+  const admin = createAdminSupabaseClient();
+  if (!admin) return;
+  const { data } = await admin.from("document_sends").select("token_hash").eq("id", sendId).maybeSingle();
+  if (!data) return;
+  await trackHash(data.token_hash as string, kind);
 }
 
 type TrackRow = {
@@ -220,11 +307,16 @@ type TrackRow = {
  * sender and studio owners. Never throws: tracking must not break the client's page.
  */
 export async function trackDocumentSend(token: string, kind: "open" | "view"): Promise<void> {
+  if (!token || token.length > 128) return;
+  await trackHash(hashShareToken(token), kind);
+}
+
+async function trackHash(tokenHash: string, kind: "open" | "view"): Promise<void> {
   try {
     const admin = createAdminSupabaseClient();
-    if (!admin || !token || token.length > 128) return;
+    if (!admin) return;
     const { data } = await admin.rpc("track_document_send", {
-      p_token_hash: hashShareToken(token),
+      p_token_hash: tokenHash,
       p_kind: kind,
     });
     const row = (data as TrackRow[] | null)?.[0];

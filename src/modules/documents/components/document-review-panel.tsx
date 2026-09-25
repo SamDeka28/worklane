@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, RotateCcw } from "lucide-react";
+import { CheckCircle2, ChevronDown, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
@@ -20,6 +20,7 @@ const KIND_LABEL: Record<DocumentFeedback["kind"], string> = {
   changes_requested: "Changes requested",
   reply: "Reply",
   signed: "Signed",
+  revision: "New revision",
 };
 
 const KIND_TONE: Record<DocumentFeedback["kind"], string> = {
@@ -28,6 +29,7 @@ const KIND_TONE: Record<DocumentFeedback["kind"], string> = {
   changes_requested: "bg-amber-500/15 text-amber-800 dark:text-amber-300",
   reply: "bg-violet-500/12 text-violet-700 dark:text-violet-300",
   signed: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+  revision: "bg-sky-500/12 text-sky-700 dark:text-sky-300",
 };
 
 function when(value: string) {
@@ -61,7 +63,6 @@ export function DocumentReviewPanel({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [body, setBody] = useState("");
-  const [showResolved, setShowResolved] = useState(false);
 
   const replyTargets = useMemo(() => {
     const seen = new Set<string>();
@@ -76,8 +77,86 @@ export function DocumentReviewPanel({
     () => (replyTargets.find((s) => s.id === latestClientSend) ?? replyTargets[0])?.id ?? "",
   );
 
-  const resolvedCount = feedback.filter((item) => item.resolvedAt).length;
-  const visible = showResolved ? feedback : feedback.filter((item) => !item.resolvedAt);
+  const addressed = feedback.filter((item) => item.resolvedAt);
+  const visible = feedback.filter((item) => !item.resolvedAt);
+
+  function renderItem(item: DocumentFeedback) {
+    const resolvable =
+      canWrite && item.authorType === "client" && item.kind !== "signed";
+    return (
+      <li
+        key={item.id}
+        className={cn(
+          "rounded-xl px-3 py-2.5 text-xs ring-1 ring-border/40",
+          item.authorType === "studio" ? "bg-violet-500/5" : "bg-muted/30",
+          item.resolvedAt && "opacity-60",
+        )}
+      >
+        <div className="mb-1 flex flex-wrap items-center gap-1.5">
+          <span className="font-semibold text-foreground">
+            {item.authorName ?? item.authorEmail ?? "Client"}
+          </span>
+          <span className={cn("rounded-full px-1.5 py-px text-[10px] font-medium", KIND_TONE[item.kind])}>
+            {KIND_LABEL[item.kind]}
+          </span>
+          {item.versionNumber ? (
+            <span className="text-muted-foreground">v{item.versionNumber}</span>
+          ) : null}
+          <span className="ml-auto text-muted-foreground">{when(item.createdAt)}</span>
+        </div>
+        {item.quote ? (
+          <p
+            className={cn(
+              "mb-1 border-l-2 border-amber-400/70 pl-2 italic text-muted-foreground",
+              item.kind === "suggestion" && "line-through decoration-rose-400/70",
+            )}
+          >
+            “{item.quote}”
+          </p>
+        ) : null}
+        {item.kind === "suggestion" && item.suggestion ? (
+          <p className="mb-1 border-l-2 border-emerald-500/70 pl-2 text-emerald-700 dark:text-emerald-300">
+            {item.suggestion}
+          </p>
+        ) : null}
+        {item.body && item.kind !== "signed" ? (
+          <p className="whitespace-pre-wrap text-sm text-foreground/90">{item.body}</p>
+        ) : item.kind === "revision" ? (
+          <p className="text-muted-foreground">
+            Published v{item.versionNumber ?? "?"} to the client&apos;s link.
+          </p>
+        ) : null}
+        {resolvable ? (
+          <button
+            type="button"
+            disabled={pending}
+            className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={() =>
+              start(async () => {
+                const result = await resolveDocumentFeedbackAction(
+                  orgSlug,
+                  item.id,
+                  !item.resolvedAt,
+                );
+                if ("error" in result && result.error) toast.error(result.error);
+                else router.refresh();
+              })
+            }
+          >
+            {item.resolvedAt ? (
+              <>
+                <RotateCcw className="size-3" /> Reopen
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="size-3" /> Mark addressed
+              </>
+            )}
+          </button>
+        ) : null}
+      </li>
+    );
+  }
 
   return (
     <div className="grid gap-3">
@@ -87,89 +166,18 @@ export function DocumentReviewPanel({
         </p>
       ) : (
         <ol className="grid max-h-[26rem] gap-2 overflow-y-auto pr-0.5">
-          {visible.map((item) => {
-            const resolvable =
-              canWrite && item.authorType === "client" && item.kind !== "signed";
-            return (
-              <li
-                key={item.id}
-                className={cn(
-                  "rounded-xl px-3 py-2.5 text-xs ring-1 ring-border/40",
-                  item.authorType === "studio" ? "bg-violet-500/5" : "bg-muted/30",
-                  item.resolvedAt && "opacity-60",
-                )}
-              >
-                <div className="mb-1 flex flex-wrap items-center gap-1.5">
-                  <span className="font-semibold text-foreground">
-                    {item.authorName ?? item.authorEmail ?? "Client"}
-                  </span>
-                  <span className={cn("rounded-full px-1.5 py-px text-[10px] font-medium", KIND_TONE[item.kind])}>
-                    {KIND_LABEL[item.kind]}
-                  </span>
-                  {item.versionNumber ? (
-                    <span className="text-muted-foreground">v{item.versionNumber}</span>
-                  ) : null}
-                  <span className="ml-auto text-muted-foreground">{when(item.createdAt)}</span>
-                </div>
-                {item.quote ? (
-                  <p
-                    className={cn(
-                      "mb-1 border-l-2 border-amber-400/70 pl-2 italic text-muted-foreground",
-                      item.kind === "suggestion" && "line-through decoration-rose-400/70",
-                    )}
-                  >
-                    “{item.quote}”
-                  </p>
-                ) : null}
-                {item.kind === "suggestion" && item.suggestion ? (
-                  <p className="mb-1 border-l-2 border-emerald-500/70 pl-2 text-emerald-700 dark:text-emerald-300">
-                    {item.suggestion}
-                  </p>
-                ) : null}
-                {item.body && item.kind !== "signed" ? (
-                  <p className="whitespace-pre-wrap text-sm text-foreground/90">{item.body}</p>
-                ) : null}
-                {resolvable ? (
-                  <button
-                    type="button"
-                    disabled={pending}
-                    className="mt-1.5 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
-                    onClick={() =>
-                      start(async () => {
-                        const result = await resolveDocumentFeedbackAction(
-                          orgSlug,
-                          item.id,
-                          !item.resolvedAt,
-                        );
-                        if ("error" in result && result.error) toast.error(result.error);
-                        else router.refresh();
-                      })
-                    }
-                  >
-                    {item.resolvedAt ? (
-                      <>
-                        <RotateCcw className="size-3" /> Reopen
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="size-3" /> Mark addressed
-                      </>
-                    )}
-                  </button>
-                ) : null}
-              </li>
-            );
-          })}
+          {visible.map(renderItem)}
         </ol>
       )}
-      {resolvedCount > 0 ? (
-        <button
-          type="button"
-          className="justify-self-start text-[11px] text-muted-foreground underline-offset-2 hover:underline"
-          onClick={() => setShowResolved((value) => !value)}
-        >
-          {showResolved ? "Hide addressed" : `Show ${resolvedCount} addressed`}
-        </button>
+      {addressed.length > 0 ? (
+        <details className="group rounded-xl bg-muted/30 ring-1 ring-border/40">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+            <CheckCircle2 className="size-3.5 text-emerald-600" />
+            Addressed ({addressed.length})
+            <ChevronDown className="ml-auto size-3.5 transition-transform group-open:rotate-180" />
+          </summary>
+          <ol className="grid max-h-[20rem] gap-2 overflow-y-auto px-2 pb-2">{addressed.map(renderItem)}</ol>
+        </details>
       ) : null}
 
       {canWrite && replyTargets.length > 0 ? (

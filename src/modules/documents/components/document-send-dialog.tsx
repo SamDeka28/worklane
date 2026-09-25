@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/react";
-import { Ban, Eye, MailCheck, MailOpen, Send } from "lucide-react";
+import { Ban, Eye, FileCheck2, Link2, MailCheck, MailOpen, Paperclip, Send, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   copyDocumentSendLinkAction,
+  emailSignedCopyAction,
+  publishDocumentRevisionAction,
   revokeDocumentSendAction,
   sendDocumentEmailAction,
 } from "@/modules/documents/actions";
@@ -31,18 +33,25 @@ function firstName(name: string | null | undefined) {
   return name?.trim().split(/\s+/)[0] ?? "";
 }
 
+function kindNoun(kindLabel: string) {
+  return kindLabel === kindLabel.toUpperCase() ? kindLabel : kindLabel.toLowerCase();
+}
+
 function defaultMessage(input: {
   recipientName: string | null;
   kindLabel: string;
   title: string;
   senderName: string | null;
   orgName: string;
+  revision?: boolean;
 }) {
   const hello = firstName(input.recipientName) ? `Hi ${firstName(input.recipientName)},` : "Hi,";
   return [
     hello,
     "",
-    `Please find our ${input.kindLabel.toLowerCase()} "${input.title}" at the link below. Happy to walk you through it or answer any questions.`,
+    input.revision
+      ? `Thanks for your feedback. We've updated the ${kindNoun(input.kindLabel)} "${input.title}" to address it. The changes are highlighted when you open the link below, and it's ready for your signature once you're happy.`
+      : `Please find our ${kindNoun(input.kindLabel)} "${input.title}" at the link below. Happy to walk you through it or answer any questions.`,
     "",
     "Best regards,",
     input.senderName ? `${input.senderName}\n${input.orgName}` : input.orgName,
@@ -61,6 +70,8 @@ export function DocumentSendDialog({
   senderName,
   recipients,
   getContent,
+  getSource,
+  sentBefore = [],
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -73,6 +84,8 @@ export function DocumentSendDialog({
   senderName: string | null;
   recipients: SendRecipient[];
   getContent: () => JSONContent;
+  getSource: () => JSONContent;
+  sentBefore?: string[];
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -88,6 +101,8 @@ export function DocumentSendDialog({
             senderName={senderName}
             recipients={recipients}
             getContent={getContent}
+            getSource={getSource}
+            sentBefore={sentBefore}
             onDone={() => onOpenChange(false)}
           />
         ) : null}
@@ -106,6 +121,8 @@ function SendForm({
   senderName,
   recipients,
   getContent,
+  getSource,
+  sentBefore,
   onDone,
 }: {
   orgSlug: string;
@@ -117,6 +134,8 @@ function SendForm({
   senderName: string | null;
   recipients: SendRecipient[];
   getContent: () => JSONContent;
+  getSource: () => JSONContent;
+  sentBefore: string[];
   onDone: () => void;
 }) {
   const router = useRouter();
@@ -124,8 +143,21 @@ function SendForm({
   const initial = recipients[0] ?? null;
   const [to, setTo] = useState(initial?.email ?? "");
   const [recipientName, setRecipientName] = useState(initial?.name ?? "");
+  const isRevision = (email: string) => sentBefore.includes(email.trim().toLowerCase());
   const [message, setMessage] = useState(() =>
-    defaultMessage({ recipientName: initial?.name ?? null, kindLabel, title, senderName, orgName }),
+    defaultMessage({
+      recipientName: initial?.name ?? null,
+      kindLabel,
+      title,
+      senderName,
+      orgName,
+      revision: isRevision(initial?.email ?? ""),
+    }),
+  );
+  const [subject, setSubject] = useState(() =>
+    isRevision(initial?.email ?? "")
+      ? `Revised ${kindNoun(kindLabel)}: ${title}`
+      : `${kindLabel}: ${title}`,
   );
   const [messageTouched, setMessageTouched] = useState(false);
 
@@ -134,7 +166,14 @@ function SendForm({
     setRecipientName(recipient.name ?? "");
     if (!messageTouched) {
       setMessage(
-        defaultMessage({ recipientName: recipient.name, kindLabel, title, senderName, orgName }),
+        defaultMessage({
+          recipientName: recipient.name,
+          kindLabel,
+          title,
+          senderName,
+          orgName,
+          revision: isRevision(recipient.email),
+        }),
       );
     }
   }
@@ -146,6 +185,7 @@ function SendForm({
         formData.set("recipient_name", recipientName);
         formData.set("version_id", versionId);
         formData.set("content_doc", JSON.stringify(getContent()));
+        formData.set("source_doc", JSON.stringify(getSource()));
         start(async () => {
           const result = await sendDocumentEmailAction(orgSlug, documentId, formData);
           if ("error" in result && result.error) {
@@ -161,7 +201,7 @@ function SendForm({
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Send className="size-4 text-muted-foreground" />
-          Send {kindLabel.toLowerCase()}
+          Send {kindNoun(kindLabel)}
         </DialogTitle>
         <DialogDescription>
           Emailed from {orgName} with a private link to a read-only copy of what you see now.
@@ -215,7 +255,8 @@ function SendForm({
             name="subject"
             required
             maxLength={200}
-            defaultValue={`${kindLabel}: ${title}`}
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
           />
         </Field>
         <Field label="Message" htmlFor="send-message" required>
@@ -294,6 +335,9 @@ export function DocumentSendHistory({
           <li key={send.id} className={cn("text-xs", revoked && "opacity-60")}>
             <div className="flex items-baseline justify-between gap-2">
               <span className="min-w-0 truncate font-medium text-foreground" title={send.recipientEmail}>
+                {send.versionNumber ? (
+                  <span className="mr-1 text-muted-foreground">v{send.versionNumber}</span>
+                ) : null}
                 {send.recipientName || send.recipientEmail}
               </span>
               <span className="shrink-0 text-muted-foreground" title={new Date(send.sentAt).toLocaleString()}>
@@ -314,7 +358,9 @@ export function DocumentSendHistory({
                       Viewed{send.viewCount > 1 ? ` ${send.viewCount}×` : ""}
                     </Chip>
                   ) : null}
-                  {send.trackOpens ? (
+                  {send.delivery === "link" ? (
+                    <Chip icon={Link2} tone="muted">Published to link</Chip>
+                  ) : send.trackOpens ? (
                     send.openCount > 0 ? (
                       <Chip
                         icon={MailOpen}
@@ -405,5 +451,248 @@ function Chip({
       <Icon className="size-3" />
       {children}
     </span>
+  );
+}
+
+export function PublishRevisionDialog({
+  open,
+  onOpenChange,
+  orgSlug,
+  documentId,
+  versionId,
+  versionNumber,
+  recipients,
+  getContent,
+  getSource,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  orgSlug: string;
+  documentId: string;
+  versionId: string;
+  versionNumber: number;
+  recipients: SendRecipient[];
+  getContent: () => JSONContent;
+  getSource: () => JSONContent;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [note, setNote] = useState("");
+  const [notify, setNotify] = useState(true);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const formData = new FormData();
+            formData.set("version_id", versionId);
+            formData.set("note", note);
+            if (notify) formData.set("notify", "on");
+            formData.set("content_doc", JSON.stringify(getContent()));
+            formData.set("source_doc", JSON.stringify(getSource()));
+            start(async () => {
+              const result = await publishDocumentRevisionAction(orgSlug, documentId, formData);
+              if ("error" in result && result.error) {
+                toast.error(result.error);
+                return;
+              }
+              if ("ok" in result) {
+                const failures = result.failures ?? [];
+                if (failures.length > 0) {
+                  toast.warning(
+                    `Published v${result.versionNumber}, but the email to ${failures.join(", ")} failed`,
+                  );
+                } else {
+                  toast.success(
+                    notify
+                      ? `Published v${result.versionNumber} and emailed ${result.emailed} recipient${result.emailed === 1 ? "" : "s"}`
+                      : `Published v${result.versionNumber}. The client's link now shows it`,
+                  );
+                }
+              }
+              setNote("");
+              onOpenChange(false);
+              router.refresh();
+            });
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UploadCloud className="size-4 text-muted-foreground" />
+              Publish v{versionNumber} to the client
+            </DialogTitle>
+            <DialogDescription>
+              Their existing link switches to this version, with changes highlighted. Earlier
+              versions stay available, and only this one can be signed.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3">
+            <div className="flex flex-wrap gap-1.5">
+              {recipients.map((recipient) => (
+                <span
+                  key={recipient.email}
+                  className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground"
+                >
+                  {recipient.name ? `${recipient.name} · ` : ""}
+                  {recipient.email}
+                </span>
+              ))}
+            </div>
+            <Field label="What changed?" htmlFor="publish-note" hint="Shown in the comment thread and the email">
+              <Textarea
+                id="publish-note"
+                rows={4}
+                maxLength={2000}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="e.g. Updated payment terms to net 30 and added a round of post-launch fixes, as discussed."
+              />
+            </Field>
+            <label className="flex items-start gap-2 rounded-lg bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={notify}
+                onChange={(event) => setNotify(event.target.checked)}
+                className="mt-0.5 rounded border-input"
+              />
+              <span>
+                <span className="font-medium text-foreground">Email them a short update</span>
+                <br />
+                Untick to update the link quietly, for example for small fixes.
+              </span>
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending}>
+              <UploadCloud className="size-4" />
+              {pending ? "Publishing…" : `Publish v${versionNumber}`}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function EmailSignedCopyDialog({
+  open,
+  onOpenChange,
+  orgSlug,
+  versionId,
+  title,
+  defaultTo,
+  fullySigned,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  orgSlug: string;
+  versionId: string;
+  title: string;
+  defaultTo: string;
+  fullySigned: boolean;
+}) {
+  const [pending, start] = useTransition();
+  const [to, setTo] = useState(defaultTo);
+  const [cc, setCc] = useState("");
+  const [message, setMessage] = useState("");
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "document";
+  const files = fullySigned
+    ? [`${slug}-signed.pdf`, `${slug}-signature-certificate.pdf`]
+    : [`${slug}-signed-by-client.pdf`];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <form
+          className="grid gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const formData = new FormData();
+            formData.set("to", to);
+            formData.set("cc", cc);
+            formData.set("message", message);
+            start(async () => {
+              const result = await emailSignedCopyAction(orgSlug, versionId, formData);
+              if ("error" in result && result.error) {
+                toast.error(result.error);
+                return;
+              }
+              toast.success(`Signed copy sent to ${to}`);
+              setMessage("");
+              onOpenChange(false);
+            });
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileCheck2 className="size-4 text-muted-foreground" />
+              Email the signed copy
+            </DialogTitle>
+            <DialogDescription>
+              {fullySigned
+                ? "Sends the fully signed PDF and the signature certificate."
+                : "Sends the PDF with the client's signature. It still needs your countersignature."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3">
+            <Field label="To" htmlFor="signed-copy-to">
+              <Input
+                id="signed-copy-to"
+                type="email"
+                required
+                value={to}
+                onChange={(event) => setTo(event.target.value)}
+                placeholder="client@company.com"
+              />
+            </Field>
+            <Field label="CC" htmlFor="signed-copy-cc" hint="Optional, separate with commas">
+              <Input
+                id="signed-copy-cc"
+                value={cc}
+                onChange={(event) => setCc(event.target.value)}
+                placeholder="legal@company.com"
+              />
+            </Field>
+            <Field label="Message" htmlFor="signed-copy-message" hint="Optional">
+              <Textarea
+                id="signed-copy-message"
+                rows={3}
+                maxLength={2000}
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                placeholder="Here's the signed copy for your records."
+              />
+            </Field>
+            <div className="grid gap-1 rounded-lg bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
+              {files.map((file) => (
+                <span key={file} className="flex items-center gap-1.5 truncate">
+                  <Paperclip className="size-3 shrink-0" />
+                  {file}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pending || !to.trim()}>
+              <Send className="size-4" />
+              {pending ? "Sending…" : "Send signed copy"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

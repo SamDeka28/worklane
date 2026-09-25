@@ -72,4 +72,8 @@ export type DocumentSignature = {
   signerEmail: string;
   intentText: string;
   signedAt: string;
+  /** "portal" = the client signed from their link; "studio" = signed or recorded by your team. */
+  method: "studio" | "portal";
+  signatureText: string | null;
+  contentHash: string | null;
 };

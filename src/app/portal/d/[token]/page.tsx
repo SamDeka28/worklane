@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { after } from "next/server";
 import { SharedDocumentView } from "@/modules/documents/components/shared-document-view";
-import { loadSharedDocument, trackDocumentSend } from "@/modules/documents/sends";
+import { loadSharedDocument, trackDocumentSendById } from "@/modules/documents/sends";
 import { createServerSupabaseClient } from "@/shared/db/supabase/server";
 
 export const metadata: Metadata = {
@@ -28,15 +28,21 @@ async function viewerIsStudioMember(organizationId: string) {
 
 export default async function SharedDocumentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ token: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { token } = await params;
-  const shared = await loadSharedDocument(token);
+  const query = await searchParams;
+  const rev = typeof query.rev === "string" ? query.rev : null;
+  const shared = await loadSharedDocument(token, rev);
   if (!shared) notFound();
 
   const isMember = await viewerIsStudioMember(shared.organizationId);
-  if (!isMember) after(() => trackDocumentSend(token, "view"));
+  if (!isMember && shared.isLatest) {
+    after(() => trackDocumentSendById(shared.displayedSendId, "view"));
+  }
 
   return (
     <SharedDocumentView
@@ -47,10 +53,18 @@ export default async function SharedDocumentPage({
       recipientEmail={shared.recipientEmail}
       sentAt={shared.sentAt}
       content={shared.content}
+      versionNumber={shared.versionNumber}
+      previousContent={shared.previousContent}
+      previousVersionNumber={shared.previousVersionNumber}
+      revisions={shared.revisions}
+      displayedSendId={shared.displayedSendId}
+      isLatest={shared.isLatest}
       internalPreview={isMember}
       supersededAt={shared.supersededAt}
       locked={shared.locked}
-      signature={shared.signature}
+      signatures={shared.signatures}
+      clientSigned={shared.clientSigned}
+      accepted={shared.accepted}
       feedback={shared.feedback}
     />
   );

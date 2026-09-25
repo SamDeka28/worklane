@@ -54,6 +54,125 @@ export const listDocuments = cache(async (orgSlug: string): Promise<DocumentReco
   }));
 });
 
+export type DocumentOverview = {
+  versionNumber: number;
+  versionCount: number;
+  lastSend: {
+    recipientName: string | null;
+    recipientEmail: string;
+    sentAt: string;
+    delivery: "email" | "link";
+    lastViewedAt: string | null;
+    lastOpenedAt: string | null;
+  } | null;
+  recipientCount: number;
+  openFeedback: number;
+  clientSigned: boolean;
+  studioSigned: boolean;
+};
+
+/** Per-document review, delivery and signing state for the documents list. */
+export const listDocumentOverview = cache(
+  async (orgSlug: string): Promise<Map<string, DocumentOverview>> => {
+    const ctx = await requireOrg(orgSlug);
+    const orgId = ctx.org.id;
+    const [versions, sends, feedback] = await Promise.all([
+      ctx.supabase
+        .from("document_versions")
+        .select("id, document_id, version_number, status")
+        .eq("organization_id", orgId),
+      ctx.supabase
+        .from("document_sends")
+        .select(
+          "document_id, document_version_id, recipient_name, recipient_email, sent_at, delivery, last_viewed_at, last_opened_at",
+        )
+        .eq("organization_id", orgId)
+        .is("revoked_at", null)
+        .order("sent_at", { ascending: true }),
+      ctx.supabase
+        .from("document_feedback")
+        .select("document_id")
+        .eq("organization_id", orgId)
+        .eq("author_type", "client")
+        .neq("kind", "signed")
+        .is("resolved_at", null),
+    ]);
+
+    const latestVersion = new Map<string, { id: string; number: number; count: number }>();
+    for (const row of versions.data ?? []) {
+      const current = latestVersion.get(row.document_id);
+      if (!current || row.version_number > current.number) {
+        latestVersion.set(row.document_id, {
+          id: row.id,
+          number: row.version_number,
+          count: (current?.count ?? 0) + 1,
+        });
+      } else {
+        current.count += 1;
+      }
+    }
+
+    // Signatures belong to whichever version was signed, usually the newest sent one.
+    const signedVersionIds = (versions.data ?? [])
+      .filter((row) => row.status === "signed")
+      .map((row) => row.id);
+    const { data: signatures } = signedVersionIds.length
+      ? await ctx.supabase
+          .from("document_signatures")
+          .select("document_version_id, method")
+          .eq("organization_id", orgId)
+          .in("document_version_id", signedVersionIds)
+      : { data: [] as { document_version_id: string; method: string }[] };
+    const versionDoc = new Map((versions.data ?? []).map((row) => [row.id, row.document_id]));
+
+    const overview = new Map<string, DocumentOverview>();
+    const entry = (documentId: string) => {
+      let value = overview.get(documentId);
+      if (!value) {
+        const latest = latestVersion.get(documentId);
+        value = {
+          versionNumber: latest?.number ?? 1,
+          versionCount: latest?.count ?? 1,
+          lastSend: null,
+          recipientCount: 0,
+          openFeedback: 0,
+          clientSigned: false,
+          studioSigned: false,
+        };
+        overview.set(documentId, value);
+      }
+      return value;
+    };
+
+    const recipients = new Map<string, Set<string>>();
+    for (const row of sends.data ?? []) {
+      const value = entry(row.document_id);
+      value.lastSend = {
+        recipientName: row.recipient_name,
+        recipientEmail: row.recipient_email,
+        sentAt: row.sent_at,
+        delivery: row.delivery === "link" ? "link" : "email",
+        lastViewedAt: row.last_viewed_at,
+        lastOpenedAt: row.last_opened_at,
+      };
+      const set = recipients.get(row.document_id) ?? new Set<string>();
+      set.add(row.recipient_email.toLowerCase());
+      recipients.set(row.document_id, set);
+      value.recipientCount = set.size;
+    }
+    for (const row of feedback.data ?? []) entry(row.document_id).openFeedback += 1;
+    for (const row of signatures ?? []) {
+      const documentId = versionDoc.get(row.document_version_id);
+      if (!documentId) continue;
+      const value = entry(documentId);
+      if (row.method === "portal") value.clientSigned = true;
+      else value.studioSigned = true;
+    }
+    for (const documentId of latestVersion.keys()) entry(documentId);
+    return overview;
+  },
+);
+
 export async function getDocument(orgSlug: string, documentId: string) {
   const ctx = await requireOrg(orgSlug);
   const { data, error } = await ctx.supabase
@@ -114,10 +233,10 @@ export async function listSignaturesForVersion(
   const ctx = await requireOrg(orgSlug);
   const { data, error } = await ctx.supabase
     .from("document_signatures")
-    .select("id, document_version_id, signer_name, signer_email, intent_text, signed_at")
+    .select("id, document_version_id, signer_name, signer_email, intent_text, signed_at, method, signature_text, content_hash")
     .eq("organization_id", ctx.org.id)
     .eq("document_version_id", versionId)
-    .order("signed_at", { ascending: false });
+    .order("signed_at", { ascending: true });
   if (error) throw new Error(error.message);
   return (data ?? []).map((row) => ({
     id: row.id,
@@ -126,6 +245,9 @@ export async function listSignaturesForVersion(
     signerEmail: row.signer_email,
     intentText: row.intent_text,
     signedAt: row.signed_at,
+    method: row.method === "portal" ? "portal" : "studio",
+    signatureText: row.signature_text ?? null,
+    contentHash: row.content_hash ?? null,
   }));
 }
 
@@ -317,7 +439,7 @@ export async function listDocumentSends(
   const { data, error } = await ctx.supabase
     .from("document_sends")
     .select(
-      "id, recipient_email, recipient_name, cc, subject, sent_at, sent_by, track_opens, open_count, first_opened_at, last_opened_at, view_count, first_viewed_at, last_viewed_at, revoked_at",
+      "id, recipient_email, recipient_name, cc, subject, sent_at, sent_by, track_opens, delivery, document_versions(version_number), open_count, first_opened_at, last_opened_at, view_count, first_viewed_at, last_viewed_at, revoked_at",
     )
     .eq("organization_id", ctx.org.id)
     .eq("document_id", documentId)
@@ -348,6 +470,13 @@ export async function listDocumentSends(
     sentAt: row.sent_at as string,
     sentByName: row.sent_by ? (names.get(row.sent_by as string) ?? null) : null,
     trackOpens: Boolean(row.track_opens),
+    delivery: row.delivery === "link" ? "link" : "email",
+    versionNumber:
+      (
+        (Array.isArray(row.document_versions) ? row.document_versions[0] : row.document_versions) as
+          | { version_number: number }
+          | null
+      )?.version_number ?? null,
     openCount: Number(row.open_count ?? 0),
     firstOpenedAt: (row.first_opened_at as string | null) ?? null,
     lastOpenedAt: (row.last_opened_at as string | null) ?? null,

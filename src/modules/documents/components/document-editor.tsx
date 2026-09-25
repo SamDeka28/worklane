@@ -11,6 +11,7 @@ import {
   BadgeCheck,
   Building2,
   CopyPlus,
+  Download,
   Eye,
   FileText,
   FolderKanban,
@@ -23,6 +24,7 @@ import {
   Pencil,
   PenLine,
   Table2,
+  UploadCloud,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -38,6 +40,7 @@ import { MILESTONE_STATUS_LABEL } from "@/modules/delivery/milestone-life";
 import type { BillingMode, MilestoneRecord, TaskRecord } from "@/modules/delivery/types";
 import {
   cloneDocumentVersionAction,
+  countersignDocumentVersionAction,
   createProjectFromDocumentAction,
   createSowFromProposalAction,
   freezeDocumentVersionAction,
@@ -56,10 +59,13 @@ import {
   resolveDocumentForPreview,
   type PreviewCatalog,
 } from "@/modules/documents/resolve-preview";
+import { SIGNATURE_FONT, SignatureBlocks } from "@/modules/documents/components/signature-blocks";
 import { TemplateGallery } from "@/modules/documents/components/template-gallery";
 import {
   DocumentSendDialog,
   DocumentSendHistory,
+  PublishRevisionDialog,
+  EmailSignedCopyDialog,
   type SendRecipient,
 } from "@/modules/documents/components/document-send-dialog";
 import type { DocumentFeedback, DocumentSend } from "@/modules/documents/sends";
@@ -123,6 +129,7 @@ export function DocumentEditor({
   feedback = [],
   recipients = [],
   senderName = null,
+  senderEmail = null,
 }: {
   orgSlug: string;
   orgName?: string;
@@ -142,16 +149,26 @@ export function DocumentEditor({
   clientName?: string | null;
   projectName?: string | null;
   currency?: "USD" | "INR";
-  signatures?: Pick<DocumentSignature, "id" | "signerName" | "signerEmail" | "signedAt">[];
+  signatures?: Pick<
+    DocumentSignature,
+    "id" | "signerName" | "signerEmail" | "signedAt" | "method" | "signatureText" | "contentHash"
+  >[];
   sends?: DocumentSend[];
   feedback?: DocumentFeedback[];
   recipients?: SendRecipient[];
   senderName?: string | null;
+  senderEmail?: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const locked =
     Boolean(version.lockedAt) || version.status === "signed" || version.status === "accepted";
+  const sentFrozen = !locked && version.status === "sent";
+  const clientSigned = signatures.some((sig) => sig.method === "portal");
+  const studioSigned = signatures.some((sig) => sig.method === "studio");
+  const needsCountersign = version.status === "signed" && clientSigned && !studioSigned;
+  const editLocked = locked || sentFrozen;
+  const latestVersionNumber = Math.max(version.versionNumber, ...versions.map((v) => v.versionNumber));
   const lockedAt =
     version.lockedAt ??
     (typeof version.snapshot?.frozenAt === "string" ? version.snapshot.frozenAt : null);
@@ -174,6 +191,8 @@ export function DocumentEditor({
   const [margins, setMargins] = useState(DEFAULT_PAGE_MARGINS);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [signedCopyOpen, setSignedCopyOpen] = useState(false);
   const openFeedback = openFeedbackCount(feedback);
   const [kind, setKind] = useState<DocumentKind>(document.kind);
   const createResolver = useRef<((item: MentionItem | null) => void) | null>(null);
@@ -200,6 +219,16 @@ export function DocumentEditor({
     [doc, previewCatalog],
   );
 
+  const publishRecipients = useMemo((): SendRecipient[] => {
+    const seen = new Map<string, SendRecipient>();
+    for (const send of sends) {
+      if (send.revokedAt || seen.has(send.recipientEmail)) continue;
+      seen.set(send.recipientEmail, { name: send.recipientName, email: send.recipientEmail });
+    }
+    return [...seen.values()];
+  }, [sends]);
+  const canPublish = canWrite && !editLocked && publishRecipients.length > 0;
+
   const sendRecipients = useMemo((): SendRecipient[] => {
     const list = clientId === document.clientId ? [...recipients] : [];
     const client = clients.find((c) => c.id === clientId);
@@ -221,7 +250,7 @@ export function DocumentEditor({
       ...milestones.map((m) => ({ id: m.id, label: m.name, type: "milestone" })),
       ...tasks.map((t) => ({ id: t.id, label: t.title, type: "task" })),
     ];
-    if (canWrite && !locked) {
+    if (canWrite && !editLocked) {
       items.push(
         { id: "__create__:client", label: "Create client", type: "client", create: true },
         { id: "__create__:project", label: "Create project", type: "project", create: true },
@@ -230,7 +259,7 @@ export function DocumentEditor({
       );
     }
     return items;
-  }, [canWrite, clients, locked, milestones, scopedProjects, tasks]);
+  }, [canWrite, clients, editLocked, milestones, scopedProjects, tasks]);
 
   const closeCreateDialog = useCallback((result: MentionItem | null) => {
     setCreateOpen(false);
@@ -284,7 +313,7 @@ export function DocumentEditor({
   }
 
   function applyTemplate(template: DocumentTemplate) {
-    if (!canWrite || locked) return;
+    if (!canWrite || editLocked) return;
     const client = clients.find((c) => c.id === clientId);
     const project = projects.find((p) => p.id === projectId);
     const next = template.build({
@@ -355,6 +384,21 @@ export function DocumentEditor({
           senderName={senderName}
           recipients={sendRecipients}
           getContent={() => previewDoc}
+          getSource={() => doc}
+          sentBefore={sends.filter((send) => !send.revokedAt).map((send) => send.recipientEmail)}
+        />
+      ) : null}
+      {canPublish ? (
+        <PublishRevisionDialog
+          open={publishOpen}
+          onOpenChange={setPublishOpen}
+          orgSlug={orgSlug}
+          documentId={document.id}
+          versionId={version.id}
+          versionNumber={version.versionNumber}
+          recipients={publishRecipients}
+          getContent={() => previewDoc}
+          getSource={() => doc}
         />
       ) : null}
       <DocumentCreateSheets
@@ -385,7 +429,7 @@ export function DocumentEditor({
           onKeyDown={(event) => {
             if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
               event.preventDefault();
-              if (canWrite && !locked && mode === "edit" && !pending) {
+              if (canWrite && !editLocked && mode === "edit" && !pending) {
                 event.currentTarget.requestSubmit();
               }
             }
@@ -416,7 +460,7 @@ export function DocumentEditor({
                   name="title"
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
-                  disabled={!canWrite || locked || mode === "preview"}
+                  disabled={!canWrite || editLocked || mode === "preview"}
                   className="block w-full min-w-0 bg-transparent font-heading text-xl font-semibold tracking-tight outline-none placeholder:text-muted-foreground/50 disabled:opacity-90 sm:text-2xl"
                   placeholder="Untitled document"
                 />
@@ -431,14 +475,14 @@ export function DocumentEditor({
                     type="button"
                     role="tab"
                     aria-selected={mode === "edit"}
-                    disabled={!canWrite || locked}
+                    disabled={!canWrite || editLocked}
                     onClick={() => setMode("edit")}
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-colors",
                       mode === "edit"
                         ? "bg-card text-foreground shadow-soft"
                         : "text-muted-foreground hover:text-foreground",
-                      (!canWrite || locked) && "opacity-50",
+                      (!canWrite || editLocked) && "opacity-50",
                     )}
                   >
                     <Pencil className="size-3.5" />
@@ -460,7 +504,7 @@ export function DocumentEditor({
                     Preview
                   </button>
                 </div>
-                {canWrite && !locked && mode === "edit" ? (
+                {canWrite && !editLocked && mode === "edit" ? (
                   <Button type="submit" size="sm" disabled={pending} className="rounded-xl px-4">
                     {pending ? "Saving…" : "Save"}
                   </Button>
@@ -491,7 +535,17 @@ export function DocumentEditor({
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      v{row.versionNumber}
+                      <span className="inline-flex items-center gap-1">
+                        v{row.versionNumber}
+                        {row.status !== "draft" ? (
+                          <span
+                            className={cn(
+                              "size-1.5 rounded-full",
+                              row.status === "sent" ? "bg-sky-500" : "bg-emerald-500",
+                            )}
+                          />
+                        ) : null}
+                      </span>
                     </Link>
                   ))}
                 </div>
@@ -534,7 +588,7 @@ export function DocumentEditor({
           <div className="min-h-0 flex-1 overflow-hidden">
             <DocumentStudioEditor
               value={mode === "preview" ? previewDoc : doc}
-              editable={mode === "edit" && canWrite && !locked}
+              editable={mode === "edit" && canWrite && !editLocked}
               orgSlug={orgSlug}
               entityType="document_version"
               entityId={version.id}
@@ -543,12 +597,38 @@ export function DocumentEditor({
               onEditorReady={setEditor}
               pagePadding={margins}
               onPagePaddingChange={
-                mode === "edit" && canWrite && !locked ? setMargins : undefined
+                mode === "edit" && canWrite && !editLocked ? setMargins : undefined
               }
               placeholder="Write or paste from Word / Docs. Type @ to tag…"
               focusTitle={title || "Untitled document"}
+              afterPages={
+                signatures.length > 0 ? (
+                  <div className="px-14 py-12">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Signatures
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {title || "Untitled document"} · version {version.versionNumber}
+                    </p>
+                    <SignatureBlocks
+                      signatures={signatures.map((sig) => ({
+                        party: sig.method === "portal" ? "client" : "studio",
+                        signerName: sig.signerName,
+                        signerEmail: sig.signerEmail,
+                        signatureText: sig.signatureText,
+                        signedAt: sig.signedAt,
+                        contentHash: sig.contentHash,
+                      }))}
+                      orgName={orgName ?? ""}
+                      clientLabel={displayClient ?? "Client"}
+                      showPending={clientSigned}
+                      className="mt-8 border-t border-slate-200 pt-6"
+                    />
+                  </div>
+                ) : null
+              }
               focusActions={
-                canWrite && !locked && mode === "edit" ? (
+                canWrite && !editLocked && mode === "edit" ? (
                   <Button type="submit" size="sm" disabled={pending} className="rounded-xl px-4">
                     {pending ? "Saving…" : "Save"}
                   </Button>
@@ -563,7 +643,41 @@ export function DocumentEditor({
             />
           </div>
 
-          {locked ? (
+          {sentFrozen ? (
+            <div className="flex flex-wrap items-center gap-2 border-t border-border/40 bg-sky-500/5 px-4 py-2 text-xs text-muted-foreground">
+              <span className="min-w-0 flex-1">
+                Version {version.versionNumber} was sent to the client and is kept as-is.
+                {version.versionNumber < latestVersionNumber
+                  ? ` A newer version (v${latestVersionNumber}) exists.`
+                  : " Start a revision to address feedback, then publish it to the client's link."}
+              </span>
+              {canWrite && version.versionNumber === latestVersionNumber ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  disabled={pending}
+                  className="h-7 rounded-lg"
+                  onClick={() =>
+                    start(async () => {
+                      const result = await cloneDocumentVersionAction(orgSlug, version.id);
+                      if ("error" in result && result.error) {
+                        toast.error(result.error);
+                        return;
+                      }
+                      if ("id" in result && result.id) {
+                        toast.success(`Revision v${latestVersionNumber + 1} started`);
+                        router.push(`/${orgSlug}/documents/${document.id}?version=${result.id}`);
+                      }
+                    })
+                  }
+                >
+                  <CopyPlus className="size-3.5" />
+                  Start revision v{latestVersionNumber + 1}
+                </Button>
+              ) : null}
+            </div>
+          ) : locked ? (
             <p className="border-t border-border/40 px-4 py-2 text-xs text-muted-foreground">
               This version is locked. Start a new version to make changes.
             </p>
@@ -577,7 +691,7 @@ export function DocumentEditor({
 
       <aside className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto pb-2 lg:w-80 xl:w-[22rem]">
         <RailCard title="Linked to" description="Tags and tables pull live data from these records.">
-          {canWrite && !locked ? (
+          {canWrite && !editLocked ? (
             <div className="grid gap-3">
               <Field label="Client" htmlFor="studio_client">
                 <NativeSelect
@@ -653,7 +767,7 @@ export function DocumentEditor({
           )}
         </RailCard>
 
-        {canWrite && !locked && mode === "edit" ? (
+        {canWrite && !editLocked && mode === "edit" ? (
           <RailCard title="Insert">
             <div className="-mx-1.5 grid gap-0.5">
               <RailAction
@@ -761,10 +875,23 @@ export function DocumentEditor({
         {canWrite ? (
           <RailCard title="Share">
             <div className="-mx-1.5 grid gap-0.5">
+              {canPublish ? (
+                <RailAction
+                  icon={UploadCloud}
+                  label={`Publish v${version.versionNumber} to client`}
+                  hint={`Updates the link ${publishRecipients.length === 1 ? (publishRecipients[0].name ?? publishRecipients[0].email) : `${publishRecipients.length} people`} already has, with changes highlighted`}
+                  disabled={pending}
+                  onClick={() => setPublishOpen(true)}
+                />
+              ) : null}
               <RailAction
                 icon={Mail}
                 label="Send by email"
-                hint="Write a message and send it from Worklane, with open tracking"
+                hint={
+                  canPublish
+                    ? "Send to someone new, or with a custom message"
+                    : "Write a message and send it from Worklane, with open tracking"
+                }
                 disabled={pending}
                 onClick={() => setSendOpen(true)}
               />
@@ -869,8 +996,32 @@ export function DocumentEditor({
           </RailCard>
         ) : null}
 
+        {canWrite && needsCountersign ? (
+          <RailCard
+            title="Countersign"
+            description="The client has signed this version. Add your signature to complete it; they'll get an email with the fully signed copy."
+          >
+            <CountersignForm
+              orgSlug={orgSlug}
+              versionId={version.id}
+              defaultName={senderName ?? ""}
+              defaultEmail={senderEmail ?? ""}
+              pending={pending}
+              start={start}
+            />
+          </RailCard>
+        ) : null}
+
         {signatures.length > 0 || lockedAt ? (
-          <RailCard title={signatures.length > 0 ? "Signed" : "Locked"}>
+          <RailCard
+            title={
+              clientSigned && studioSigned
+                ? "Fully signed"
+                : signatures.length > 0
+                  ? "Signed"
+                  : "Locked"
+            }
+          >
             <div className="grid gap-2">
               {signatures.map((sig) => (
                 <div key={sig.id} className="flex items-start gap-3 rounded-xl bg-muted/40 px-3 py-2.5">
@@ -878,7 +1029,12 @@ export function DocumentEditor({
                     <PenLine className="size-3.5" />
                   </span>
                   <div className="min-w-0 text-sm">
-                    <p className="truncate font-medium">{sig.signerName}</p>
+                    <p className="flex items-center gap-1.5 font-medium">
+                      <span className="truncate">{sig.signerName}</span>
+                      <span className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">
+                        {sig.method === "portal" ? "Client" : "Your side"}
+                      </span>
+                    </p>
                     <p className="truncate text-xs text-muted-foreground">{sig.signerEmail}</p>
                     <p className="text-xs text-muted-foreground">{formatStamp(sig.signedAt)}</p>
                   </div>
@@ -890,8 +1046,55 @@ export function DocumentEditor({
                   Locked {formatStamp(lockedAt)}
                 </p>
               ) : null}
+              {version.status === "signed" && signatures.length > 0 ? (
+                <div className="mt-1 grid gap-0.5 border-t border-border/40 pt-2">
+                  {canWrite ? (
+                    <RailAction
+                      icon={Mail}
+                      label="Email signed copy"
+                      hint={
+                        clientSigned && studioSigned
+                          ? "Signed PDF and certificate, e.g. to resend to the client"
+                          : "PDF with the signatures so far"
+                      }
+                      onClick={() => setSignedCopyOpen(true)}
+                    />
+                  ) : null}
+                  <a
+                    href={`/${orgSlug}/documents/${document.id}/pdf?version=${version.id}`}
+                    className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  >
+                    <Download className="size-3.5" />
+                    Download signed PDF
+                  </a>
+                  {clientSigned && studioSigned ? (
+                    <a
+                      href={`/${orgSlug}/documents/${document.id}/pdf?version=${version.id}&part=certificate`}
+                      className="flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    >
+                      <BadgeCheck className="size-3.5" />
+                      Download certificate
+                    </a>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </RailCard>
+        ) : null}
+        {version.status === "signed" && signatures.length > 0 && canWrite ? (
+          <EmailSignedCopyDialog
+            open={signedCopyOpen}
+            onOpenChange={setSignedCopyOpen}
+            orgSlug={orgSlug}
+            versionId={version.id}
+            title={title || document.title}
+            defaultTo={
+              signatures.find((sig) => sig.method === "portal")?.signerEmail ??
+              recipients[0]?.email ??
+              ""
+            }
+            fullySigned={clientSigned && studioSigned}
+          />
         ) : null}
       </aside>
     </div>
@@ -1051,6 +1254,105 @@ function SignForm({
       <Button type="submit" disabled={pending} className="w-full gap-2">
         <PenLine className="size-4" />
         Sign document
+      </Button>
+    </form>
+  );
+}
+
+function CountersignForm({
+  orgSlug,
+  versionId,
+  defaultName,
+  defaultEmail,
+  pending,
+  start,
+}: {
+  orgSlug: string;
+  versionId: string;
+  defaultName: string;
+  defaultEmail: string;
+  pending: boolean;
+  start: (fn: () => Promise<void>) => void;
+}) {
+  const router = useRouter();
+  const [name, setName] = useState(defaultName);
+  const [signature, setSignature] = useState(defaultName);
+  const [consent, setConsent] = useState(false);
+  return (
+    <form
+      className="grid gap-3"
+      action={(formData) => {
+        start(async () => {
+          const result = await countersignDocumentVersionAction(orgSlug, versionId, formData);
+          if ("error" in result && result.error) toast.error(result.error);
+          else {
+            toast.success("Countersigned. The document is now signed by both sides");
+            router.refresh();
+          }
+        });
+      }}
+    >
+      <Field label="Full name" htmlFor="countersign_name">
+        <Input
+          id="countersign_name"
+          name="signer_name"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          required
+        />
+      </Field>
+      <Field label="Email" htmlFor="countersign_email">
+        <Input
+          id="countersign_email"
+          name="signer_email"
+          type="email"
+          defaultValue={defaultEmail}
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          required
+        />
+      </Field>
+      <Field label="Type your signature" htmlFor="countersign_signature">
+        <Input
+          id="countersign_signature"
+          name="signature_text"
+          value={signature}
+          onChange={(event) => setSignature(event.target.value)}
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          required
+        />
+      </Field>
+      <p
+        className="min-h-10 truncate rounded-lg bg-muted/40 px-3 py-1 text-3xl leading-tight"
+        style={{ fontFamily: SIGNATURE_FONT }}
+        aria-hidden
+      >
+        {signature || "\u00a0"}
+      </p>
+      <label className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+        <input
+          type="checkbox"
+          name="consent"
+          checked={consent}
+          onChange={(event) => setConsent(event.target.checked)}
+          className="mt-0.5"
+        />
+        I agree to the terms of this document on behalf of my organization and adopt the above as my
+        electronic signature.
+      </label>
+      <Button
+        type="submit"
+        disabled={pending || !consent || !name.trim() || !signature.trim()}
+        className="w-full gap-2"
+      >
+        <PenLine className="size-4" />
+        Countersign
       </Button>
     </form>
   );

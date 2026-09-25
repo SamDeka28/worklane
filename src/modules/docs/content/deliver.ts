@@ -288,7 +288,7 @@ export const DELIVER: DocArticle[] = [
       "Draft from an industry-standard template (proposal, SOW, MSA, NDA, brief, change order, status report), tag live project data with @, preview what the client sees, and link documents to work.",
     category: "deliver",
     kind: "how-to",
-    related: ["document-editor", "sign-and-version", "mentions"],
+    related: ["document-editor", "sign-and-version", "client-review", "mentions"],
     blocks: [
       {
         type: "p",
@@ -329,6 +329,22 @@ export const DELIVER: DocArticle[] = [
       {
         type: "p",
         text: "Click **Save** — you'll see “Draft saved: tags indexed”. A document tagged with a project appears on that project's Documents tab as **tagged in body**, **linked & tagged**, or **in Docs**.",
+      },
+      { type: "h2", text: "The documents list" },
+      {
+        type: "p",
+        text: "The summary at the top counts documents **With clients** (sent, not yet signed), **Needs your signature** (the client signed and you still need to countersign), **Open comments**, and **Drafts**.",
+      },
+      {
+        type: "table",
+        head: ["Column", "Shows"],
+        rows: [
+          ["Document", "Title, kind, current version, client, and project."],
+          ["Client activity", "Who it was sent to, whether by email or link only, how long ago, and whether they viewed the link or opened the email."],
+          ["Review", "Open client comments, or “No open items”."],
+          ["Signatures", "Whether the client and your side have signed: **Fully signed**, **Countersign needed**, or **Awaiting client**."],
+          ["Status", "Draft, Sent, Accepted, Signed, or Void."],
+        ],
       },
     ],
   },
@@ -393,16 +409,16 @@ export const DELIVER: DocArticle[] = [
   },
   {
     slug: "sign-and-version",
-    title: "Share, accept, sign, and version documents",
+    title: "Send, sign, and version documents",
     summary:
-      "Send a document, freeze an accepted version, collect a click-to-sign signature, and revise with new versions.",
+      "Email a document from Worklane with open tracking, publish revisions to the same link, have both sides sign, and send the signed PDF and certificate.",
     category: "deliver",
     kind: "how-to",
-    related: ["documents", "projects"],
+    related: ["client-review", "documents", "projects"],
     blocks: [
       {
         type: "p",
-        text: "Everything here lives in the **Share & sign** panel on the right side of the editor.",
+        text: "Everything here lives in the **Share** panel on the right side of the editor. The client never needs an account: they review, comment, and sign from a private link.",
       },
       { type: "h2", text: "Document statuses" },
       {
@@ -410,49 +426,133 @@ export const DELIVER: DocArticle[] = [
         head: ["Status", "Meaning"],
         rows: [
           ["Draft", "Editable."],
-          ["Sent", "Shared with the client via email."],
-          ["Accepted", "Frozen with **Accept & freeze**."],
-          ["Signed", "A signer completed click-to-sign."],
+          ["Sent", "Emailed or published to the client. The sent version is kept as-is."],
+          ["Accepted", "Frozen with **Mark as accepted**, without signatures."],
+          ["Signed", "At least one side has signed. The version is locked."],
           ["Void", "No longer in effect."],
         ],
       },
-      { type: "h2", text: "Share" },
-      {
-        type: "list",
-        items: [
-          "**Send via email** opens your mail app with a link and marks the document **Sent**.",
-          "**Copy link** copies the document link to your clipboard.",
-        ],
-      },
-      { type: "h2", text: "Accept and sign" },
+      { type: "h2", text: "Send by email" },
       {
         type: "steps",
         items: [
-          { title: "Accept & freeze", body: "Locks the current version and stores a permanent snapshot. Client and project context lock too." },
-          {
-            title: "Click-to-sign",
-            body: "Enter **Signer name** and **Email**, then **Sign (clickwrap)**. The signer agrees: “I agree to the terms in this document and intend to sign electronically.”",
-          },
-          { title: "See signatures", body: "The **Signatures** list records who signed and when." },
+          { title: "Click Send by email", body: "The email is sent from Worklane through your workspace's mail server; no mail app opens." },
+          { title: "Recipient, CC, and subject", body: "Pick one of the client's contacts or type an address. Add up to five CC addresses." },
+          { title: "Write the message", body: "A friendly default is filled in. When you've sent this document to them before, it says the document was revised and that the changes are highlighted." },
+          { title: "Track opens (optional)", body: "Adds a tiny invisible image so you can see when the email was opened. Link views are always tracked." },
+          { title: "Click Send", body: "The client gets a branded email with a **View** button. The version you sent is frozen, and the document moves to **Sent**." },
         ],
       },
-      { type: "h2", text: "Revise with versions" },
+      {
+        type: "callout",
+        tone: "note",
+        text: "Sending needs SMTP to be configured for the workspace (SMTP_USER and SMTP_PASS). Email opens are a hint, not proof: some mail apps block or pre-load images.",
+      },
+      { type: "h3", text: "Delivery log" },
       {
         type: "p",
-        text: "A locked version shows “This version is locked. Clone to revise.” Click **Clone to new version** to create an editable v2 (then v3…). Version pills in the top bar show the history.",
+        text: "Each send appears under the Share panel with its version and status chips: **Not opened yet**, **Opened** (the email), **Viewed** (the link), or **Published to link**. You get a notification the first time a client opens the email or views the link. **Copy link** gives you the client's link again; **Revoke** turns it off.",
+      },
+      { type: "h2", text: "Revise and publish" },
+      {
+        type: "steps",
+        items: [
+          { title: "Start a revision", body: "A sent version can't be edited. Click **Start revision v2** on the banner (or **Start a new version**) to copy it into an editable draft." },
+          { title: "Address the feedback", body: "Edit the draft. The **Client review** card lists every comment and suggestion; mark each one addressed as you go." },
+          { title: "Click Publish v2 to client", body: "Add a short **What changed?** note and choose whether to **Email them a short update**. Untick it for small fixes." },
+        ],
+      },
+      {
+        type: "p",
+        text: "You never need to resend a new link. The client's existing link switches to the latest version, with changed sections available to highlight, and every earlier version stays viewable read-only. Comments and signing always apply to the latest version.",
+      },
+      { type: "h2", text: "Signing: both sides sign" },
+      {
+        type: "p",
+        text: "Either side can sign first. The first signature locks the version, and the other side then signs the same locked copy, so both signatures cover exactly the same text.",
+      },
+      {
+        type: "table",
+        head: ["Situation", "What to do"],
+        rows: [
+          ["The client signed first", "A **Countersign** card appears. Your name and email are prefilled; type your signature, tick the consent box, and click **Countersign**. The client is emailed the fully signed copy."],
+          ["You want to sign first", "Use **Record a signature**. The client's link then shows **Sign** and asks them to complete it."],
+          ["No signatures needed", "**Mark as accepted** locks the version as the agreed copy."],
+        ],
+      },
+      {
+        type: "p",
+        text: "Each signature records the name, email, typed signature, time, IP address, browser, and a SHA-256 fingerprint of the signed content. The signatures are shown under the document on both sides, with an **Awaiting signature** line for whoever hasn't signed yet.",
+      },
+      { type: "h2", text: "Signed copies and the certificate" },
+      {
+        type: "list",
+        items: [
+          "Signing emails attach a **PDF of the signed document**. Once both sides have signed, they also attach a separate **signature certificate** listing each signer, when and how they signed, and the fingerprint.",
+          "The client gets a confirmation when they sign; you get a notification (with the PDF) and the document is ready to countersign.",
+          "**Email signed copy** (in the Signed card) sends the PDFs to anyone, for example to resend them to the client or to your accountant. Only the client who owns the link gets a **View signed copy** button.",
+          "**Download signed PDF** and **Download certificate** save the files directly.",
+        ],
       },
       { type: "h2", text: "Turn a document into work" },
       {
         type: "list",
         items: [
-          "**Create SOW** (proposals only) creates “SOW · {title}” ready to fill in.",
+          "**Create statement of work** (proposals only) creates “SOW · {title}” ready to fill in.",
           "**Create project** (once locked, when no project is linked) opens a Planning project on Milestones billing for the linked client.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "client-review",
+    title: "Client review: comments, changes, and signing",
+    summary:
+      "What your client sees on their link, how they comment, suggest edits, request changes, and sign, and how you reply and mark feedback addressed.",
+    category: "deliver",
+    kind: "how-to",
+    related: ["sign-and-version", "documents", "notifications"],
+    blocks: [
+      {
+        type: "p",
+        text: "When you send or publish a document, your client gets a private review page. It shows the document the way you designed it, a comments panel, and buttons to request changes or sign. No account or password is needed.",
+      },
+      { type: "h2", text: "What the client can do" },
+      {
+        type: "table",
+        head: ["Action", "How"],
+        rows: [
+          ["Comment", "Type in the comments panel, or select text in the document and choose **Comment** to quote it."],
+          ["Suggest an edit", "Select text and choose **Suggest edit**, then type the replacement. You see the original struck through and the suggestion beside it."],
+          ["Request changes", "**Request changes** sends a summary of what needs to change. You're notified by email."],
+          ["Accept & sign", "Type their full name and signature, tick the consent box, and sign. They're emailed a PDF of the signed copy."],
+          ["Print", "**Print** produces a clean copy without the review panel."],
+        ],
+      },
+      { type: "h2", text: "Revisions on the client's side" },
+      {
+        type: "list",
+        items: [
+          "Their link always opens the latest version you published. A banner says what changed, for example “Revised (v2): 3 sections changed since v1”.",
+          "Changed sections aren't highlighted by default. **Highlight changes** turns the highlights on; **Hide highlights** turns them off.",
+          "Small **v1 / v2** buttons next to the title open earlier versions read-only, with a link back to the latest.",
+          "Once signed or accepted, the page shows who signed and becomes read-only.",
+        ],
+      },
+      { type: "h2", text: "Handle feedback in the editor" },
+      {
+        type: "steps",
+        items: [
+          { title: "Open the Client review card", body: "It shows the number of open items. Each entry is tagged with the version it was left on." },
+          { title: "Reply", body: "Type a reply. It appears on their page, and **Email the client** (on by default) also emails them a link." },
+          { title: "Mark addressed", body: "Click **Mark addressed** once you've handled an item, or **Reopen** to bring it back. Addressed items fold into an **Addressed** section on both sides." },
+          { title: "Publish the revision", body: "When you're ready, publish the new version to the same link. See Send, sign, and version documents." },
         ],
       },
       {
         type: "callout",
         tone: "tip",
-        text: "Need a PDF for your records? Switch to **Preview** and use your browser's Print → Save as PDF.",
+        text: "Opening the client's link yourself while signed in shows it as a preview: it isn't counted as a client view and you can't comment or sign as the client.",
       },
     ],
   },

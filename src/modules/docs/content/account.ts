@@ -46,6 +46,11 @@ export const ACCOUNT: DocArticle[] = [
           ["General", "Other studio updates", "On"],
         ],
       },
+      { type: "h2", text: "Client activity on documents" },
+      {
+        type: "p",
+        text: "When you send a document, you're notified under **Clients** the first time the client opens the email and the first time they view the link, and whenever they comment, suggest a change, request changes, or sign. **Changes requested** and **signed** always email you, whatever your settings. Signed notifications attach the signed PDF, plus the signature certificate once both sides have signed.",
+      },
       {
         type: "callout",
         tone: "note",
@@ -267,10 +272,25 @@ export const ACCOUNT: DocArticle[] = [
         type: "p",
         text: "Charges with payments applied can't be cancelled, and both actions are blocked while related partners have settlements on record.",
       },
-      { type: "h3", text: "Invite or invoice emails aren't arriving" },
+      { type: "h3", text: "Invite, invoice, or document emails aren't arriving" },
       {
         type: "p",
-        text: "If Team shows **Email not configured**, Worklane copies invite links for you to share and opens your mail app for invoices instead.",
+        text: "If Team shows **Email not configured**, the studio's email (SMTP) isn't set up. Invite links are copied for you to share yourself. For invoices, download the **PDF** and use **I sent it another way**. Documents are sent by email, so sending one needs email set up. If email is configured, ask the recipient to check spam and look at the document's **Delivery log** to confirm the address it went to. **Copy link** there gives you the client's link to share another way.",
+      },
+      { type: "h3", text: "I can't edit a sent or signed document" },
+      {
+        type: "p",
+        text: "The first signature locks that version. To change anything, create a new revision and publish it to the same link. See [Send, sign, and version documents](/docs/sign-and-version).",
+      },
+      { type: "h3", text: "The client signed, but I still need to sign" },
+      {
+        type: "p",
+        text: "Open the document and use the **Countersign** card in the right-hand panel. Either side can sign first; the version shows **Fully signed** once both have signed, and the client is emailed the signed PDF and certificate.",
+      },
+      { type: "h3", text: "An invoice won't issue: “Already charged”" },
+      {
+        type: "p",
+        text: "A line is linked to a milestone or work log that already has an open charge. Remove the line, or click **Issue anyway (double bill)** if you really mean to bill it twice. See [Invoices](/docs/invoices).",
       },
       { type: "h3", text: "My theme didn't change" },
       {

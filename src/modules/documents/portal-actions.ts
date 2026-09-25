@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { buildLiveSnapshot } from "@/modules/documents/lock";
 import { documentViewPath, loadSharedDocument } from "@/modules/documents/sends";
+import { signedDocumentAttachments } from "@/modules/documents/signed-pdf";
 import { notify } from "@/modules/notifications/service";
 import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
 import {
@@ -94,9 +95,10 @@ export async function signPortalDocumentAction(token: string, formData: FormData
   const shared = await loadSharedDocument(token);
   const admin = createAdminSupabaseClient();
   if (!shared || !admin) return { error: "This link is no longer available" };
-  if (shared.locked) return { error: "This document has already been signed" };
+  if (shared.clientSigned) return { error: "This document has already been signed" };
+  if (shared.accepted) return { error: "This document has already been accepted" };
   if (shared.supersededAt) {
-    return { error: "A newer revision was sent to you. Please sign the latest copy." };
+    return { error: "A newer revision was sent to someone else on your team. Please sign that copy." };
   }
   if (!shared.versionId) return { error: "This copy can't be signed. Ask the sender to resend it." };
 
@@ -124,23 +126,28 @@ export async function signPortalDocumentAction(token: string, formData: FormData
   const pick = (value: unknown) =>
     ((Array.isArray(value) ? value[0] : value) as { name: string } | null)?.name ?? null;
 
-  const { data: lockedVersion } = await admin
-    .from("document_versions")
-    .update({
-      status: "signed",
-      locked_at: signedAt,
-      snapshot: buildLiveSnapshot({
-        clientName: pick(document?.clients),
-        projectName: pick(document?.projects),
-        contentDoc: shared.content as Record<string, unknown>,
-        frozenAt: signedAt,
-      }),
-    })
-    .eq("id", shared.versionId)
-    .is("locked_at", null)
-    .neq("status", "signed")
-    .select("id")
-    .maybeSingle();
+  const studioSigned = shared.signatures.some((sig) => sig.party === "studio");
+  const lockedVersion = shared.locked
+    ? { id: shared.versionId }
+    : (
+        await admin
+          .from("document_versions")
+          .update({
+            status: "signed",
+            locked_at: signedAt,
+            snapshot: buildLiveSnapshot({
+              clientName: pick(document?.clients),
+              projectName: pick(document?.projects),
+              contentDoc: shared.content as Record<string, unknown>,
+              frozenAt: signedAt,
+            }),
+          })
+          .eq("id", shared.versionId)
+          .is("locked_at", null)
+          .neq("status", "signed")
+          .select("id")
+          .maybeSingle()
+      ).data;
   if (!lockedVersion) return { error: "This document has already been signed" };
 
   const intentText = `I, ${signerName}, agree to the terms of "${shared.title}" and adopt "${signatureText}" as my electronic signature.`;
@@ -159,6 +166,7 @@ export async function signPortalDocumentAction(token: string, formData: FormData
     content_hash: contentHash,
   });
   if (signatureError) {
+    if (shared.locked) return { error: "Couldn't record your signature. Please try again." };
     await admin
       .from("document_versions")
       .update({ status: "draft", locked_at: null, snapshot: null })
@@ -195,13 +203,24 @@ export async function signPortalDocumentAction(token: string, formData: FormData
     }),
   ]);
 
+  const attachments = await signedDocumentAttachments(admin, {
+    versionId: shared.versionId,
+    title: shared.title,
+    orgName: shared.orgName,
+    clientName: pick(document?.clients),
+    content: shared.content,
+  });
+
   await notify({
     recipients: [shared.sentBy],
     organizationId: shared.organizationId,
     orgName: shared.orgName,
     category: "clients",
+    attachments,
     title: `${signerName} signed ${shared.title}`,
-    body: `Signed by ${signerName} (${shared.recipientEmail}). This version is now locked.`,
+    body: studioSigned
+      ? `Signed by ${signerName} (${shared.recipientEmail}). Both sides have now signed.`
+      : `Signed by ${signerName} (${shared.recipientEmail}). This version is locked and ready for your countersignature.`,
     href: shared.orgSlug ? `/${shared.orgSlug}/documents/${shared.documentId}` : null,
     entity: { type: "document", id: shared.documentId },
     actionLabel: "Open document",
@@ -213,7 +232,9 @@ export async function signPortalDocumentAction(token: string, formData: FormData
     const input = {
       orgName: shared.orgName,
       heading: `You signed ${shared.title}`,
-      message: `Thanks, ${signerName.split(/\s+/)[0]}. Your signature has been recorded and ${shared.orgName} has been notified. You can view or print the signed copy any time from the link below.`,
+      message: studioSigned
+        ? `Thanks, ${signerName.split(/\s+/)[0]}. Your signature has been recorded and the document is now signed by both sides. A PDF of the signed copy is attached, and you can view it any time from the link below.`
+        : `Thanks, ${signerName.split(/\s+/)[0]}. Your signature has been recorded and ${shared.orgName} has been notified to countersign. A PDF of your signed copy is attached; you'll get the final copy once they've signed.`,
       viewUrl,
       buttonLabel: "View signed copy",
       rows: [
@@ -228,6 +249,7 @@ export async function signPortalDocumentAction(token: string, formData: FormData
       fromName: shared.orgName,
       html: documentUpdateEmailHtml(input),
       text: documentUpdateEmailText(input),
+      attachments,
     });
   }
 

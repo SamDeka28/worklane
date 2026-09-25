@@ -1238,3 +1238,11 @@
   color: #94a3b8;
   text-decoration: line-through;
 }
+
+.doc-wysiwyg .doc-changed {
+  border-radius: 4px;
+  background-color: rgb(16 185 129 / 0.1);
+  box-shadow:
+    0 0 0 6px rgb(16 185 129 / 0.1),
+    -10px 0 0 0 rgb(16 185 129);
+}

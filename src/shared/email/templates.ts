@@ -321,7 +321,8 @@ export type DocumentUpdateEmailInput = {
   orgName: string;
   heading: string;
   message: string;
-  viewUrl: string;
+  /** Omit when there's no client link (e.g. a copy sent to someone new); the button is dropped. */
+  viewUrl?: string | null;
   buttonLabel: string;
   rows?: { label: string; value: string }[];
 };
@@ -333,8 +334,8 @@ export function documentUpdateEmailHtml(input: DocumentUpdateEmailInput) {
     title: input.heading,
     content: `${paragraphs(input.message)}
 ${input.rows?.length ? detailRows(input.rows) : ""}
-${button(input.viewUrl, input.buttonLabel)}
-${fallbackLink(input.viewUrl)}`,
+${input.viewUrl ? `${button(input.viewUrl, input.buttonLabel)}
+${fallbackLink(input.viewUrl)}` : ""}`,
     footer: `Sent on behalf of ${escapeHtml(input.orgName)} via Worklane. Reply to this email to reach them directly.`,
   });
 }
@@ -345,7 +346,6 @@ export function documentUpdateEmailText(input: DocumentUpdateEmailInput) {
     "",
     input.message.trim(),
     ...(input.rows?.length ? ["", ...input.rows.map((row) => `${row.label}: ${row.value}`)] : []),
-    "",
-    `${input.buttonLabel}: ${input.viewUrl}`,
+    ...(input.viewUrl ? ["", `${input.buttonLabel}: ${input.viewUrl}`] : []),
   ].join("\n");
 }

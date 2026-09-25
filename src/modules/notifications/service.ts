@@ -4,6 +4,7 @@ import {
   notificationEmailHtml,
   notificationEmailText,
   sendEmail,
+  type SendEmailInput,
 } from "@/shared/email";
 import {
   emailEnabled,
@@ -30,6 +31,8 @@ export type NotifyInput = {
    * them (the default copy is usually addressed to "you"), or `false` to skip owners.
    */
   ownerCopy?: { title: string; body?: string } | false;
+  /** Files attached to the notification emails (e.g. a signed PDF). */
+  attachments?: SendEmailInput["attachments"];
 };
 
 type Delivery = { userId: string; title: string; body: string; forceEmail: boolean };
@@ -131,6 +134,7 @@ export async function notify(input: NotifyInput): Promise<void> {
           subject: delivery.title,
           html: notificationEmailHtml(mail),
           text: notificationEmailText(mail),
+          attachments: input.attachments,
         });
         if (!result.ok) {
           console.error(`notify email to ${email} failed: ${result.error}`);

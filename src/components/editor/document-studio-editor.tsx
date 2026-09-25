@@ -66,6 +66,7 @@ export function DocumentStudioEditor({
   onPagePaddingChange,
   focusTitle,
   focusActions,
+  afterPages,
   className,
 }: {
   value?: JSONContent | null;
@@ -84,6 +85,8 @@ export function DocumentStudioEditor({
   focusTitle?: string;
   /** Extra controls (e.g. Save) for the focus-mode top bar. */
   focusActions?: ReactNode;
+  /** Rendered as an extra sheet below the paginated document (e.g. signatures). */
+  afterPages?: ReactNode;
   className?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -354,7 +357,7 @@ export function DocumentStudioEditor({
             />
           </div>
         </div>
-        <div className="flex min-w-fit justify-center px-6 pt-3 pb-16">
+        <div className="flex min-w-fit flex-col items-center gap-6 px-6 pt-3 pb-16">
           <div
             data-theme="light"
             className="lane-paper shrink-0 text-slate-900"
@@ -362,6 +365,15 @@ export function DocumentStudioEditor({
           >
             <EditorContent editor={editor} />
           </div>
+          {afterPages ? (
+            <div
+              data-theme="light"
+              className="lane-paper shrink-0 bg-white text-slate-900 shadow-sm"
+              style={{ width: pageWidth }}
+            >
+              {afterPages}
+            </div>
+          ) : null}
         </div>
       </div>
 

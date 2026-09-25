@@ -114,6 +114,7 @@ export default async function DocumentDetailPage({
               contact.email ? [{ name: contact.name, email: contact.email }] : [],
             )}
             senderName={ctx.user.displayName}
+            senderEmail={ctx.user.email}
           />
         </div>
       </div>
