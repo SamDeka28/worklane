@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { slugifyStageName } from "@/modules/crm/types";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
-import { notify, userLabel } from "@/modules/notifications/service";
+import { notifyMentions } from "@/modules/mentions/notify";
+import { notify, notifyOwners, userLabel } from "@/modules/notifications/service";
 import { parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
@@ -130,6 +131,26 @@ export async function createLeadAction(orgSlug: string, formData: FormData) {
   if (error || !data) return { error: error?.message ?? "Could not create lead" };
 
   await recordActivity(ctx, "created", data.id, { name, stage });
+  await notifyMentions(ctx, {
+    doc: notesDoc,
+    where: `notes on the lead ${name}`,
+    excerpt: notesPlain ?? "",
+    href: `/${orgSlug}/crm?lead=${data.id}`,
+    entity: { type: "lead", id: data.id as string },
+  });
+  const company = String(formData.get("company") ?? "").trim();
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "leads",
+    title: (actor) => `${actor} added lead ${name}`,
+    body: [company, String(formData.get("source") ?? "").trim()].filter(Boolean).join(" · ") ||
+      "New lead in the pipeline.",
+    href: `/${orgSlug}/crm?lead=${data.id}`,
+    entity: { type: "lead", id: data.id as string },
+    actionLabel: "Open lead",
+  });
   revalidatePath(`/${orgSlug}/crm`);
   revalidatePath(`/${orgSlug}`);
   return { id: data.id as string };
@@ -162,6 +183,12 @@ export async function updateLeadAction(
 
   const stage = await resolveStageSlug(ctx, String(formData.get("stage") ?? ""));
   const notesDoc = parseNotesDoc(formData);
+  const { data: before } = await ctx.supabase
+    .from("leads")
+    .select("notes_doc")
+    .eq("id", leadId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
 
   const { error } = await ctx.supabase
     .from("leads")
@@ -187,6 +214,14 @@ export async function updateLeadAction(
   if (error) return { error: error.message };
 
   await recordActivity(ctx, "updated", leadId, { name, stage });
+  await notifyMentions(ctx, {
+    doc: notesDoc,
+    previousDoc: before?.notes_doc,
+    where: `notes on the lead ${name}`,
+    excerpt: String(formData.get("notes") ?? ""),
+    href: `/${orgSlug}/crm?lead=${leadId}`,
+    entity: { type: "lead", id: leadId },
+  });
   revalidatePath(`/${orgSlug}/crm`);
   return { ok: true as const };
 }
@@ -247,10 +282,14 @@ export async function moveLeadStageAction(
       category: "leads",
       title: `${actor} moved ${lead.name as string} to ${(stageRow?.name as string | undefined) ?? resolved}`,
       body: "A lead you own changed stage.",
-      href: `/${orgSlug}/crm`,
+      href: `/${orgSlug}/crm?lead=${leadId}`,
       actorId: ctx.userId,
       entity: { type: "lead", id: leadId },
-      actionLabel: "Open pipeline",
+      actionLabel: "Open lead",
+      ownerCopy: {
+        title: `${actor} moved ${lead.name as string} to ${(stageRow?.name as string | undefined) ?? resolved}`,
+        body: "Lead stage changed in the pipeline.",
+      },
     });
   }
 
@@ -551,6 +590,17 @@ export async function deleteLeadAction(orgSlug: string, leadId: string, confirmN
     .eq("organization_id", ctx.org.id)
     .eq("entity_type", "lead")
     .eq("entity_id", leadId);
+
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "leads",
+    title: (actor) => `${actor} deleted lead ${lead.name as string}`,
+    body: "The lead was permanently removed from the pipeline.",
+    href: `/${orgSlug}/crm`,
+    actionLabel: "Open pipeline",
+  });
 
   revalidatePath(`/${orgSlug}/crm`);
   return { ok: true as const };

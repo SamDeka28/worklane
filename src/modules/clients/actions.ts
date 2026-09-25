@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
+import { notifyOwners } from "@/modules/notifications/service";
 
 async function recordActivity(
   ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
@@ -82,6 +83,17 @@ export async function createClientAction(orgSlug: string, formData: FormData) {
   }
 
   await recordActivity(ctx, "created", "client", client.id, { name });
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "clients",
+    title: (actor) => `${actor} added client ${name}`,
+    body: [contactName, email].filter(Boolean).join(" · ") || "New client in the studio.",
+    href: `/${orgSlug}/clients/${client.id}`,
+    entity: { type: "client", id: client.id as string },
+    actionLabel: "View client",
+  });
   revalidatePath(`/${orgSlug}`);
   return { id: client.id as string };
 }
@@ -239,6 +251,17 @@ export async function deleteClientAction(
     .eq("organization_id", ctx.org.id)
     .eq("entity_type", "client")
     .eq("entity_id", clientId);
+
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "clients",
+    title: (actor) => `${actor} deleted client ${client.name as string}`,
+    body: "The client and its contacts were permanently removed.",
+    href: `/${orgSlug}/clients`,
+    actionLabel: "View clients",
+  });
 
   revalidatePath(`/${orgSlug}/clients`);
   revalidatePath(`/${orgSlug}`);

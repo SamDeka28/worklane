@@ -465,26 +465,32 @@
 
 @keyframes lane-bell-ring {
   0%,
-  70%,
+  66%,
   100% {
-    transform: rotate(0);
+    transform: scale(1) rotate(0);
+  }
+  70% {
+    transform: scale(1.28) rotate(0);
   }
   74% {
-    transform: rotate(14deg);
+    transform: scale(1.22) rotate(14deg);
   }
   80% {
-    transform: rotate(-12deg);
+    transform: scale(1.14) rotate(-12deg);
   }
   86% {
-    transform: rotate(8deg);
+    transform: scale(1.06) rotate(8deg);
   }
   92% {
-    transform: rotate(-4deg);
+    transform: scale(0.94) rotate(-4deg);
+  }
+  96% {
+    transform: scale(1.03) rotate(0);
   }
 }
 
 .lane-bell-ring {
-  transform-origin: 50% 2px;
+  transform-origin: 50% 30%;
   animation: lane-bell-ring 3.2s ease-in-out infinite;
 }
 

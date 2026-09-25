@@ -21,6 +21,7 @@ import {
   IndentableParagraph,
   IndentShortcuts,
 } from "@/components/editor/indentable-blocks";
+import { useMentionCatalog } from "@/components/editor/use-mention-catalog";
 import {
   configureTypedMention,
   type CreateMentionFn,
@@ -84,8 +85,9 @@ export function DocumentStudioEditor({
   const [uploading, setUploading] = useState(false);
   const createRef = useRef(onCreateMention);
   createRef.current = onCreateMention;
-  const mentionsRef = useRef(mentions);
-  mentionsRef.current = mentions;
+  const allMentions = useMentionCatalog(orgSlug, mentions, editable);
+  const mentionsRef = useRef(allMentions);
+  mentionsRef.current = allMentions;
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 

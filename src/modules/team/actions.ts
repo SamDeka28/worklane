@@ -483,7 +483,10 @@ export async function updateMemberAccessAction(
     JSON.stringify(member.permissions ?? null) !== JSON.stringify(permissions);
   const addedProjects = projectIds.filter((id) => !existingIds.has(id)).length;
   if (accessChanged || addedProjects > 0) {
-    const actor = await userLabel(ctx.userId);
+    const [actor, memberName] = await Promise.all([
+      userLabel(ctx.userId),
+      userLabel(member.user_id as string),
+    ]);
     const details = [
       roleChanged
         ? `Your role is now ${roleLabel(role)}.`
@@ -505,6 +508,17 @@ export async function updateMemberAccessAction(
       actorId: ctx.userId,
       entity: { type: "member", id: memberId },
       actionLabel: "Open Worklane",
+      ownerCopy: {
+        title: `${actor} updated ${memberName}’s access`,
+        body: [
+          roleChanged ? `Role is now ${roleLabel(role)}.` : accessChanged ? "Module permissions changed." : null,
+          addedProjects > 0
+            ? `Added to ${addedProjects} project${addedProjects === 1 ? "" : "s"}.`
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      },
     });
   }
 
@@ -644,6 +658,7 @@ export async function notifyUser(input: {
     href: input.href ?? null,
     actorId: input.actorId ?? null,
     email: input.sendMail === false ? false : undefined,
+    ownerCopy: false,
   });
 }
 

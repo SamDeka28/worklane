@@ -2,7 +2,9 @@
 
 import {
   Bell,
+  AtSign,
   Briefcase,
+  Building2,
   CheckSquare,
   Handshake,
   MessageSquare,
@@ -27,10 +29,12 @@ import type {
 } from "@/modules/notifications/types";
 
 const CATEGORY_ICON: Record<NotificationCategory, LucideIcon> = {
+  mentions: AtSign,
   tasks: CheckSquare,
   comments: MessageSquare,
   projects: Briefcase,
   leads: Target,
+  clients: Building2,
   finance: Wallet,
   partners: Handshake,
   team: Users,
@@ -38,10 +42,12 @@ const CATEGORY_ICON: Record<NotificationCategory, LucideIcon> = {
 };
 
 const CATEGORY_TONE: Record<NotificationCategory, string> = {
+  mentions: "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-300",
   tasks: "bg-sky-500/15 text-sky-600 dark:text-sky-300",
   comments: "bg-violet-500/15 text-violet-600 dark:text-violet-300",
   projects: "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300",
   leads: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+  clients: "bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",
   finance: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
   partners: "bg-teal-500/15 text-teal-700 dark:text-teal-300",
   team: "bg-rose-500/15 text-rose-600 dark:text-rose-300",

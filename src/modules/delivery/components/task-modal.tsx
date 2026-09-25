@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import type { JSONContent } from "@tiptap/react";
-import { Paperclip, Trash2 } from "lucide-react";
+import { MessageSquare, Paperclip, SendHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import {
   RichEditor,
   type MentionItem,
 } from "@/components/editor/rich-editor";
+import { AvatarMark } from "@/components/studio/avatar-mark";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   addTaskCommentAction,
   createTaskAction,
@@ -28,6 +30,7 @@ import {
   updateTaskAction,
 } from "@/modules/delivery/actions";
 import { TaskDetailFields } from "@/modules/delivery/components/task-detail-fields";
+import { relativeTime } from "@/modules/notifications/components/notification-item";
 import type {
   BoardTask,
   TaskAssigneeOption,
@@ -178,6 +181,8 @@ export function TaskModal({
   }, [open, orgSlug, task?.id]);
 
   const taskComments = task ? comments.filter((row) => row.taskId === task.id) : [];
+  const peopleById = new Map(assignees.map((person) => [person.userId, person] as const));
+  const me = peopleById.get(currentUserId);
   const milestoneOptions =
     showProjectPicker && projectId ? (milestonesByProject[projectId] ?? []) : milestones;
   const title = isCreate ? "New card" : (task?.title ?? "Card");
@@ -369,33 +374,80 @@ export function TaskModal({
 
             {!isCreate && task ? (
               <section className="space-y-4 border-t border-border/40 pt-6">
-                <h3 className="text-[15px] font-semibold tracking-tight">Comments</h3>
-                <ul className="space-y-3">
-                  {taskComments.length === 0 ? (
-                    <li className="text-[15px] text-muted-foreground">No comments yet.</li>
-                  ) : (
-                    taskComments.map((comment) => (
-                      <li key={comment.id} className="rounded-2xl bg-muted/55 px-4 py-3">
-                        {comment.bodyDoc ? (
-                          <RichEditor
-                            value={comment.bodyDoc as JSONContent}
-                            editable={false}
-                            minHeightClassName="min-h-0"
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="size-4 text-muted-foreground" />
+                  <h3 className="text-[15px] font-semibold tracking-tight">Comments</h3>
+                  {taskComments.length > 0 ? (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
+                      {taskComments.length}
+                    </span>
+                  ) : null}
+                </div>
+                {taskComments.length === 0 ? (
+                  <p className="rounded-2xl border border-dashed border-border/70 px-4 py-5 text-center text-sm text-muted-foreground">
+                    No comments yet. Start the conversation below.
+                  </p>
+                ) : (
+                  <ol className="relative space-y-4 before:absolute before:top-4 before:bottom-4 before:left-[15px] before:w-px before:bg-border/60">
+                    {taskComments.map((comment) => {
+                      const mine = comment.createdBy === currentUserId;
+                      const author = comment.createdBy ? peopleById.get(comment.createdBy) : undefined;
+                      const name = mine ? "You" : (author?.label ?? "Teammate");
+                      return (
+                        <li key={comment.id} className="relative flex gap-3">
+                          <AvatarMark
+                            name={author?.label ?? name}
+                            src={author?.avatarUrl}
+                            size="sm"
+                            className="relative mt-0.5 size-8 ring-4 ring-popover"
                           />
-                        ) : (
-                          <p className="text-[15px] leading-relaxed">{comment.body}</p>
-                        )}
-                        <p className="mt-1.5 text-xs text-muted-foreground">
-                          {comment.createdBy === currentUserId ? "You" : "Teammate"} ·{" "}
-                          {new Date(comment.createdAt).toLocaleString()}
-                        </p>
-                      </li>
-                    ))
-                  )}
-                </ul>
+                          <div
+                            className={cn(
+                              "min-w-0 flex-1 rounded-2xl rounded-tl-md px-4 py-3 ring-1",
+                              mine
+                                ? "bg-primary/[0.08] ring-primary/25"
+                                : "bg-muted/70 ring-border dark:bg-white/[0.05]",
+                            )}
+                          >
+                            <div className="mb-1 flex items-baseline gap-2">
+                              <span className="text-sm font-semibold">{name}</span>
+                              <time
+                                dateTime={comment.createdAt}
+                                title={new Date(comment.createdAt).toLocaleString()}
+                                className="text-xs text-muted-foreground"
+                              >
+                                {relativeTime(comment.createdAt)}
+                              </time>
+                            </div>
+                            {comment.bodyDoc ? (
+                              <RichEditor
+                                value={comment.bodyDoc as JSONContent}
+                                editable={false}
+                                minHeightClassName="min-h-0"
+                                className="rounded-none bg-transparent ring-0 focus-within:bg-transparent focus-within:ring-0 [&_.ProseMirror]:p-0 [&_.ProseMirror]:text-[15px] [&_.ProseMirror]:leading-relaxed"
+                              />
+                            ) : (
+                              <p className="text-[15px] leading-relaxed whitespace-pre-wrap">
+                                {comment.body}
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
                 {canWrite ? (
                   <form
-                    className="grid gap-2.5"
+                    className="flex gap-3"
+                    onKeyDownCapture={(event) => {
+                      if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+                      // Capture phase so the editor's Mod-Enter hard break never runs.
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (pending || !commentPlain.trim()) return;
+                      event.currentTarget.requestSubmit();
+                    }}
                     action={(formData) => {
                       start(async () => {
                         const result = await addTaskCommentAction(orgSlug, task.id, formData);
@@ -409,28 +461,44 @@ export function TaskModal({
                       });
                     }}
                   >
-                    <HiddenDocFields name="body" doc={commentDoc} plain={commentPlain} />
-                    <RichEditor
-                      key={`comment-${taskComments.length}`}
-                      value={commentDoc}
-                      orgSlug={orgSlug}
-                      entityType="task"
-                      entityId={task.id}
-                      mentions={mentions}
-                      placeholder="Write a comment… Use @ to reference."
-                      minHeightClassName="min-h-24"
-                      onChange={(doc, plain) => {
-                        setCommentDoc(doc);
-                        setCommentPlain(plain);
-                      }}
+                    <AvatarMark
+                      name={me?.label ?? "You"}
+                      src={me?.avatarUrl}
+                      size="sm"
+                      className="mt-0.5 size-8"
                     />
-                    <Button
-                      type="submit"
-                      variant="outline"
-                      disabled={pending || !commentPlain.trim()}
-                    >
-                      Comment
-                    </Button>
+                    <div className="min-w-0 flex-1 space-y-2.5">
+                      <HiddenDocFields name="body" doc={commentDoc} plain={commentPlain} />
+                      <RichEditor
+                        key={`comment-${taskComments.length}`}
+                        value={commentDoc}
+                        orgSlug={orgSlug}
+                        entityType="task"
+                        entityId={task.id}
+                        mentions={mentions}
+                        placeholder="Write a comment… Use @ to reference."
+                        minHeightClassName="min-h-20"
+                        className="bg-background ring-border focus-within:bg-background"
+                        onChange={(doc, plain) => {
+                          setCommentDoc(doc);
+                          setCommentPlain(plain);
+                        }}
+                      />
+                      <div className="flex items-center justify-end gap-3">
+                        <span className="hidden text-xs text-muted-foreground sm:inline">
+                          <kbd className="rounded border border-border/70 bg-muted px-1 font-sans">⌘</kbd>{" "}
+                          /{" "}
+                          <kbd className="rounded border border-border/70 bg-muted px-1 font-sans">Ctrl</kbd>{" "}
+                          +{" "}
+                          <kbd className="rounded border border-border/70 bg-muted px-1 font-sans">Enter</kbd>{" "}
+                          to send
+                        </span>
+                        <Button type="submit" size="sm" disabled={pending || !commentPlain.trim()}>
+                          <SendHorizontal />
+                          {pending ? "Sending…" : "Comment"}
+                        </Button>
+                      </div>
+                    </div>
                   </form>
                 ) : null}
               </section>

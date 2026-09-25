@@ -26,6 +26,7 @@ import {
   type CreateMentionFn,
   type MentionItem,
 } from "@/components/editor/mention-suggestion";
+import { useMentionCatalog } from "@/components/editor/use-mention-catalog";
 import { uploadFileAction } from "@/modules/files/actions";
 
 export type { MentionItem };
@@ -106,8 +107,9 @@ export function RichEditor({
   const [uploading, setUploading] = useState(false);
   const createRef = useRef(onCreateMention);
   createRef.current = onCreateMention;
-  const mentionsRef = useRef(mentions);
-  mentionsRef.current = mentions;
+  const allMentions = useMentionCatalog(orgSlug, mentions, editable);
+  const mentionsRef = useRef(allMentions);
+  mentionsRef.current = allMentions;
 
   const extensions = useMemo(
     () => [

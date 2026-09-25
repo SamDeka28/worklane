@@ -8,6 +8,7 @@ import { extractDocumentRefs } from "@/modules/documents/refs";
 import { buildBasicDocumentTemplate } from "@/modules/documents/templates";
 import type { DocumentKind } from "@/modules/documents/types";
 import { requireWritableOrg } from "@/modules/identity/org";
+import { notifyMentions } from "@/modules/mentions/notify";
 
 const EMPTY_DOC = buildBasicDocumentTemplate({
   kind: "proposal",
@@ -137,7 +138,7 @@ export async function saveDocumentVersionAction(
 
   const { data: version } = await ctx.supabase
     .from("document_versions")
-    .select("id, document_id, status, locked_at")
+    .select("id, document_id, status, locked_at, content_doc")
     .eq("id", versionId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -171,6 +172,22 @@ export async function saveDocumentVersionAction(
       error: syncError instanceof Error ? syncError.message : "Could not sync tags",
     };
   }
+
+  const { data: documentRow } = await ctx.supabase
+    .from("documents")
+    .select("title")
+    .eq("id", version.document_id)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  const documentTitle = title || (documentRow?.title as string | undefined) || "a document";
+  await notifyMentions(ctx, {
+    doc: contentDoc,
+    previousDoc: version.content_doc,
+    where: documentTitle,
+    excerpt: `You were tagged in ${documentTitle}.`,
+    href: `/${orgSlug}/documents/${version.document_id}`,
+    entity: { type: "document", id: version.document_id as string },
+  });
 
   revalidatePath(`/${orgSlug}/documents/${version.document_id}`);
   return { ok: true as const };

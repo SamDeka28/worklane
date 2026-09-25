@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireWritableOrg } from "@/modules/identity/org";
+import { notifyOwners } from "@/modules/notifications/service";
 import {
   brandToSnapshot,
   loadOrgInvoiceConfig,
@@ -48,7 +49,7 @@ export async function createDraftInvoiceAction(orgSlug: string, formData: FormDa
 
   const { data: client } = await ctx.supabase
     .from("clients")
-    .select("id, currency")
+    .select("id, name, currency")
     .eq("id", clientId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -144,6 +145,17 @@ export async function createDraftInvoiceAction(orgSlug: string, formData: FormDa
     entity_type: "invoice",
     entity_id: invoice.id,
     metadata: { number: draftNumber },
+  });
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "finance",
+    title: (actor) => `${actor} started an invoice for ${client.name as string}`,
+    body: dueOn ? `Draft · due ${dueOn}` : "Draft invoice",
+    href: `/${orgSlug}/invoices/${invoice.id}`,
+    entity: { type: "invoice", id: invoice.id as string },
+    actionLabel: "Open invoice",
   });
 
   revalidatePath(`/${orgSlug}/invoices`);
@@ -601,6 +613,17 @@ export async function issueInvoiceAction(
     entity_id: invoiceId,
     metadata: { number },
   });
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "finance",
+    title: (actor) => `${actor} issued invoice ${number}`,
+    body: "The invoice is finalized and ready to send.",
+    href: `/${orgSlug}/invoices/${invoiceId}`,
+    entity: { type: "invoice", id: invoiceId },
+    actionLabel: "Open invoice",
+  });
 
   revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
   revalidatePath(`/${orgSlug}/finance`);
@@ -652,6 +675,17 @@ export async function voidInvoiceAction(orgSlug: string, invoiceId: string) {
     .eq("organization_id", ctx.org.id);
 
   if (error) return { error: error.message };
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "finance",
+    title: (actor) => `${actor} voided invoice ${invoice.number}`,
+    body: "Linked charges were voided too.",
+    href: `/${orgSlug}/invoices/${invoiceId}`,
+    entity: { type: "invoice", id: invoiceId },
+    actionLabel: "Open invoice",
+  });
   revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
   revalidatePath(`/${orgSlug}/finance`);
   return { ok: true as const };
@@ -851,6 +885,17 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
   if (!mailed.ok) return { error: mailed.error };
 
   await markInvoiceSentAction(orgSlug, invoiceId);
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "finance",
+    title: (actor) => `${actor} sent invoice ${invoice.number} to ${emailInput.clientName ?? to}`,
+    body: `${emailInput.amountLabel} · emailed to ${to}`,
+    href: `/${orgSlug}/invoices/${invoiceId}`,
+    entity: { type: "invoice", id: invoiceId },
+    actionLabel: "Open invoice",
+  });
   revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
   return { ok: true as const, to };
 }

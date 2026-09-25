@@ -17,7 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { MoreHorizontal, Plus } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   BoardCanvas,
@@ -186,6 +186,32 @@ export function KanbanBoard({
   const [activeHeight, setActiveHeight] = useState(76);
   const [modal, setModal] = useState<TaskModalState | null>(null);
   const sensors = useBoardDndSensors();
+  const linkedTaskId = useSearchParams().get("task");
+  const linkedModal = useMemo<TaskModalState | null>(
+    () =>
+      linkedTaskId && tasks.some((task) => task.id === linkedTaskId)
+        ? { mode: "edit", taskId: linkedTaskId }
+        : null,
+    [linkedTaskId, tasks],
+  );
+  const activeModal = modal ?? linkedModal;
+
+  function setTaskParam(taskId: string | null) {
+    const url = new URL(window.location.href);
+    if (taskId) url.searchParams.set("task", taskId);
+    else url.searchParams.delete("task");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function openTask(taskId: string) {
+    setModal({ mode: "edit", taskId });
+    setTaskParam(taskId);
+  }
+
+  function closeModal() {
+    setModal(null);
+    if (linkedTaskId) setTaskParam(null);
+  }
 
   const filteredTasks = useMemo(() => {
     if (!orgMode) return tasks;
@@ -570,7 +596,7 @@ export function KanbanBoard({
                   assigneeLabelById={assigneeById}
                   canWrite={canWrite}
                   canManageColumns={manageLists && orderedColumns.length > 1}
-                  selectedTaskId={modal?.mode === "edit" ? modal.taskId : null}
+                  selectedTaskId={activeModal?.mode === "edit" ? activeModal.taskId : null}
                   activeTaskId={activeId}
                   dropActive={Boolean(activeId) && overColumnId === column.id}
                   dropIndex={
@@ -578,7 +604,7 @@ export function KanbanBoard({
                   }
                   dropHeight={activeHeight}
                   showProject={orgMode}
-                  onOpenTask={(taskId) => setModal({ mode: "edit", taskId })}
+                  onOpenTask={openTask}
                   onAddCard={() =>
                     setModal({
                       mode: "create",
@@ -644,8 +670,8 @@ export function KanbanBoard({
 
       <TaskModal
         orgSlug={orgSlug}
-        open={Boolean(modal)}
-        state={modal}
+        open={Boolean(activeModal)}
+        state={activeModal}
         tasks={tasks}
         comments={comments}
         milestones={milestones}
@@ -656,7 +682,7 @@ export function KanbanBoard({
         currentUserId={currentUserId}
         canWrite={canWrite}
         showProjectPicker={orgMode}
-        onClose={() => setModal(null)}
+        onClose={closeModal}
       />
     </div>
   );

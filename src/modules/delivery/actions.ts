@@ -25,7 +25,8 @@ import {
 } from "@/modules/delivery/types";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
-import { notify, userLabel } from "@/modules/notifications/service";
+import { notifyMentions } from "@/modules/mentions/notify";
+import { notify, notifyOwners, userLabel } from "@/modules/notifications/service";
 import {
   allocatePartnersForCharge,
 } from "@/modules/partners/allocate";
@@ -105,6 +106,19 @@ async function loadProjectRow(
   return data;
 }
 
+const BILLING_MODE_LABEL: Record<BillingMode, string> = {
+  none: "No billing",
+  single_charge: "Single charge",
+  milestones: "Milestones",
+  hourly: "Hourly",
+  manual: "Manual billing",
+};
+
+function listNames(names: string[]) {
+  if (names.length <= 2) return names.join(" and ");
+  return `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+}
+
 async function notifyTaskAssignees(
   ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
   orgSlug: string,
@@ -115,17 +129,29 @@ async function notifyTaskAssignees(
     projectName?: string | null;
   },
   userIds: string[],
+  options: { created?: boolean } = {},
 ) {
-  if (userIds.length === 0) return;
-  const actor = await userLabel(ctx.userId);
+  if (userIds.length === 0 && !options.created) return;
+  const [actor, ...names] = await Promise.all([
+    userLabel(ctx.userId),
+    ...userIds.map((id) => (id === ctx.userId ? Promise.resolve("themselves") : userLabel(id))),
+  ]);
+  const body = task.projectName ? `${task.title} · ${task.projectName}` : task.title;
   await notify({
     recipients: userIds,
     organizationId: ctx.org.id,
     orgName: ctx.org.name,
     category: "tasks",
     title: `${actor} assigned you a task`,
-    body: task.projectName ? `${task.title} · ${task.projectName}` : task.title,
-    href: `/${orgSlug}/projects/${task.projectId}`,
+    body,
+    ownerCopy: {
+      title:
+        names.length > 0
+          ? `${actor} assigned ${listNames(names)} to ${task.title}`
+          : `${actor} created ${task.title}`,
+      body,
+    },
+    href: `/${orgSlug}/projects/${task.projectId}?tab=work&panel=board&task=${task.id}`,
     actorId: ctx.userId,
     entity: { type: "task", id: task.id },
     actionLabel: "Open task",
@@ -226,6 +252,23 @@ export async function createProjectAction(orgSlug: string, formData: FormData) {
   );
 
   await recordActivity(ctx, "created", "project", project.id, { name, client_id: clientId });
+  const { data: projectClient } = await ctx.supabase
+    .from("clients")
+    .select("name")
+    .eq("id", clientId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "projects",
+    title: (actor) => `${actor} created project ${name}`,
+    body: `${(projectClient?.name as string | undefined) ?? "Client"} · ${BILLING_MODE_LABEL[billingMode]}`,
+    href: `/${orgSlug}/projects/${project.id}`,
+    entity: { type: "project", id: project.id as string },
+    actionLabel: "Open project",
+  });
 
   const documentIds = formData
     .getAll("document_id")
@@ -310,6 +353,17 @@ export async function deleteProjectAction(
       .eq("entity_type", "task")
       .in("entity_id", taskIds);
   }
+
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "projects",
+    title: (actor) => `${actor} deleted project ${project.name as string}`,
+    body: `The project and its ${taskIds.length} task${taskIds.length === 1 ? "" : "s"} were permanently removed.`,
+    href: `/${orgSlug}/projects`,
+    actionLabel: "View projects",
+  });
 
   revalidatePath(`/${orgSlug}/projects`);
   revalidatePath(`/${orgSlug}/board`);
@@ -1461,7 +1515,15 @@ export async function createTaskAction(
       projectName: project.name as string,
     },
     assignee.assigneeUserIds ?? [],
+    { created: true },
   );
+  await notifyMentions(ctx, {
+    doc: descriptionDoc,
+    where: `the task ${title}`,
+    excerpt: description ?? "",
+    href: `/${orgSlug}/projects/${projectId}?tab=work&panel=board&task=${data.id}`,
+    entity: { type: "task", id: data.id as string },
+  });
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
   revalidatePath(`/${orgSlug}/board`);
   return { id: data.id as string, title, ok: true as const };
@@ -1524,7 +1586,7 @@ export async function deleteTaskAction(orgSlug: string, taskId: string) {
   const ctx = await requireWritableOrg(orgSlug);
   const { data: task } = await ctx.supabase
     .from("tasks")
-    .select("project_id")
+    .select("project_id, title")
     .eq("id", taskId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -1538,6 +1600,16 @@ export async function deleteTaskAction(orgSlug: string, taskId: string) {
     .eq("organization_id", ctx.org.id);
 
   if (error) return { error: error.message };
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "tasks",
+    title: (actor) => `${actor} deleted task ${task.title as string}`,
+    body: "The card was removed from the board.",
+    href: `/${orgSlug}/projects/${task.project_id}?tab=work&panel=board`,
+    actionLabel: "Open board",
+  });
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
   revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
@@ -1547,7 +1619,7 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
   const ctx = await requireWritableOrg(orgSlug);
   const { data: task } = await ctx.supabase
     .from("tasks")
-    .select("id, project_id, assignee_user_ids")
+    .select("id, project_id, assignee_user_ids, description_doc")
     .eq("id", taskId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -1606,6 +1678,14 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
     { id: taskId, title, projectId: task.project_id as string },
     (assignee.assigneeUserIds ?? []).filter((id) => !previous.has(id)),
   );
+  await notifyMentions(ctx, {
+    doc: descriptionDoc,
+    previousDoc: task.description_doc,
+    where: `the task ${title}`,
+    excerpt: description ?? "",
+    href: `/${orgSlug}/projects/${task.project_id}?tab=work&panel=board&task=${taskId}`,
+    entity: { type: "task", id: taskId },
+  });
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
   revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
@@ -1694,18 +1774,28 @@ export async function addTaskCommentAction(orgSlug: string, taskId: string, form
     .select("created_by")
     .eq("organization_id", ctx.org.id)
     .eq("task_id", taskId);
+  const taskHref = `/${orgSlug}/projects/${task.project_id}?tab=work&panel=board&task=${taskId}`;
+  const mentioned = new Set(
+    await notifyMentions(ctx, {
+      doc: bodyDoc,
+      where: `a comment on ${task.title as string}`,
+      excerpt: body,
+      href: taskHref,
+      entity: { type: "task", id: taskId },
+    }),
+  );
   const actor = await userLabel(ctx.userId);
   await notify({
     recipients: [
       ...((task.assignee_user_ids as string[] | null) ?? []),
       ...(thread ?? []).map((row) => row.created_by as string | null),
-    ],
+    ].filter((id) => !id || !mentioned.has(id)),
     organizationId: ctx.org.id,
     orgName: ctx.org.name,
     category: "comments",
     title: `${actor} commented on ${task.title as string}`,
     body: body.length > 180 ? `${body.slice(0, 177)}…` : body,
-    href: `/${orgSlug}/projects/${task.project_id}`,
+    href: `/${orgSlug}/projects/${task.project_id}?tab=work&panel=board&task=${taskId}`,
     actorId: ctx.userId,
     entity: { type: "task", id: taskId },
     actionLabel: "View comment",

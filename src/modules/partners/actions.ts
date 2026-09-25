@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireModuleWrite, requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
-import { notify, userLabel } from "@/modules/notifications/service";
+import { notify, notifyOwners, userLabel } from "@/modules/notifications/service";
 import {
   assertShareSum,
   compilePoolRemainderDistribution,
@@ -80,6 +80,17 @@ export async function createPartnerAction(orgSlug: string, formData: FormData) {
     entity_type: "partner",
     entity_id: data.id,
     metadata: { name, kind, email },
+  });
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "partners",
+    title: (actor) => `${actor} added partner ${name}`,
+    body: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} · ${email}`,
+    href: `/${orgSlug}/partners`,
+    entity: { type: "partner", id: data.id as string },
+    actionLabel: "View partners",
   });
 
   const { inviteOrgMemberAction } = await import("@/modules/team/actions");
@@ -440,9 +451,13 @@ export async function addProjectMembersAction(
   );
   if (error) return { error: error.message };
 
-  const actor = await userLabel(ctx.userId);
+  const added = userIds.filter((id) => !alreadyMembers.has(id));
+  const [actor, ...addedNames] = await Promise.all([
+    userLabel(ctx.userId),
+    ...added.map((id) => userLabel(id)),
+  ]);
   await notify({
-    recipients: userIds.filter((id) => !alreadyMembers.has(id)),
+    recipients: added,
     organizationId: ctx.org.id,
     orgName: ctx.org.name,
     category: "projects",
@@ -455,6 +470,17 @@ export async function addProjectMembersAction(
     actorId: ctx.userId,
     entity: { type: "project", id: projectId },
     actionLabel: "Open project",
+    ownerCopy:
+      added.length > 0
+        ? {
+            title: `${actor} added ${
+              addedNames.length <= 2
+                ? addedNames.join(" and ")
+                : `${addedNames.slice(0, 2).join(", ")} and ${addedNames.length - 2} more`
+            } to ${project.name as string}`,
+            body: role === "lead" ? "Added as project lead." : "Added as project members.",
+          }
+        : false,
   });
 
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
@@ -532,7 +558,7 @@ export async function recordPartnerSettlementAction(orgSlug: string, formData: F
 
   const { data: partner } = await ctx.supabase
     .from("partners")
-    .select("user_id")
+    .select("name, user_id")
     .eq("id", partnerId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -547,6 +573,10 @@ export async function recordPartnerSettlementAction(orgSlug: string, formData: F
     actorId: ctx.userId,
     entity: { type: "partner_settlement", id: data.id as string },
     actionLabel: "View balance",
+    ownerCopy: {
+      title: `Payout recorded for ${(partner?.name as string | undefined) ?? "a partner"}: ${formatMoney({ amountMinor, currency })}`,
+      body: `Settled on ${settledOn}${memo ? ` · ${memo}` : ""}.`,
+    },
   });
 
   revalidatePath(`/${orgSlug}/partners`);
@@ -619,6 +649,17 @@ export async function deletePartnerAction(
     return { error: error.message };
   }
   if (!count) return { error: "You don’t have permission to delete this partner" };
+
+  await notifyOwners({
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    actorId: ctx.userId,
+    category: "partners",
+    title: (actor) => `${actor} deleted partner ${partner.name as string}`,
+    body: "The partner profile was permanently removed.",
+    href: `/${orgSlug}/partners`,
+    actionLabel: "View partners",
+  });
 
   revalidatePath(`/${orgSlug}/partners`);
   revalidatePath(`/${orgSlug}/finance`);

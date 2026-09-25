@@ -25,7 +25,26 @@ export type NotifyInput = {
   actionLabel?: string;
   /** Force the email on/off regardless of preferences (e.g. invite links). */
   email?: boolean;
+  /**
+   * Studio owners are copied on every studio notification. Pass third-person copy for
+   * them (the default copy is usually addressed to "you"), or `false` to skip owners.
+   */
+  ownerCopy?: { title: string; body?: string } | false;
 };
+
+type Delivery = { userId: string; title: string; body: string; forceEmail: boolean };
+
+export async function orgOwnerIds(organizationId: string): Promise<string[]> {
+  const admin = createAdminSupabaseClient();
+  if (!admin) return [];
+  const { data } = await admin
+    .from("organization_members")
+    .select("user_id")
+    .eq("organization_id", organizationId)
+    .eq("role", "owner")
+    .eq("status", "active");
+  return (data ?? []).map((row) => row.user_id as string);
+}
 
 /**
  * Inserts in-app notifications and emails recipients who have that category enabled.
@@ -34,10 +53,29 @@ export type NotifyInput = {
  */
 export async function notify(input: NotifyInput): Promise<void> {
   try {
-    const recipients = [
-      ...new Set(input.recipients.filter((id): id is string => Boolean(id))),
-    ].filter((id) => id !== input.actorId);
-    if (recipients.length === 0) return;
+    const direct = new Set(
+      input.recipients.filter((id): id is string => Boolean(id) && id !== input.actorId),
+    );
+    const deliveries: Delivery[] = [...direct].map((userId) => ({
+      userId,
+      title: input.title,
+      body: input.body,
+      forceEmail: input.email === true,
+    }));
+
+    if (input.organizationId && input.ownerCopy !== false) {
+      const owners = await orgOwnerIds(input.organizationId);
+      for (const ownerId of owners) {
+        if (direct.has(ownerId) || ownerId === input.actorId) continue;
+        deliveries.push({
+          userId: ownerId,
+          title: input.ownerCopy?.title ?? input.title,
+          body: input.ownerCopy?.body ?? input.body,
+          forceEmail: false,
+        });
+      }
+    }
+    if (deliveries.length === 0) return;
 
     const admin = createAdminSupabaseClient();
     if (!admin) return;
@@ -48,13 +86,13 @@ export async function notify(input: NotifyInput): Promise<void> {
     const { data: rows } = await admin
       .from("notifications")
       .insert(
-        recipients.map((userId) => ({
+        deliveries.map((delivery) => ({
           organization_id: input.organizationId,
-          user_id: userId,
+          user_id: delivery.userId,
           kind: "info",
           category: input.category,
-          title: input.title,
-          body: input.body,
+          title: delivery.title,
+          body: delivery.body,
           href,
           actor_id: input.actorId ?? null,
           entity_type: input.entity?.type ?? null,
@@ -68,27 +106,29 @@ export async function notify(input: NotifyInput): Promise<void> {
     const { data: profiles } = await admin
       .from("profiles")
       .select("id, email, notification_prefs")
-      .in("id", recipients);
+      .in(
+        "id",
+        deliveries.map((delivery) => delivery.userId),
+      );
 
     const sentIds: string[] = [];
     await Promise.all(
-      (profiles ?? []).map(async (profile) => {
-        const email = (profile.email as string | null) ?? null;
+      deliveries.map(async (delivery) => {
+        const profile = (profiles ?? []).find((row) => row.id === delivery.userId);
+        const email = (profile?.email as string | null) ?? null;
         if (!email) return;
-        const prefs =
-          (profile.notification_prefs as NotificationPrefs | null) ?? {};
-        if (input.email !== true && !emailEnabled(prefs, input.category))
-          return;
+        const prefs = (profile?.notification_prefs as NotificationPrefs | null) ?? {};
+        if (!delivery.forceEmail && !emailEnabled(prefs, input.category)) return;
         const mail = {
-          title: input.title,
-          body: input.body,
+          title: delivery.title,
+          body: delivery.body,
           href,
           actionLabel: input.actionLabel,
           orgName: input.orgName ?? null,
         };
         const result = await sendEmail({
           to: email,
-          subject: input.title,
+          subject: delivery.title,
           html: notificationEmailHtml(mail),
           text: notificationEmailText(mail),
         });
@@ -96,7 +136,7 @@ export async function notify(input: NotifyInput): Promise<void> {
           console.error(`notify email to ${email} failed: ${result.error}`);
           return;
         }
-        const row = (rows ?? []).find((item) => item.user_id === profile.id);
+        const row = (rows ?? []).find((item) => item.user_id === delivery.userId);
         if (row) sentIds.push(row.id as string);
       }),
     );
@@ -109,6 +149,42 @@ export async function notify(input: NotifyInput): Promise<void> {
     }
   } catch (error) {
     console.error("notify failed", error);
+  }
+}
+
+/**
+ * Studio-wide activity only owners hear about (creations, deletions, invoices).
+ * Skips the lookup work when the only owner is the person who did it.
+ */
+export async function notifyOwners(input: {
+  organizationId: string;
+  orgName?: string | null;
+  actorId: string;
+  category: NotificationCategory;
+  title: (actor: string) => string;
+  body: string;
+  href?: string | null;
+  entity?: { type: string; id: string } | null;
+  actionLabel?: string;
+}): Promise<void> {
+  try {
+    const owners = await orgOwnerIds(input.organizationId);
+    if (!owners.some((id) => id !== input.actorId)) return;
+    const actor = await userLabel(input.actorId);
+    await notify({
+      recipients: [],
+      organizationId: input.organizationId,
+      orgName: input.orgName,
+      category: input.category,
+      title: input.title(actor),
+      body: input.body,
+      href: input.href,
+      actorId: input.actorId,
+      entity: input.entity,
+      actionLabel: input.actionLabel,
+    });
+  } catch (error) {
+    console.error("notifyOwners failed", error);
   }
 }
 

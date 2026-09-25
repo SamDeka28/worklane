@@ -1,8 +1,10 @@
 export const NOTIFICATION_CATEGORIES = [
+  "mentions",
   "tasks",
   "comments",
   "projects",
   "leads",
+  "clients",
   "finance",
   "partners",
   "team",
@@ -15,6 +17,11 @@ export const NOTIFICATION_CATEGORY_META: Record<
   NotificationCategory,
   { label: string; description: string; emailByDefault: boolean }
 > = {
+  mentions: {
+    label: "Mentions",
+    description: "When someone @mentions you in a comment, task, lead, or document",
+    emailByDefault: true,
+  },
   tasks: {
     label: "Tasks",
     description: "When a task is assigned to you",
@@ -35,9 +42,14 @@ export const NOTIFICATION_CATEGORY_META: Record<
     description: "When someone moves a lead you own",
     emailByDefault: true,
   },
+  clients: {
+    label: "Clients",
+    description: "New and removed clients (owners)",
+    emailByDefault: true,
+  },
   finance: {
-    label: "Payments",
-    description: "Payments received from clients",
+    label: "Payments & invoices",
+    description: "Payments received, and invoices created, issued, sent, or voided",
     emailByDefault: false,
   },
   partners: {

@@ -277,6 +277,7 @@ function QueuedAttachments({
 }
 
 function LeadFormFields({
+  orgSlug,
   idPrefix,
   lead,
   stages,
@@ -286,6 +287,7 @@ function LeadFormFields({
   attachments,
   aside,
 }: {
+  orgSlug: string;
   idPrefix: string;
   lead?: LeadRecord;
   stages: LeadStageRecord[];
@@ -392,8 +394,9 @@ function LeadFormFields({
                   setNotesDoc(doc);
                   setNotesPlain(plain);
                 }}
-                placeholder="Call notes, context, next steps…"
+                placeholder="Call notes, context, next steps… Type @ to tag."
                 minHeightClassName="min-h-40"
+                orgSlug={orgSlug}
               />
               <HiddenDocFields name="notes" doc={notesDoc} plain={notesPlain} />
             </>
@@ -545,6 +548,7 @@ export function CreateLeadDialog({
         }}
       >
         <LeadFormFields
+          orgSlug={orgSlug}
           idPrefix="new_lead"
           stages={stages}
           defaultCurrency={defaultCurrency}
@@ -699,6 +703,7 @@ export function LeadDetailSheet({
         }}
       >
         <LeadFormFields
+          orgSlug={orgSlug}
           idPrefix={`lead_${lead.id.slice(0, 8)}`}
           lead={lead}
           stages={stages}
