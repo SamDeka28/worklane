@@ -463,6 +463,37 @@
   }
 }
 
+@keyframes lane-bell-ring {
+  0%,
+  70%,
+  100% {
+    transform: rotate(0);
+  }
+  74% {
+    transform: rotate(14deg);
+  }
+  80% {
+    transform: rotate(-12deg);
+  }
+  86% {
+    transform: rotate(8deg);
+  }
+  92% {
+    transform: rotate(-4deg);
+  }
+}
+
+.lane-bell-ring {
+  transform-origin: 50% 2px;
+  animation: lane-bell-ring 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lane-bell-ring {
+    animation: none;
+  }
+}
+
 @keyframes lane-marketing-rise {
   from {
     opacity: 0;

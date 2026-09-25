@@ -8,14 +8,15 @@ import {
   grantViolation,
   type MemberPermissions,
 } from "@/modules/identity/permissions";
+import { notify, userLabel } from "@/modules/notifications/service";
+import type { NotificationCategory } from "@/modules/notifications/types";
 import type { OrgInvitation } from "@/modules/team/types";
 import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
 import {
   getAppUrl,
   inviteEmailHtml,
   inviteEmailText,
-  notificationEmailHtml,
-  notificationEmailText,
+  roleLabel,
   sendEmail,
 } from "@/shared/email";
 
@@ -214,6 +215,8 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
               : `You were linked as a partner in ${ctx.org.name}.`,
             href: `${getAppUrl()}/${orgSlug}/partners`,
             email,
+            category: "partners",
+            actorId: ctx.userId,
           });
           revalidatePath(`/${orgSlug}/partners`);
           revalidatePath(`/${orgSlug}/team`);
@@ -236,6 +239,8 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
             body: `You were added to ${projectName} in ${ctx.org.name}.`,
             href: `${getAppUrl()}/${orgSlug}/projects/${projectId}`,
             email,
+            category: "projects",
+            actorId: ctx.userId,
           });
           for (const pid of projectIds) {
             revalidatePath(`/${orgSlug}/projects/${pid}`);
@@ -376,7 +381,7 @@ export async function updateMemberAccessAction(
 
   const { data: member, error: loadError } = await db
     .from("organization_members")
-    .select("id, user_id, role, status")
+    .select("id, user_id, role, status, permissions")
     .eq("id", memberId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -470,6 +475,37 @@ export async function updateMemberAccessAction(
       { onConflict: "project_id,user_id" },
     );
     if (upsertError) return { error: upsertError.message };
+  }
+
+  const roleChanged = member.role !== role;
+  const accessChanged =
+    roleChanged ||
+    JSON.stringify(member.permissions ?? null) !== JSON.stringify(permissions);
+  const addedProjects = projectIds.filter((id) => !existingIds.has(id)).length;
+  if (accessChanged || addedProjects > 0) {
+    const actor = await userLabel(ctx.userId);
+    const details = [
+      roleChanged
+        ? `Your role is now ${roleLabel(role)}.`
+        : accessChanged
+          ? "Your module permissions were updated."
+          : null,
+      addedProjects > 0
+        ? `You were added to ${addedProjects} project${addedProjects === 1 ? "" : "s"}.`
+        : null,
+    ].filter(Boolean);
+    await notify({
+      recipients: [member.user_id as string],
+      organizationId: ctx.org.id,
+      orgName: ctx.org.name,
+      category: "team",
+      title: `${actor} updated your access in ${ctx.org.name}`,
+      body: details.join(" "),
+      href: `/${orgSlug}`,
+      actorId: ctx.userId,
+      entity: { type: "member", id: memberId },
+      actionLabel: "Open Worklane",
+    });
   }
 
   revalidatePath(`/${orgSlug}/team`);
@@ -596,84 +632,19 @@ export async function notifyUser(input: {
   href?: string | null;
   email?: string | null;
   sendMail?: boolean;
+  category?: NotificationCategory;
+  actorId?: string | null;
 }) {
-  const admin = createAdminSupabaseClient();
-  if (!admin) return;
-
-  const { data: row } = await admin
-    .from("notifications")
-    .insert({
-      organization_id: input.organizationId ?? null,
-      user_id: input.userId,
-      kind: "info",
-      title: input.title,
-      body: input.body,
-      href: input.href ?? null,
-    })
-    .select("id")
-    .single();
-
-  if (input.sendMail === false) return;
-
-  let email = input.email ?? null;
-  if (!email) {
-    const { data: profile } = await admin
-      .from("profiles")
-      .select("email")
-      .eq("id", input.userId)
-      .maybeSingle();
-    email = (profile?.email as string | null) ?? null;
-  }
-  if (!email) return;
-
-  const mailed = await sendEmail({
-    to: email,
-    subject: input.title,
-    html: notificationEmailHtml(input),
-    text: notificationEmailText(input),
+  await notify({
+    recipients: [input.userId],
+    organizationId: input.organizationId ?? null,
+    category: input.category ?? "general",
+    title: input.title,
+    body: input.body,
+    href: input.href ?? null,
+    actorId: input.actorId ?? null,
+    email: input.sendMail === false ? false : undefined,
   });
-
-  if (mailed.ok && row?.id) {
-    await admin
-      .from("notifications")
-      .update({ email_sent_at: new Date().toISOString() })
-      .eq("id", row.id);
-  }
-}
-
-export async function listNotificationsForUser(limit = 30) {
-  const { requireUser } = await import("@/shared/db/require-user");
-  const { supabase, user } = await requireUser();
-  const { data, error } = await supabase
-    .from("notifications")
-    .select("id, title, body, href, read_at, created_at, organization_id")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) {
-    if (error.message.includes("notifications")) return [];
-    throw new Error(error.message);
-  }
-  return (data ?? []).map((row) => ({
-    id: row.id as string,
-    title: row.title as string,
-    body: (row.body as string | null) ?? null,
-    href: (row.href as string | null) ?? null,
-    readAt: (row.read_at as string | null) ?? null,
-    createdAt: row.created_at as string,
-    organizationId: (row.organization_id as string | null) ?? null,
-  }));
-}
-
-export async function markNotificationReadAction(notificationId: string) {
-  const { requireUser } = await import("@/shared/db/require-user");
-  const { supabase, user } = await requireUser();
-  await supabase
-    .from("notifications")
-    .update({ read_at: new Date().toISOString() })
-    .eq("id", notificationId)
-    .eq("user_id", user.id);
-  return { ok: true as const };
 }
 
 export async function removeMemberAction(orgSlug: string, memberId: string, confirmValue: string) {

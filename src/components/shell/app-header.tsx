@@ -18,10 +18,6 @@ import {
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { AppSidebar } from "@/components/shell/app-sidebar";
 // import { ThemeToggle } from "@/components/shell/theme-toggle";
-import {
-  NotificationsMenu,
-  type HeaderNotification,
-} from "@/components/shell/notifications-menu";
 import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
 import { signOutAction } from "@/modules/identity/actions";
 import type { Organization, OrgRole } from "@/modules/identity/types";
@@ -45,7 +41,6 @@ export function AppHeader({
   org,
   orgs = [],
   canWrite = true,
-  notifications = [],
   notificationsSlot,
   permissions,
   role,
@@ -54,7 +49,6 @@ export function AppHeader({
   org: Organization;
   orgs?: Organization[];
   canWrite?: boolean;
-  notifications?: HeaderNotification[];
   /** Prefer streaming this from the layout so nav is not blocked on the query. */
   notificationsSlot?: ReactNode;
   permissions: MemberPermissions;
@@ -130,7 +124,7 @@ export function AppHeader({
           <Search className="size-4" />
         </Button>
         {/* <ThemeToggle /> */}
-        {notificationsSlot ?? <NotificationsMenu notifications={notifications} />}
+        {notificationsSlot}
         {canWrite ? (
           <DropdownMenu>
             <DropdownMenuTrigger

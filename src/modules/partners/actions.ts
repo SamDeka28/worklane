@@ -3,12 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { requireModuleWrite, requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
+import { notify, userLabel } from "@/modules/notifications/service";
 import {
   assertShareSum,
   compilePoolRemainderDistribution,
 } from "@/modules/partners/ledger";
 import type { PartnerKind } from "@/modules/partners/types";
-import { netFromGross, parseMajorToMinor } from "@/shared/money";
+import { formatMoney, netFromGross, parseMajorToMinor } from "@/shared/money";
 import type { IsoCurrency } from "@/shared/money";
 
 function asKind(value: string): PartnerKind {
@@ -400,11 +401,21 @@ export async function addProjectMembersAction(
 
   const { data: project } = await ctx.supabase
     .from("projects")
-    .select("id")
+    .select("id, name")
     .eq("id", projectId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
   if (!project) return { error: "Project not found" };
+
+  const { data: existing } = await ctx.supabase
+    .from("project_members")
+    .select("user_id")
+    .eq("organization_id", ctx.org.id)
+    .eq("project_id", projectId)
+    .in("user_id", userIds);
+  const alreadyMembers = new Set(
+    (existing ?? []).map((row) => row.user_id as string),
+  );
 
   const { data: members, error: membersError } = await ctx.supabase
     .from("organization_members")
@@ -428,6 +439,23 @@ export async function addProjectMembersAction(
     { onConflict: "project_id,user_id" },
   );
   if (error) return { error: error.message };
+
+  const actor = await userLabel(ctx.userId);
+  await notify({
+    recipients: userIds.filter((id) => !alreadyMembers.has(id)),
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    category: "projects",
+    title: `${actor} added you to ${project.name as string}`,
+    body:
+      role === "lead"
+        ? "You're the project lead."
+        : "You can now see this project's board and tasks.",
+    href: `/${orgSlug}/projects/${projectId}`,
+    actorId: ctx.userId,
+    entity: { type: "project", id: projectId },
+    actionLabel: "Open project",
+  });
 
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
   return { ok: true as const };
@@ -500,6 +528,25 @@ export async function recordPartnerSettlementAction(orgSlug: string, formData: F
     entity_type: "partner",
     entity_id: partnerId,
     metadata: { settlement_id: data.id, amount_minor: amountMinor.toString() },
+  });
+
+  const { data: partner } = await ctx.supabase
+    .from("partners")
+    .select("user_id")
+    .eq("id", partnerId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  await notify({
+    recipients: [partner?.user_id as string | null],
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    category: "partners",
+    title: `Payout recorded: ${formatMoney({ amountMinor, currency })}`,
+    body: `${ctx.org.name} recorded a settlement on ${settledOn}${memo ? ` · ${memo}` : ""}.`,
+    href: `/${orgSlug}/partners`,
+    actorId: ctx.userId,
+    entity: { type: "partner_settlement", id: data.id as string },
+    actionLabel: "View balance",
   });
 
   revalidatePath(`/${orgSlug}/partners`);

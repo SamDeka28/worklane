@@ -1,10 +1,32 @@
-import { NotificationsMenu } from "@/components/shell/notifications-menu";
-import { listNotificationsForUser } from "@/modules/team/actions";
+import {
+  countUnreadNotifications,
+  listNotificationsAction,
+} from "@/modules/notifications/actions";
+import { NotificationsBell } from "@/modules/notifications/components/notifications-bell";
 
 /** Streamed so org layout + page work are not blocked on the notifications query. */
-export async function HeaderNotifications() {
-  const notifications = await listNotificationsForUser(20).catch(() => []);
-  return <NotificationsMenu notifications={notifications} />;
+export async function HeaderNotifications({
+  orgSlug,
+  organizationId,
+  userId,
+}: {
+  orgSlug: string;
+  organizationId: string;
+  userId: string;
+}) {
+  const [initial, unread] = await Promise.all([
+    listNotificationsAction({ organizationId, limit: 15 }).catch(() => []),
+    countUnreadNotifications(organizationId).catch(() => 0),
+  ]);
+  return (
+    <NotificationsBell
+      orgSlug={orgSlug}
+      organizationId={organizationId}
+      userId={userId}
+      initial={initial}
+      initialUnread={unread}
+    />
+  );
 }
 
 export function HeaderNotificationsFallback() {

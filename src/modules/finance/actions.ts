@@ -7,7 +7,8 @@ import {
   voidPartnerAllocationsForCharge,
   voidPartnerAllocationsForPayment,
 } from "@/modules/partners/allocate";
-import { netFromGross, parseMajorToMinor } from "@/shared/money";
+import { notify, orgManagerIds } from "@/modules/notifications/service";
+import { formatMoney, netFromGross, parseMajorToMinor } from "@/shared/money";
 import type { IsoCurrency } from "@/shared/money";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
@@ -101,7 +102,7 @@ export async function recordPaymentAction(orgSlug: string, formData: FormData) {
 
   const { data: client } = await ctx.supabase
     .from("clients")
-    .select("id, currency")
+    .select("id, name, currency")
     .eq("id", clientId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -186,6 +187,19 @@ export async function recordPaymentAction(orgSlug: string, formData: FormData) {
       unallocated_minor: posted?.unallocated_minor ?? "0",
       charge_id: chargeId,
     },
+  });
+
+  await notify({
+    recipients: await orgManagerIds(ctx.org.id, "finance"),
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    category: "finance",
+    title: `Payment received from ${client.name as string}`,
+    body: `${formatMoney({ amountMinor, currency })} via ${method} on ${paidOn}${reference ? ` · ${reference}` : ""}.`,
+    href: `/${orgSlug}/clients/${clientId}`,
+    actorId: ctx.userId,
+    entity: { type: "payment", id: paymentId ?? clientId },
+    actionLabel: "View client",
   });
 
   if (paymentId) {

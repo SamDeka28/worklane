@@ -46,7 +46,11 @@ export default async function OrgLayout({
           canWrite={ctx.canWrite}
           notificationsSlot={
             <Suspense fallback={<HeaderNotificationsFallback />}>
-              <HeaderNotifications />
+              <HeaderNotifications
+                orgSlug={ctx.org.slug}
+                organizationId={ctx.org.id}
+                userId={ctx.userId}
+              />
             </Suspense>
           }
           permissions={ctx.permissions}

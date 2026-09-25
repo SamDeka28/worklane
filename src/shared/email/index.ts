@@ -104,4 +104,5 @@ export {
   invoiceEmailText,
   notificationEmailHtml,
   notificationEmailText,
+  roleLabel,
 } from "./templates";

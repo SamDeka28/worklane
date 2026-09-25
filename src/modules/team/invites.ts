@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { revalidatePath } from "next/cache";
+import { notify, userLabel } from "@/modules/notifications/service";
 import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
 
 function hashToken(token: string) {
@@ -186,6 +187,37 @@ export type AcceptInvitationResult =
     }
   | { ok: false; error: string; expectedEmail?: string };
 
+async function notifyInviter(
+  tokenHash: string,
+  userId: string,
+  orgSlug: string,
+) {
+  const admin = createAdminSupabaseClient();
+  if (!admin) return;
+  const { data: invite } = await admin
+    .from("organization_invitations")
+    .select("id, invited_by, organization_id, organizations ( name )")
+    .eq("token_hash", tokenHash)
+    .maybeSingle();
+  if (!invite?.invited_by) return;
+  const org = Array.isArray(invite.organizations)
+    ? invite.organizations[0]
+    : invite.organizations;
+  const who = await userLabel(userId);
+  await notify({
+    recipients: [invite.invited_by as string],
+    organizationId: invite.organization_id as string,
+    orgName: (org?.name as string | undefined) ?? null,
+    category: "team",
+    title: `${who} joined ${(org?.name as string | undefined) ?? "your studio"}`,
+    body: "They accepted your invitation and can now sign in.",
+    href: `/${orgSlug}/team`,
+    actorId: userId,
+    entity: { type: "invitation", id: invite.id as string },
+    actionLabel: "View team",
+  });
+}
+
 /** Accept invite for the signed-in user. Safe to call from Server Components (not a server action). */
 export async function acceptInvitation(token: string): Promise<AcceptInvitationResult> {
   const { requireUser } = await import("@/shared/db/require-user");
@@ -206,6 +238,7 @@ export async function acceptInvitation(token: string): Promise<AcceptInvitationR
       revalidatePath(`/${orgSlug}/projects`);
       revalidatePath(`/${orgSlug}/team`);
       if (projectId) revalidatePath(`/${orgSlug}/projects/${projectId}`);
+      if (!row.already_member) await notifyInviter(tokenHash, user.id, orgSlug);
       return {
         ok: true as const,
         alreadyAccepted: Boolean(row.already_member),
@@ -242,6 +275,8 @@ export async function acceptInvitation(token: string): Promise<AcceptInvitationR
 
   const result = await fulfillInvitation(admin, { ...invite, org: invite.org }, user);
   if ("ok" in result && result.ok) {
+    if (!invite.acceptedAt)
+      await notifyInviter(tokenHash, user.id, result.orgSlug);
     return {
       ...result,
       alreadyAccepted: Boolean(invite.acceptedAt),

@@ -25,6 +25,7 @@ import {
 } from "@/modules/delivery/types";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
+import { notify, userLabel } from "@/modules/notifications/service";
 import {
   allocatePartnersForCharge,
 } from "@/modules/partners/allocate";
@@ -102,6 +103,33 @@ async function loadProjectRow(
     return null;
   }
   return data;
+}
+
+async function notifyTaskAssignees(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  orgSlug: string,
+  task: {
+    id: string;
+    title: string;
+    projectId: string;
+    projectName?: string | null;
+  },
+  userIds: string[],
+) {
+  if (userIds.length === 0) return;
+  const actor = await userLabel(ctx.userId);
+  await notify({
+    recipients: userIds,
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    category: "tasks",
+    title: `${actor} assigned you a task`,
+    body: task.projectName ? `${task.title} · ${task.projectName}` : task.title,
+    href: `/${orgSlug}/projects/${task.projectId}`,
+    actorId: ctx.userId,
+    entity: { type: "task", id: task.id },
+    actionLabel: "Open task",
+  });
 }
 
 async function loadClientCurrency(
@@ -1423,6 +1451,17 @@ export async function createTaskAction(
   if (error || !data) return { error: error?.message ?? "Could not create task" };
 
   await recordActivity(ctx, "tasked", "project", projectId, { title });
+  await notifyTaskAssignees(
+    ctx,
+    orgSlug,
+    {
+      id: data.id as string,
+      title,
+      projectId,
+      projectName: project.name as string,
+    },
+    assignee.assigneeUserIds ?? [],
+  );
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
   revalidatePath(`/${orgSlug}/board`);
   return { id: data.id as string, title, ok: true as const };
@@ -1508,7 +1547,7 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
   const ctx = await requireWritableOrg(orgSlug);
   const { data: task } = await ctx.supabase
     .from("tasks")
-    .select("id, project_id")
+    .select("id, project_id, assignee_user_ids")
     .eq("id", taskId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -1560,6 +1599,13 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
     .eq("organization_id", ctx.org.id);
 
   if (error) return { error: error.message };
+  const previous = new Set((task.assignee_user_ids as string[] | null) ?? []);
+  await notifyTaskAssignees(
+    ctx,
+    orgSlug,
+    { id: taskId, title, projectId: task.project_id as string },
+    (assignee.assigneeUserIds ?? []).filter((id) => !previous.has(id)),
+  );
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
   revalidatePath(`/${orgSlug}/board`);
   return { ok: true as const };
@@ -1627,7 +1673,7 @@ export async function addTaskCommentAction(orgSlug: string, taskId: string, form
 
   const { data: task } = await ctx.supabase
     .from("tasks")
-    .select("id, project_id")
+    .select("id, project_id, title, assignee_user_ids")
     .eq("id", taskId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -1642,6 +1688,28 @@ export async function addTaskCommentAction(orgSlug: string, taskId: string, form
     created_by: ctx.userId,
   });
   if (error) return { error: error.message };
+
+  const { data: thread } = await ctx.supabase
+    .from("task_comments")
+    .select("created_by")
+    .eq("organization_id", ctx.org.id)
+    .eq("task_id", taskId);
+  const actor = await userLabel(ctx.userId);
+  await notify({
+    recipients: [
+      ...((task.assignee_user_ids as string[] | null) ?? []),
+      ...(thread ?? []).map((row) => row.created_by as string | null),
+    ],
+    organizationId: ctx.org.id,
+    orgName: ctx.org.name,
+    category: "comments",
+    title: `${actor} commented on ${task.title as string}`,
+    body: body.length > 180 ? `${body.slice(0, 177)}…` : body,
+    href: `/${orgSlug}/projects/${task.project_id}`,
+    actorId: ctx.userId,
+    entity: { type: "task", id: taskId },
+    actionLabel: "View comment",
+  });
 
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
   return { ok: true as const };

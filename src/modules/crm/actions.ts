@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { slugifyStageName } from "@/modules/crm/types";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
+import { notify, userLabel } from "@/modules/notifications/service";
 import { parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
@@ -201,6 +202,13 @@ export async function moveLeadStageAction(
   const resolved = await resolveStageSlug(ctx, stage);
   if (resolved !== stage.trim()) return { error: "Unknown stage" };
 
+  const { data: lead } = await ctx.supabase
+    .from("leads")
+    .select("name, stage, owner_user_id")
+    .eq("id", leadId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+
   const { error } = await ctx.supabase
     .from("leads")
     .update({ stage: resolved })
@@ -221,6 +229,31 @@ export async function moveLeadStageAction(
   }
 
   await recordActivity(ctx, "stage_moved", leadId, { stage: resolved });
+
+  if (lead && lead.stage !== resolved) {
+    const [{ data: stageRow }, actor] = await Promise.all([
+      ctx.supabase
+        .from("lead_stages")
+        .select("name")
+        .eq("organization_id", ctx.org.id)
+        .eq("slug", resolved)
+        .maybeSingle(),
+      userLabel(ctx.userId),
+    ]);
+    await notify({
+      recipients: [lead.owner_user_id as string | null],
+      organizationId: ctx.org.id,
+      orgName: ctx.org.name,
+      category: "leads",
+      title: `${actor} moved ${lead.name as string} to ${(stageRow?.name as string | undefined) ?? resolved}`,
+      body: "A lead you own changed stage.",
+      href: `/${orgSlug}/crm`,
+      actorId: ctx.userId,
+      entity: { type: "lead", id: leadId },
+      actionLabel: "Open pipeline",
+    });
+  }
+
   revalidatePath(`/${orgSlug}/crm`);
   revalidatePath(`/${orgSlug}`);
   return { ok: true as const };
