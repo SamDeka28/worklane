@@ -16,7 +16,12 @@ import {
   type OrgInvoiceSettings,
 } from "@/modules/invoices/settings";
 import { getInvoiceTemplate } from "@/modules/invoices/templates";
-import { formatInvoiceNumber, lineTotalMinor } from "@/modules/invoices/totals";
+import {
+  formatInvoiceNumber,
+  invoiceMoneyLabel,
+  invoiceSubtotalMinor,
+  lineTotalMinor,
+} from "@/modules/invoices/totals";
 import { netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
@@ -823,17 +828,24 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
     .eq("id", invoice.clientId)
     .maybeSingle();
 
-  const { getAppUrl, notificationEmailHtml, sendEmail } = await import("@/shared/email");
-  const pdfUrl = `${getAppUrl()}/${orgSlug}/invoices/${invoiceId}/pdf`;
+  const { getAppUrl, invoiceEmailHtml, invoiceEmailText, sendEmail } = await import(
+    "@/shared/email"
+  );
+  const emailInput = {
+    orgName: ctx.org.name,
+    clientName: (client?.name as string | undefined) ?? null,
+    number: invoice.number,
+    amountLabel: invoiceMoneyLabel(invoiceSubtotalMinor(invoice.lines), invoice.currency),
+    issuedOn: invoice.issuedOn,
+    dueOn: invoice.dueOn,
+    viewUrl: `${getAppUrl()}/${orgSlug}/invoices/${invoiceId}/pdf`,
+    memo: invoice.memo,
+  };
   const mailed = await sendEmail({
     to,
-    subject: `Invoice ${invoice.number} from ${ctx.org.name}`,
-    html: notificationEmailHtml({
-      title: `Invoice ${invoice.number}`,
-      body: `Hi${client?.name ? ` ${client.name}` : ""},\n\nPlease find invoice ${invoice.number}${invoice.dueOn ? ` (due ${invoice.dueOn})` : ""}.\n\nOpen the PDF from the link below.`,
-      href: pdfUrl,
-    }),
-    text: `Invoice ${invoice.number} from ${ctx.org.name}. PDF: ${pdfUrl}`,
+    subject: `Invoice ${invoice.number} from ${ctx.org.name} – ${emailInput.amountLabel}`,
+    html: invoiceEmailHtml(emailInput),
+    text: invoiceEmailText(emailInput),
   });
 
   if (!mailed.ok) return { error: mailed.error };

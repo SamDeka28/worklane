@@ -8,7 +8,9 @@ import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
 import {
   getAppUrl,
   inviteEmailHtml,
+  inviteEmailText,
   notificationEmailHtml,
+  notificationEmailText,
   sendEmail,
 } from "@/shared/email";
 
@@ -225,6 +227,13 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
   const inviter =
     (await profileLabel(ctx.userId)) || ctx.org.name;
 
+  const inviteInput = {
+    orgName: ctx.org.name,
+    inviterLabel: inviter,
+    role,
+    acceptUrl,
+    projectName,
+  };
   const mailed = await sendEmail({
     to: email,
     subject: projectName
@@ -232,14 +241,8 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
       : role === "partner"
         ? `Join ${ctx.org.name} as a partner`
         : `Join ${ctx.org.name} on Worklane`,
-    html: inviteEmailHtml({
-      orgName: ctx.org.name,
-      inviterLabel: inviter,
-      role,
-      acceptUrl,
-      projectName,
-    }),
-    text: `You're invited to ${ctx.org.name} as ${role}. Accept: ${acceptUrl}`,
+    html: inviteEmailHtml(inviteInput),
+    text: inviteEmailText(inviteInput),
   });
 
   if (!mailed.ok) {
@@ -452,6 +455,13 @@ export async function resendInvitationAction(orgSlug: string, invitationId: stri
   const role = invite.role as string;
   const email = invite.email as string;
 
+  const inviteInput = {
+    orgName: ctx.org.name,
+    inviterLabel: inviter,
+    role,
+    acceptUrl,
+    projectName,
+  };
   const mailed = await sendEmail({
     to: email,
     subject: projectName
@@ -459,14 +469,8 @@ export async function resendInvitationAction(orgSlug: string, invitationId: stri
       : role === "partner"
         ? `Join ${ctx.org.name} as a partner`
         : `Join ${ctx.org.name} on Worklane`,
-    html: inviteEmailHtml({
-      orgName: ctx.org.name,
-      inviterLabel: inviter,
-      role,
-      acceptUrl,
-      projectName,
-    }),
-    text: `You're invited to ${ctx.org.name} as ${role}. Accept: ${acceptUrl}`,
+    html: inviteEmailHtml(inviteInput),
+    text: inviteEmailText(inviteInput),
   });
 
   if (!mailed.ok && !mailed.skipped) {
@@ -550,12 +554,8 @@ export async function notifyUser(input: {
   const mailed = await sendEmail({
     to: email,
     subject: input.title,
-    html: notificationEmailHtml({
-      title: input.title,
-      body: input.body,
-      href: input.href,
-    }),
-    text: `${input.title}\n\n${input.body}${input.href ? `\n\n${input.href}` : ""}`,
+    html: notificationEmailHtml(input),
+    text: notificationEmailText(input),
   });
 
   if (mailed.ok && row?.id) {

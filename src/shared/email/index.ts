@@ -84,54 +84,12 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   }
 }
 
-export function inviteEmailHtml(input: {
-  orgName: string;
-  inviterLabel: string;
-  role: string;
-  acceptUrl: string;
-  projectName?: string | null;
-}) {
-  const projectLine = input.projectName
-    ? `<p style="margin:0 0 16px">You'll also join the project <strong>${escapeHtml(input.projectName)}</strong>.</p>`
-    : "";
-  return `<!doctype html>
-<html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#111;background:#f4f4f5;padding:24px">
-  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;padding:28px">
-    <p style="margin:0 0 8px;font-size:13px;color:#71717a">Worklane</p>
-    <h1 style="margin:0 0 12px;font-size:22px">Join ${escapeHtml(input.orgName)}</h1>
-    <p style="margin:0 0 16px">${escapeHtml(input.inviterLabel)} invited you as <strong>${escapeHtml(input.role)}</strong>.</p>
-    ${projectLine}
-    <p style="margin:0 0 24px">
-      <a href="${escapeHtml(input.acceptUrl)}" style="display:inline-block;background:#1d4ed8;color:#fff;text-decoration:none;padding:10px 16px;border-radius:999px;font-weight:600">Accept invite</a>
-    </p>
-    <p style="margin:0;font-size:12px;color:#71717a">Or open: ${escapeHtml(input.acceptUrl)}</p>
-  </div>
-</body></html>`;
-}
-
-export function notificationEmailHtml(input: {
-  title: string;
-  body: string;
-  href?: string | null;
-}) {
-  const link = input.href
-    ? `<p style="margin:16px 0 0"><a href="${escapeHtml(input.href)}" style="color:#1d4ed8">Open in Worklane</a></p>`
-    : "";
-  return `<!doctype html>
-<html><body style="font-family:system-ui,sans-serif;line-height:1.5;color:#111;background:#f4f4f5;padding:24px">
-  <div style="max-width:520px;margin:0 auto;background:#fff;border-radius:16px;padding:28px">
-    <p style="margin:0 0 8px;font-size:13px;color:#71717a">Worklane</p>
-    <h1 style="margin:0 0 12px;font-size:20px">${escapeHtml(input.title)}</h1>
-    <p style="margin:0;white-space:pre-wrap">${escapeHtml(input.body)}</p>
-    ${link}
-  </div>
-</body></html>`;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
+export {
+  escapeHtml,
+  inviteEmailHtml,
+  inviteEmailText,
+  invoiceEmailHtml,
+  invoiceEmailText,
+  notificationEmailHtml,
+  notificationEmailText,
+} from "./templates";
