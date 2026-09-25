@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
@@ -15,15 +16,18 @@ import {
 import { cn } from "@/lib/utils";
 
 const LINKS = [
-  { href: "#board", label: "Board" },
-  { href: "#modules", label: "Product" },
-  { href: "#lane", label: "How it works" },
-  { href: "#faq", label: "FAQ" },
+  { href: "/#board", label: "Board" },
+  { href: "/#modules", label: "Product" },
+  { href: "/#lane", label: "How it works" },
+  { href: "/docs", label: "Docs" },
+  { href: "/#faq", label: "FAQ" },
 ] as const;
 
 export function MarketingHeader() {
-  const [scrolled, setScrolled] = useState(false);
+  const pathname = usePathname();
+  const [scrolledPastHero, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const scrolled = scrolledPastHero || pathname !== "/";
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -51,7 +55,11 @@ export function MarketingHeader() {
             <Link
               key={link.href}
               href={link.href}
-              className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-white/55 transition-colors hover:bg-white/6 hover:text-white"
+              aria-current={isActive(pathname, link.href) ? "page" : undefined}
+              className={cn(
+                "rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-white/6 hover:text-white",
+                isActive(pathname, link.href) ? "bg-white/8 text-white" : "text-white/55",
+              )}
             >
               {link.label}
             </Link>
@@ -133,4 +141,8 @@ export function MarketingHeader() {
       </div>
     </header>
   );
+}
+
+function isActive(pathname: string, href: string) {
+  return !href.includes("#") && (pathname === href || pathname.startsWith(`${href}/`));
 }

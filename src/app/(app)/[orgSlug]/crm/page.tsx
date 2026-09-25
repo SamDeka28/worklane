@@ -102,7 +102,6 @@ export default async function CrmPage({
                 <CreateLeadDialog
                   orgSlug={orgSlug}
                   stages={stages}
-                  defaultOpen={query.new === "1"}
                   defaultCurrency={ctx.org.defaultCurrency}
                   showMoney={seeMoney}
                 />

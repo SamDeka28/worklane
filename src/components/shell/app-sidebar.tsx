@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { CreateOrganizationDialog } from "@/components/shell/create-organization-dialog";
-import { ThemeMenu } from "@/components/shell/theme-menu";
+import { UserMenuItems } from "@/components/shell/user-menu-items";
 import { AvatarMark } from "@/components/studio/chrome";
 import {
   DropdownMenu,
@@ -32,7 +32,6 @@ import {
 import { cn } from "@/lib/utils";
 import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
 import type { ModuleKey, Organization, OrgRole } from "@/modules/identity/types";
-import { signOutAction } from "@/modules/identity/actions";
 
 type NavItem = {
   href: string;
@@ -280,34 +279,7 @@ export function AppSidebar({
             <ChevronsUpDown className="hidden size-3.5 shrink-0 text-muted-foreground group-data-[expanded=true]/rail:inline xl:inline" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="top" className="min-w-52 p-2" sideOffset={8}>
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="px-2.5 py-2.5 font-normal">
-                <p className="truncate text-sm font-medium">{display}</p>
-                {user.email ? (
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</p>
-                ) : null}
-              </DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={() => router.push(`${base}/profile`)}
-              >
-                Profile
-              </DropdownMenuItem>
-              <ThemeMenu base={base} />
-              <DropdownMenuItem
-                onClick={() => router.push(`${base}/settings`)}
-              >
-                Studio settings
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => {
-                  void signOutAction();
-                }}
-              >
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
+            <UserMenuItems base={base} display={display} email={user.email} />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

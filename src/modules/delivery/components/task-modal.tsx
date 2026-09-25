@@ -30,6 +30,7 @@ import {
   updateTaskAction,
 } from "@/modules/delivery/actions";
 import { TaskDetailFields } from "@/modules/delivery/components/task-detail-fields";
+import { ActivityPanel, ActivityToggle } from "@/modules/history/components/activity-view";
 import { relativeTime } from "@/modules/notifications/components/notification-item";
 import type {
   BoardTask,
@@ -130,6 +131,8 @@ export function TaskModal({
     task?.assigneeUserIds ?? (task?.assigneeUserId ? [task.assigneeUserId] : []),
   );
   const [labels, setLabels] = useState<string[]>(task?.labels ?? []);
+  const [activityFor, setActivityFor] = useState<string | null>(null);
+  const showActivity = Boolean(open && task && activityFor === task.id);
 
   useEffect(() => {
     if (!open || !state) return;
@@ -194,27 +197,66 @@ export function TaskModal({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) onClose();
+        if (next) return;
+        setActivityFor(null);
+        onClose();
       }}
     >
       <DialogContent
         showCloseButton
-        className="flex max-h-[min(94vh,58rem)] w-full max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-[1.75rem] p-0 text-base sm:max-w-5xl lg:max-w-6xl"
+        className={cn(
+          "flex max-h-[min(94vh,58rem)] w-full max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-[1.75rem] p-0 text-base transition-[max-width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          showActivity ? "sm:max-w-2xl" : "sm:max-w-5xl lg:max-w-6xl",
+        )}
       >
-        <DialogHeader className="shrink-0 border-b border-border/40 px-6 py-5 pr-14 sm:px-8">
-          <DialogTitle className="font-heading text-xl tracking-tight sm:text-2xl">
-            {title}
-          </DialogTitle>
-          <DialogDescription className="text-sm sm:text-[15px]">
-            {isCreate
-              ? "Write the card on the left, set schedule and ownership on the right."
-              : task?.projectName
-                ? `${task.projectName}${task.clientName ? ` · ${task.clientName}` : ""}`
-                : "Title, description, attachments, and comments."}
-          </DialogDescription>
+        <DialogHeader className="shrink-0 flex-row items-center gap-4 border-b border-border/40 px-6 py-5 pr-14 sm:px-8">
+          <div className="min-w-0 flex-1 space-y-1">
+            <DialogTitle className="truncate font-heading text-xl tracking-tight sm:text-2xl">
+              {title}
+            </DialogTitle>
+            <DialogDescription className="text-sm sm:text-[15px]">
+              {isCreate
+                ? "Write the card on the left, set schedule and ownership on the right."
+                : task?.projectName
+                  ? `${task.projectName}${task.clientName ? ` · ${task.clientName}` : ""}`
+                  : "Title, description, attachments, and comments."}
+            </DialogDescription>
+          </div>
+          {task ? (
+            <ActivityToggle
+              active={showActivity}
+              onToggle={() => setActivityFor(showActivity ? null : task.id)}
+              className="shrink-0"
+            />
+          ) : null}
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
+        {showActivity && task ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+            <ActivityPanel
+              orgSlug={orgSlug}
+              entityType="task"
+              entityId={task.id}
+              refreshKey={JSON.stringify([
+                task.title,
+                task.description,
+                task.status,
+                task.columnId,
+                task.priority,
+                task.kind,
+                task.dueOn,
+                task.milestoneId,
+                task.labels,
+                task.assigneeUserIds,
+              ])}
+            />
+          </div>
+        ) : null}
+
+        <div
+          hidden={showActivity}
+          className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]"
+        >
           <div className="min-h-0 space-y-6 overflow-y-auto px-6 py-6 sm:px-8">
             <form
               id="task-card-form"
@@ -503,6 +545,7 @@ export function TaskModal({
                 ) : null}
               </section>
             ) : null}
+
           </div>
 
           <aside className="flex min-h-0 flex-col gap-4 overflow-y-auto border-t border-border/40 bg-muted/30 px-5 py-5 lg:border-t-0 lg:border-l">

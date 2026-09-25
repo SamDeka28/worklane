@@ -40,7 +40,7 @@ export function ThemeMenu({ base }: { base: string }) {
 
   return (
     <DropdownMenuSub>
-      <DropdownMenuSubTrigger className="px-2.5 py-1.5">
+      <DropdownMenuSubTrigger className="gap-2 rounded-lg px-2.5 py-2">
         <Palette className="size-4 text-muted-foreground" />
         <span className="flex-1">Appearance</span>
         <span className="max-w-24 truncate text-xs text-muted-foreground">{current}</span>

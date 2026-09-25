@@ -88,6 +88,10 @@ const FAQ = [
     a: "Each project has its own board. Studio Board rolls every open card from active projects into one kanban — priority, kind, project chip, due date — so nothing hides behind a project tab.",
   },
   {
+    q: "Where can I learn how everything works?",
+    a: "The Worklane docs cover every module with step-by-step how-tos, in-depth guides, and reference — from converting your first lead to settling partner payouts. Find them under Docs in the menu.",
+  },
+  {
     q: "What does it cost?",
     a: "Start free. Create an account, open your studio, and run the lane. No invented price table — explore as you go.",
   },
@@ -457,6 +461,23 @@ export default function MarketingHomePage() {
             <h2 className="mt-3 font-heading text-[clamp(1.85rem,3.5vw,2.75rem)] font-bold tracking-[-0.03em]">
               Three steps onto the lane.
             </h2>
+            <p className="mt-4 text-[15px] leading-7 text-white/45">
+              Every step is covered in the{" "}
+              <Link
+                href="/docs/quick-start"
+                className="font-medium text-violet-300 underline decoration-violet-300/30 underline-offset-4 hover:text-violet-200"
+              >
+                quick start guide
+              </Link>{" "}
+              — plus in-depth how-tos for each module in the{" "}
+              <Link
+                href="/docs"
+                className="font-medium text-violet-300 underline decoration-violet-300/30 underline-offset-4 hover:text-violet-200"
+              >
+                documentation
+              </Link>
+              .
+            </p>
           </div>
           <ol className="mt-12 grid gap-10 md:grid-cols-3 md:gap-8">
             {[

@@ -5,7 +5,7 @@
  * so the lead sheet opens and closes instantly.
  */
 export function setCrmUrl(
-  params: { lead?: string | null; new?: string | null },
+  params: { lead?: string | null; new?: string | null; stage?: string | null },
   mode: "push" | "replace" = "replace",
 ) {
   const url = new URL(window.location.href);
@@ -21,4 +21,8 @@ export function setCrmUrl(
 
 export function openLead(leadId: string) {
   setCrmUrl({ lead: leadId }, "push");
+}
+
+export function openNewLead(stage?: string) {
+  setCrmUrl({ new: "1", stage: stage ?? null, lead: null });
 }

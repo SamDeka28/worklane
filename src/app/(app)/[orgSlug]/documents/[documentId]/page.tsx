@@ -97,27 +97,8 @@ export default async function DocumentDetailPage({
             clientName={clientName}
             projectName={project?.name ?? null}
             currency={currency === "INR" ? "INR" : "USD"}
+            signatures={signatures}
           />
-          {signatures.length > 0 ? (
-            <div className="mt-6 border-t border-border/40 pt-4">
-              <h2 className="text-sm font-medium">Signatures</h2>
-              <ul className="mt-2 space-y-1.5">
-                {signatures.map((sig) => (
-                  <li key={sig.id} className="text-sm text-muted-foreground">
-                    {sig.signerName} · {sig.signerEmail} ·{" "}
-                    {new Date(sig.signedAt).toLocaleString()}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {version.snapshot ? (
-            <p className="mt-4 text-xs text-muted-foreground">
-              Frozen {String(version.snapshot.frozenAt)} · client{" "}
-              {String(version.snapshot.clientName ?? "-")} · project{" "}
-              {String(version.snapshot.projectName ?? "-")}
-            </p>
-          ) : null}
         </div>
       </div>
     </WorkSurface>

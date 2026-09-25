@@ -131,7 +131,7 @@ export function DocumentStudioEditor({
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: cn(DOCUMENT_PROSE, "min-h-[40rem]"),
+        class: cn(DOCUMENT_PROSE, "min-h-[66rem]"),
         style: `padding:${(pagePadding ?? DEFAULT_PAGE_MARGINS).top}px ${(pagePadding ?? DEFAULT_PAGE_MARGINS).right}px ${(pagePadding ?? DEFAULT_PAGE_MARGINS).bottom}px ${(pagePadding ?? DEFAULT_PAGE_MARGINS).left}px`,
       },
       transformPastedHTML(html) {
@@ -246,9 +246,12 @@ export function DocumentStudioEditor({
 
       {editable ? <DocumentBubbleMenu editor={editor} /> : null}
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[#e8e6e1] dark:bg-muted/40">
-        <div className="mx-auto flex w-full max-w-[54rem] justify-center px-3 py-6 sm:px-6 sm:py-8">
-          <div className="w-full overflow-hidden rounded-[2px] bg-white text-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_8px_28px_rgba(0,0,0,0.1)] ring-1 ring-black/5 dark:bg-card dark:text-foreground dark:shadow-lift dark:ring-white/10">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#ebe9e4] dark:bg-black/25">
+        <div className="mx-auto flex w-full max-w-[54rem] justify-center px-3 py-6 sm:px-8 sm:py-10">
+          <div
+            data-theme="light"
+            className="lane-paper w-full overflow-hidden rounded-[3px] bg-white text-slate-900 shadow-[0_1px_3px_rgba(0,0,0,0.08),0_12px_40px_rgba(0,0,0,0.14)] ring-1 ring-black/5"
+          >
             <div className="sticky top-0 z-[5]">
               <EditorPageRuler
                 editor={editor}

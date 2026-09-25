@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useTransition, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ActivityPanel, ActivityToggle } from "@/modules/history/components/activity-view";
 import { Paperclip, Trash2, UploadCloud, X } from "lucide-react";
 import { toast } from "sonner";
 import type { JSONContent } from "@tiptap/react";
@@ -281,6 +282,7 @@ function LeadFormFields({
   idPrefix,
   lead,
   stages,
+  defaultStage,
   defaultCurrency,
   showMoney,
   disabled,
@@ -291,6 +293,7 @@ function LeadFormFields({
   idPrefix: string;
   lead?: LeadRecord;
   stages: LeadStageRecord[];
+  defaultStage?: string;
   defaultCurrency: "USD" | "INR";
   showMoney: boolean;
   disabled?: boolean;
@@ -331,7 +334,7 @@ function LeadFormFields({
             <NativeSelect
               id={id("stage")}
               name="stage"
-              defaultValue={lead?.stage ?? stages[0]?.slug ?? "new"}
+              defaultValue={lead?.stage ?? defaultStage ?? stages[0]?.slug ?? "new"}
               disabled={disabled}
             >
               {stages.map((stage) => (
@@ -479,30 +482,35 @@ function LeadFormFields({
 export function CreateLeadDialog({
   orgSlug,
   stages,
-  defaultOpen = false,
   defaultCurrency = "USD",
   showMoney = true,
 }: {
   orgSlug: string;
   stages: LeadStageRecord[];
-  defaultOpen?: boolean;
   defaultCurrency?: "USD" | "INR";
   showMoney?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(defaultOpen);
+  const searchParams = useSearchParams();
+  const requested = searchParams.get("new") === "1";
+  const requestedStage = searchParams.get("stage");
+  const defaultStage =
+    requestedStage && stages.some((stage) => stage.slug === requestedStage)
+      ? requestedStage
+      : undefined;
+  const [open, setOpen] = useState(requested);
   const [formKey, setFormKey] = useState(0);
   const [queued, setQueued] = useState<File[]>([]);
   const [pending, start] = useTransition();
-  const [syncedDefaultOpen, setSyncedDefaultOpen] = useState(defaultOpen);
-  if (syncedDefaultOpen !== defaultOpen) {
-    setSyncedDefaultOpen(defaultOpen);
-    setOpen(defaultOpen);
+  const [syncedRequested, setSyncedRequested] = useState(requested);
+  if (syncedRequested !== requested) {
+    setSyncedRequested(requested);
+    setOpen(requested);
   }
 
   function close() {
     setOpen(false);
-    if (defaultOpen) setCrmUrl({ new: null });
+    setCrmUrl({ new: null, stage: null });
   }
 
   return (
@@ -529,7 +537,7 @@ export function CreateLeadDialog({
     >
       <form
         id="create-lead-form"
-        key={formKey}
+        key={`${formKey}:${defaultStage ?? ""}`}
         action={(formData) => {
           start(async () => {
             const result = await createLeadAction(orgSlug, formData);
@@ -542,7 +550,7 @@ export function CreateLeadDialog({
             setQueued([]);
             setFormKey((key) => key + 1);
             setOpen(false);
-            setCrmUrl({ new: null, lead: result.id });
+            setCrmUrl({ new: null, stage: null, lead: result.id });
             router.refresh();
           });
         }}
@@ -551,6 +559,7 @@ export function CreateLeadDialog({
           orgSlug={orgSlug}
           idPrefix="new_lead"
           stages={stages}
+          defaultStage={defaultStage}
           defaultCurrency={defaultCurrency}
           showMoney={showMoney}
           attachments={<QueuedAttachments files={queued} onChange={setQueued} />}
@@ -582,8 +591,10 @@ export function LeadDetailSheet({
   const router = useRouter();
   const [pending, start] = useTransition();
   const confirmDelete = useTypeToConfirm();
+  const [activityFor, setActivityFor] = useState<string | null>(null);
 
   if (!lead) return null;
+  const showActivity = activityFor === lead.id;
 
   const won = isWonStage(lead.stage, stages);
   const formId = `edit-lead-${lead.id}`;
@@ -640,9 +651,19 @@ export function LeadDetailSheet({
       hideTrigger
       width="wide"
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (!next) setActivityFor(null);
+        onOpenChange(next);
+      }}
+      narrow={showActivity}
+      headerAction={
+        <ActivityToggle
+          active={showActivity}
+          onToggle={() => setActivityFor(showActivity ? null : lead.id)}
+        />
+      }
       footer={
-        canWrite ? (
+        canWrite && !showActivity ? (
           <div className="flex items-center gap-2">
             {canDelete ? (
               <Button
@@ -688,6 +709,7 @@ export function LeadDetailSheet({
       <form
         id={formId}
         key={`${lead.id}:${lead.updatedAt}`}
+        hidden={showActivity}
         action={(formData) => {
           if (!canWrite) return;
           start(async () => {
@@ -721,6 +743,15 @@ export function LeadDetailSheet({
           aside={convertCard}
         />
       </form>
+      {showActivity ? (
+        <ActivityPanel
+          orgSlug={orgSlug}
+          entityType="lead"
+          entityId={lead.id}
+          currency={lead.currency}
+          refreshKey={lead.updatedAt}
+        />
+      ) : null}
     </ActionSheet>
   );
 }

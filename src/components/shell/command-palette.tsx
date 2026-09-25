@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ArrowUpRight,
+  BookOpen,
   FileText,
   FolderKanban,
   Handshake,
   Home,
+  LifeBuoy,
   LogOut,
   Palette,
   Plus,
@@ -30,6 +33,8 @@ import {
 import { signOutAction } from "@/modules/identity/actions";
 import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
 import type { Organization } from "@/modules/identity/types";
+import { searchDocs } from "@/modules/docs/search";
+import type { DocSearchEntry } from "@/modules/docs/types";
 
 export function CommandPalette({
   org,
@@ -39,8 +44,30 @@ export function CommandPalette({
   permissions: MemberPermissions;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [docsIndex, setDocsIndex] = useState<DocSearchEntry[] | null>(null);
   const router = useRouter();
   const base = `/${org.slug}`;
+  const docResults = useMemo(
+    () => (docsIndex ? searchDocs(docsIndex, query, 6) : []),
+    [docsIndex, query],
+  );
+
+  useEffect(() => {
+    if (!open || docsIndex) return;
+    let cancelled = false;
+    void import("@/modules/docs/registry").then((mod) => {
+      if (!cancelled) setDocsIndex(mod.docSearchIndex());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, docsIndex]);
+
+  const openDoc = (slug: string) => {
+    setOpen(false);
+    window.open(`/docs/${slug}`, "_blank", "noopener");
+  };
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -86,10 +113,44 @@ export function CommandPalette({
     org.modules[module] && canAccessModule(permissions, module);
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search or jump…" />
+    <CommandDialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setQuery("");
+      }}
+    >
+      <CommandInput
+        placeholder="Search, jump, or find help…"
+        value={query}
+        onValueChange={setQuery}
+      />
       <CommandList>
-        <CommandEmpty>Nothing matches.</CommandEmpty>
+        {docResults.length === 0 ? <CommandEmpty>Nothing matches.</CommandEmpty> : null}
+        {docResults.length > 0 ? (
+          <>
+            <CommandGroup heading="Documentation" forceMount>
+              {docResults.map((entry) => (
+                <CommandItem
+                  key={entry.slug}
+                  value={`docs:${entry.slug}`}
+                  forceMount
+                  onSelect={() => openDoc(entry.slug)}
+                >
+                  <BookOpen />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{entry.title}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {entry.category} · {entry.summary}
+                    </span>
+                  </span>
+                  <ArrowUpRight className="size-3.5 text-muted-foreground" />
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        ) : null}
         <CommandGroup heading="Go">
           <CommandItem onSelect={() => go(base)}>
             <Home /> Home
@@ -182,6 +243,14 @@ export function CommandPalette({
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Account">
+          <CommandItem
+            onSelect={() => {
+              setOpen(false);
+              window.open("/docs", "_blank", "noopener");
+            }}
+          >
+            <LifeBuoy /> Help &amp; documentation
+          </CommandItem>
           <CommandItem
             onSelect={() => {
               setOpen(false);

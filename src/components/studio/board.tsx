@@ -21,13 +21,14 @@ import { cn } from "@/lib/utils";
 export const boardCollisionDetection: CollisionDetection = (args) => {
   const pointerHits = pointerWithin(args);
   if (pointerHits.length > 0) {
-    const tasks = pointerHits.filter((hit) => {
+    const cards = pointerHits.filter((hit) => {
       const container = hit.data?.droppableContainer as
         | { data?: { current?: { type?: string } } }
         | undefined;
-      return container?.data?.current?.type === "task";
+      const type = container?.data?.current?.type;
+      return type === "task" || type === "lead";
     });
-    if (tasks.length > 0) return tasks;
+    if (cards.length > 0) return cards;
     return pointerHits;
   }
 

@@ -149,25 +149,25 @@ export function EditorPageRuler({
   return (
     <div
       ref={trackRef}
-      className="relative h-6 w-full touch-none select-none border-b border-black/10 bg-[#e8e6df]"
+      className="relative h-6 w-full touch-none select-none border-b border-slate-200 bg-slate-50"
       onPointerMove={onPointerMove}
       onPointerUp={() => setDragging(null)}
       onPointerCancel={() => setDragging(null)}
     >
       {/* Margin gutters */}
-      <div className="absolute inset-y-0 left-0 bg-stone-400/30" style={{ width: margins.left }} />
-      <div className="absolute inset-y-0 right-0 bg-stone-400/30" style={{ width: margins.right }} />
+      <div className="absolute inset-y-0 left-0 bg-slate-200/70" style={{ width: margins.left }} />
+      <div className="absolute inset-y-0 right-0 bg-slate-200/70" style={{ width: margins.right }} />
 
       {/* Scale marks — absolute only, no flex “sections” */}
       {majorTicks.map((x, i) => (
         <div key={x} className="pointer-events-none absolute bottom-0" style={{ left: x }}>
-          <span className="absolute bottom-2 left-0.5 text-[8px] leading-none text-stone-500">
+          <span className="absolute bottom-2 left-0.5 text-[8px] leading-none text-slate-400">
             {i}
           </span>
-          <span className="absolute bottom-0 left-0 h-2.5 w-px bg-stone-500/70" />
+          <span className="absolute bottom-0 left-0 h-2.5 w-px bg-slate-400" />
           {x + TICK_PX / 2 <= width ? (
             <span
-              className="absolute bottom-0 h-1.5 w-px bg-stone-400/60"
+              className="absolute bottom-0 h-1.5 w-px bg-slate-300"
               style={{ left: TICK_PX / 2 }}
             />
           ) : null}
@@ -185,7 +185,7 @@ export function EditorPageRuler({
       >
         <span
           className={cn(
-            "absolute top-0.5 left-1/2 h-3 w-1 -translate-x-1/2 rounded-[1px] bg-stone-700",
+            "absolute top-0.5 left-1/2 h-3 w-1 -translate-x-1/2 rounded-[1px] bg-slate-600",
             dragging === "pageLeft" && "bg-sky-700",
           )}
         />
@@ -200,7 +200,7 @@ export function EditorPageRuler({
       >
         <span
           className={cn(
-            "absolute top-0.5 left-1/2 h-3 w-1 -translate-x-1/2 rounded-[1px] bg-stone-700",
+            "absolute top-0.5 left-1/2 h-3 w-1 -translate-x-1/2 rounded-[1px] bg-slate-600",
             dragging === "pageRight" && "bg-sky-700",
           )}
         />

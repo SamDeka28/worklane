@@ -11,7 +11,7 @@
   [data-theme="nord"] *,
   [data-theme="monokai"] *,
   [data-theme="solarized-dark"] *
-));
+):where(:not(.lane-paper, .lane-paper *)));
 
 @theme inline {
   --color-background: var(--background);
@@ -810,22 +810,22 @@
     transform: scale(1) rotate(0);
   }
   70% {
-    transform: scale(1.28) rotate(0);
+    transform: scale(1.45) rotate(0);
   }
   74% {
-    transform: scale(1.22) rotate(14deg);
+    transform: scale(1.38) rotate(14deg);
   }
   80% {
-    transform: scale(1.14) rotate(-12deg);
+    transform: scale(1.26) rotate(-12deg);
   }
   86% {
-    transform: scale(1.06) rotate(8deg);
+    transform: scale(1.12) rotate(8deg);
   }
   92% {
-    transform: scale(0.94) rotate(-4deg);
+    transform: scale(0.9) rotate(-4deg);
   }
   96% {
-    transform: scale(1.03) rotate(0);
+    transform: scale(1.05) rotate(0);
   }
 }
 

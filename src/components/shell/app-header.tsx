@@ -3,23 +3,20 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, Plus, Search } from "lucide-react";
+import { BookOpen, Menu, Plus, Search } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { AvatarMark } from "@/components/studio/chrome";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { AppSidebar } from "@/components/shell/app-sidebar";
-import { ThemeMenu } from "@/components/shell/theme-menu";
+import { UserMenuItems } from "@/components/shell/user-menu-items";
 import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
-import { signOutAction } from "@/modules/identity/actions";
 import type { Organization, OrgRole } from "@/modules/identity/types";
 
 const TITLES: Record<string, string> = {
@@ -124,6 +121,18 @@ export function AppHeader({
         >
           <Search className="size-4" />
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label="Documentation"
+          title="Documentation"
+          className="gap-1.5 px-2 text-muted-foreground hover:text-foreground lg:px-2.5"
+          nativeButton={false}
+          render={<a href="/docs" target="_blank" rel="noopener" />}
+        >
+          <BookOpen className="size-4" />
+          <span className="hidden lg:inline">Docs</span>
+        </Button>
         {notificationsSlot}
         {canWrite ? (
           <DropdownMenu>
@@ -182,30 +191,7 @@ export function AppHeader({
             </span>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-52 p-2">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="px-2.5 py-2.5 font-normal">
-                <p className="truncate text-sm font-medium">{display}</p>
-                {user.email ? (
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">{user.email}</p>
-                ) : null}
-              </DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => router.push(`${base}/profile`)}>
-                Profile
-              </DropdownMenuItem>
-              <ThemeMenu base={base} />
-              <DropdownMenuItem onClick={() => router.push(`${base}/settings`)}>
-                Studio settings
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={() => {
-                  void signOutAction();
-                }}
-              >
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
+            <UserMenuItems base={base} display={display} email={user.email} />
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

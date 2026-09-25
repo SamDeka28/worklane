@@ -17,7 +17,15 @@ import { StatusChip } from "@/components/studio/status-chip";
 import { AddContactSheet } from "@/modules/clients/components/client-forms";
 import { ClientHubChrome } from "@/modules/clients/components/client-hub-chrome";
 import { clientNextStep } from "@/modules/clients/next-step";
-import { getClient, listClientActivity, listContacts } from "@/modules/clients/queries";
+import {
+  describeClientActivity,
+  getClient,
+  listClientActivity,
+  listContacts,
+} from "@/modules/clients/queries";
+import type { ClientActivityItem } from "@/modules/clients/types";
+import { cn } from "@/lib/utils";
+import { Activity, BadgeCheck, Receipt, UserPlus } from "lucide-react";
 import { listClientProjects } from "@/modules/delivery/queries";
 import { CollectComposer } from "@/modules/finance/components/finance-forms";
 import { ChargeRows } from "@/modules/finance/components/charge-board";
@@ -29,15 +37,19 @@ import { canDeleteModule, canSeeMoney } from "@/modules/identity/permissions";
 import { CreateDocumentDialog } from "@/modules/documents/components/document-forms";
 import { listDocuments } from "@/modules/documents/queries";
 
-function activityTone(verb: string): "paid" | "due" | "partial" | "planning" | "active" | "on_hold" {
-  const v = verb.toLowerCase();
-  if (v.includes("paid") || v.includes("collect")) return "paid";
-  if (v.includes("charge") || v.includes("invoice")) return "due";
-  if (v.includes("partial")) return "partial";
-  if (v.includes("project") || v.includes("active")) return "active";
-  if (v.includes("hold")) return "on_hold";
-  return "planning";
-}
+const ACTIVITY_ICON: Record<ClientActivityItem["kind"], typeof Receipt> = {
+  charge: Receipt,
+  payment: BadgeCheck,
+  created: UserPlus,
+  other: Activity,
+};
+
+const ACTIVITY_ICON_TONE: Record<ClientActivityItem["kind"], string> = {
+  charge: "bg-sky-500/12 text-sky-600 dark:text-sky-300",
+  payment: "bg-emerald-500/12 text-emerald-600 dark:text-emerald-300",
+  created: "bg-violet-500/12 text-violet-600 dark:text-violet-300",
+  other: "bg-muted text-muted-foreground",
+};
 
 function projectTone(status: string): "active" | "planning" | "on_hold" | "completed" | "cancelled" {
   if (status === "active") return "active";
@@ -74,6 +86,9 @@ export default async function ClientProfilePage({
     snapshot: clientMoneySnapshot([], [], []),
   };
   const clientDocs = documents.filter((doc) => doc.clientId === clientId);
+  const activityItems = await describeClientActivity(orgSlug, activity, {
+    includeMoney: seeMoney,
+  });
 
   const latestProjectId = projects[0]?.id ?? null;
   const next = clientNextStep({
@@ -155,7 +170,7 @@ export default async function ClientProfilePage({
         }
       />
 
-      <HubBody>
+      <HubBody className="*:shrink-0">
         <NextStepCard title={next.title} body={next.body} />
 
         <SoftCard
@@ -312,24 +327,76 @@ export default async function ClientProfilePage({
               </HubSection>
             ) : null}
 
-            {activity.length > 0 ? (
+            {activityItems.length > 0 ? (
               <HubSection variant="panel" title="Activity">
                 <ul className="divide-y divide-border/50">
-                  {activity.slice(0, 8).map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex items-center justify-between gap-3 px-4 py-3"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <StatusChip tone={activityTone(item.verb)}>
-                          {item.verb.replaceAll("_", " ")}
-                        </StatusChip>
-                      </div>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        {new Date(item.createdAt).toLocaleDateString()}
-                      </span>
-                    </li>
-                  ))}
+                  {activityItems.slice(0, 10).map((item) => {
+                    const Icon = ACTIVITY_ICON[item.kind];
+                    const byline = [
+                      item.detail,
+                      item.actorName ? `by ${item.actorName}` : null,
+                    ].filter(Boolean);
+                    return (
+                      <li key={item.id} className="flex items-start gap-3 px-4 py-3.5">
+                        <span
+                          className={cn(
+                            "mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-full",
+                            ACTIVITY_ICON_TONE[item.kind],
+                          )}
+                        >
+                          <Icon className="size-4" aria-hidden />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm">
+                            <span className="font-semibold">{item.title}</span>
+                            {item.subject ? (
+                              <span className="text-muted-foreground"> · {item.subject}</span>
+                            ) : null}
+                          </p>
+                          {item.projectName || byline.length > 0 ? (
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                              {item.projectName && item.projectId ? (
+                                <Link
+                                  href={`/${orgSlug}/projects/${item.projectId}`}
+                                  className="font-medium text-foreground/80 hover:text-foreground hover:underline"
+                                >
+                                  {item.projectName}
+                                </Link>
+                              ) : null}
+                              {item.projectName && byline.length > 0 ? " · " : null}
+                              {byline.join(" · ")}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="shrink-0 text-right">
+                          {item.amountMinor != null && item.currency ? (
+                            <p
+                              className={cn(
+                                "text-sm font-semibold tabular-nums",
+                                item.kind === "payment"
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-foreground",
+                              )}
+                            >
+                              {item.kind === "payment" ? "+" : ""}
+                              {moneyLabel(item.amountMinor, item.currency as typeof client.currency)}
+                            </p>
+                          ) : null}
+                          <time
+                            dateTime={item.createdAt}
+                            title={new Date(item.createdAt).toLocaleString()}
+                            className="mt-0.5 block text-xs tabular-nums text-muted-foreground"
+                          >
+                            {new Intl.DateTimeFormat("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            }).format(new Date(item.createdAt))}
+                          </time>
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               </HubSection>
             ) : null}

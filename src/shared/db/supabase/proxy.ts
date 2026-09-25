@@ -52,6 +52,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/auth") ||
     pathname.startsWith("/brand") ||
     pathname.startsWith("/portal") ||
+    pathname.startsWith("/docs") ||
     pathname.startsWith("/invite");
 
   const firstSegment = pathname.split("/").filter(Boolean)[0];

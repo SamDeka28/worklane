@@ -1,29 +1,56 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import {
   DndContext,
   type DragEndEvent,
+  type DragOverEvent,
   DragOverlay,
-  closestCorners,
+  MeasuringStrategy,
 } from "@dnd-kit/core";
-import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { BoardCanvas, BoardCardShell, BoardColumn, useBoardDndSensors } from "@/components/studio/board";
-import { StatusChip } from "@/components/studio/status-chip";
+import {
+  BoardCanvas,
+  BoardColumn,
+  boardCollisionDetection,
+  useBoardDndSensors,
+} from "@/components/studio/board";
 import { cn } from "@/lib/utils";
 import { moveLeadStageAction } from "@/modules/crm/actions";
-import { openLead } from "@/modules/crm/components/crm-url";
+import { openLead, openNewLead } from "@/modules/crm/components/crm-url";
+import { LeadBoardCard, type LeadCardState } from "@/modules/crm/components/lead-board-card";
 import {
+  isLostStage,
   isWonStage,
-  stageLabel,
-  stageTone,
   type LeadRecord,
   type LeadStageRecord,
 } from "@/modules/crm/types";
-import { formatMoney } from "@/shared/money";
+const OPEN_STAGE_DOTS = [
+  "bg-slate-400",
+  "bg-sky-500",
+  "bg-violet-500",
+  "bg-amber-500",
+  "bg-indigo-500",
+  "bg-orange-500",
+];
+
+function stageState(slug: string, stages: LeadStageRecord[]): LeadCardState {
+  if (isWonStage(slug, stages)) return "won";
+  if (isLostStage(slug, stages)) return "lost";
+  return "open";
+}
+
+function stageDot(stage: LeadStageRecord, index: number, stages: LeadStageRecord[]) {
+  const state = stageState(stage.slug, stages);
+  if (state === "won") return "bg-emerald-500";
+  if (state === "lost") return "bg-rose-400";
+  return OPEN_STAGE_DOTS[index % OPEN_STAGE_DOTS.length];
+}
 
 function groupLeads(leads: LeadRecord[], stages: LeadStageRecord[]) {
   const map = new Map<string, LeadRecord[]>();
@@ -62,12 +89,17 @@ export function LeadBoard({
   const [pending, start] = useTransition();
   const [items, setItems] = useState(() => groupLeads(leads, stages));
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [overStage, setOverStage] = useState<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [activeHeight, setActiveHeight] = useState(88);
   const sensors = useBoardDndSensors();
   const stageSlugs = useMemo(() => new Set(stages.map((stage) => stage.slug)), [stages]);
 
-  useEffect(() => {
+  const [synced, setSynced] = useState({ leads, stages });
+  if (synced.leads !== leads || synced.stages !== stages) {
+    setSynced({ leads, stages });
     setItems(groupLeads(leads, stages));
-  }, [leads, stages]);
+  }
 
   const leadMap = useMemo(() => new Map(leads.map((lead) => [lead.id, lead])), [leads]);
   const overlay = activeId ? leadMap.get(activeId) : null;
@@ -79,43 +111,79 @@ export function LeadBoard({
     return null;
   }
 
+  function resolveStage(overId: string) {
+    return stageSlugs.has(overId) ? overId : stageOf(overId);
+  }
+
+  function resetDrag() {
+    setActiveId(null);
+    setOverStage(null);
+    setDropIndex(null);
+  }
+
+  function onDragOver({ active, over }: DragOverEvent) {
+    if (!over) {
+      setOverStage(null);
+      setDropIndex(null);
+      return;
+    }
+    const leadId = String(active.id);
+    const overId = String(over.id);
+    const stage = resolveStage(overId);
+    if (!stage) {
+      setOverStage(null);
+      setDropIndex(null);
+      return;
+    }
+    const visible = (items.get(stage) ?? []).filter((lead) => lead.id !== leadId);
+    let index = stageSlugs.has(overId)
+      ? visible.length
+      : Math.max(0, visible.findIndex((lead) => lead.id === overId));
+    // Place after the hovered card when the pointer is in its lower half.
+    if (!stageSlugs.has(overId) && active.rect.current.translated) {
+      const pointerMid =
+        active.rect.current.translated.top + active.rect.current.translated.height / 2;
+      if (pointerMid > over.rect.top + over.rect.height / 2) index += 1;
+    }
+    setOverStage(stage);
+    setDropIndex(Math.min(index, visible.length));
+  }
+
   function onDragEnd(event: DragEndEvent) {
     const leadId = String(event.active.id);
-    const overId = event.over ? String(event.over.id) : null;
-    setActiveId(null);
-    if (!overId || !canWrite) return;
+    const targetStage = overStage ?? (event.over ? resolveStage(String(event.over.id)) : null);
+    const targetIndex = dropIndex;
+    resetDrag();
+    if (!targetStage || !canWrite) return;
 
     const fromStage = stageOf(leadId);
-    const overStage = stageSlugs.has(overId) ? overId : stageOf(overId);
-    if (!fromStage || !overStage) return;
-
+    if (!fromStage) return;
     const fromList = items.get(fromStage) ?? [];
-    const toList = items.get(overStage) ?? [];
-    const fromIndex = fromList.findIndex((lead) => lead.id === leadId);
-    if (fromIndex < 0) return;
+    const moving = fromList.find((lead) => lead.id === leadId);
+    if (!moving) return;
 
     const next = new Map(items);
-    if (fromStage === overStage) {
-      const overIndex = toList.findIndex((lead) => lead.id === overId);
-      const target = overIndex < 0 ? fromIndex : overIndex;
-      next.set(fromStage, arrayMove(fromList, fromIndex, target));
-    } else {
-      const moving = fromList[fromIndex];
-      const remaining = fromList.filter((lead) => lead.id !== leadId);
-      const overIndex = toList.findIndex((lead) => lead.id === overId);
-      const inserted = [...toList];
-      inserted.splice(overIndex < 0 ? inserted.length : overIndex, 0, {
-        ...moving,
-        stage: overStage,
-      });
-      next.set(fromStage, remaining);
-      next.set(overStage, inserted);
+    next.set(
+      fromStage,
+      fromList.filter((lead) => lead.id !== leadId),
+    );
+    const base = next.get(targetStage) ?? [];
+    const at = targetIndex == null ? base.length : Math.min(targetIndex, base.length);
+    const inserted = [...base];
+    inserted.splice(at, 0, { ...moving, stage: targetStage });
+    next.set(targetStage, inserted);
+
+    const orderedIds = inserted.map((lead) => lead.id);
+    if (
+      fromStage === targetStage &&
+      orderedIds.every((id, index) => fromList[index]?.id === id)
+    ) {
+      return;
     }
     setItems(next);
 
-    const orderedIds = (next.get(overStage) ?? []).map((lead) => lead.id);
     start(async () => {
-      const result = await moveLeadStageAction(orgSlug, leadId, overStage, orderedIds);
+      const result = await moveLeadStageAction(orgSlug, leadId, targetStage, orderedIds);
       if (result.error) {
         toast.error(result.error);
         setItems(groupLeads(leads, stages));
@@ -128,114 +196,201 @@ export function LeadBoard({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
-      onDragStart={({ active }) => setActiveId(String(active.id))}
+      collisionDetection={boardCollisionDetection}
+      measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+      onDragStart={({ active }) => {
+        setActiveId(String(active.id));
+        const height = active.rect.current.initial?.height;
+        setActiveHeight(height && height > 0 ? Math.round(height) : 88);
+      }}
+      onDragOver={onDragOver}
       onDragEnd={onDragEnd}
-      onDragCancel={() => setActiveId(null)}
+      onDragCancel={resetDrag}
     >
-      <BoardCanvas>
-        {stages.map((stage) => {
-          const column = items.get(stage.slug) ?? [];
-          return (
-            <BoardColumn
-              key={stage.id}
-              id={stage.slug}
-              title={stage.name}
-              count={column.length}
-            >
-              <SortableContext
-                items={column.map((lead) => lead.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {column.map((lead) => (
-                  <SortableLeadCard
-                    key={lead.id}
-                    lead={lead}
-                    stages={stages}
+      <BoardCanvas className="h-full min-h-0 px-3 pb-3 pt-3 sm:px-4">
+        {stages.map((stage, stageIndex) => (
+          <LeadColumn
+            key={stage.id}
+            stage={stage}
+            dot={stageDot(stage, stageIndex, stages)}
+            state={stageState(stage.slug, stages)}
+            leads={items.get(stage.slug) ?? []}
+            showMoney={showMoney}
+            canWrite={canWrite}
+            disabled={!canWrite || pending}
+            selectedLeadId={activeLeadId}
+            activeLeadId={activeId}
+            dropActive={Boolean(activeId) && overStage === stage.slug}
+            dropIndex={Boolean(activeId) && overStage === stage.slug ? dropIndex : null}
+            dropHeight={activeHeight}
+          />
+        ))}
+      </BoardCanvas>
+      {typeof document !== "undefined"
+        ? createPortal(
+            <DragOverlay adjustScale={false} dropAnimation={null}>
+              {overlay ? (
+                <div className="w-74 cursor-grabbing">
+                  <LeadBoardCard
+                    lead={overlay}
+                    state={stageState(overlay.stage, stages)}
                     showMoney={showMoney}
-                    disabled={!canWrite || pending}
-                    active={activeLeadId === lead.id}
-                    onOpen={() => openLead(lead.id)}
+                    className="shadow-lift ring-primary/30"
                   />
-                ))}
-              </SortableContext>
-              {column.length === 0 ? (
-                <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-                  Drop leads here
-                </p>
+                </div>
               ) : null}
-            </BoardColumn>
+            </DragOverlay>,
+            document.body,
+          )
+        : null}
+    </DndContext>
+  );
+}
+
+function LeadColumn({
+  stage,
+  dot,
+  state,
+  leads,
+  showMoney,
+  canWrite,
+  disabled,
+  selectedLeadId,
+  activeLeadId,
+  dropActive,
+  dropIndex,
+  dropHeight,
+}: {
+  stage: LeadStageRecord;
+  dot: string;
+  state: LeadCardState;
+  leads: LeadRecord[];
+  showMoney: boolean;
+  canWrite: boolean;
+  disabled: boolean;
+  selectedLeadId: string | null;
+  activeLeadId: string | null;
+  dropActive: boolean;
+  dropIndex: number | null;
+  dropHeight: number;
+}) {
+  const visibleIds = leads.filter((lead) => lead.id !== activeLeadId).map((lead) => lead.id);
+  const showingSlot = dropActive && dropIndex != null;
+  const slotBeforeId = showingSlot ? (visibleIds[dropIndex] ?? null) : null;
+  const slotAtEnd = showingSlot && dropIndex >= visibleIds.length;
+
+  return (
+    <BoardColumn
+      id={stage.slug}
+      isOver={dropActive}
+      header={
+        <header className="shrink-0 px-3 pt-3.5 pb-3">
+          <div className="flex items-center gap-1.5">
+            <span className={cn("ml-1 size-2.5 shrink-0 rounded-full", dot)} aria-hidden />
+            <h2 className="min-w-0 flex-1 truncate px-1 text-[12px] font-bold tracking-[0.08em] text-foreground/70 uppercase">
+              {stage.name}
+            </h2>
+            <span className="rounded-md bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm ring-1 ring-foreground/10">
+              {leads.length}
+            </span>
+          </div>
+        </header>
+      }
+      footer={
+        canWrite && state === "open" ? (
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+            onClick={() => openNewLead(stage.slug)}
+          >
+            <Plus className="size-4" />
+            Add a lead
+          </button>
+        ) : null
+      }
+    >
+      <SortableContext items={leads.map((lead) => lead.id)} strategy={verticalListSortingStrategy}>
+        {leads.map((lead) => {
+          return (
+            <div key={lead.id} className="contents">
+              {slotBeforeId === lead.id ? <DropSlot height={dropHeight} /> : null}
+              <SortableLeadCard
+                lead={lead}
+                state={state}
+                showMoney={showMoney}
+                disabled={disabled}
+                selected={selectedLeadId === lead.id}
+                collapsed={lead.id === activeLeadId}
+              />
+            </div>
           );
         })}
-      </BoardCanvas>
-      <DragOverlay>
-        {overlay ? (
-          <BoardCardShell className="w-72 shadow-soft">
-            <p className="truncate text-sm font-medium">{overlay.name}</p>
-            {overlay.company ? (
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">{overlay.company}</p>
-            ) : null}
-          </BoardCardShell>
-        ) : null}
-      </DragOverlay>
-    </DndContext>
+        {slotAtEnd ? <DropSlot height={dropHeight} /> : null}
+      </SortableContext>
+      {leads.length === 0 && !dropActive ? (
+        <p className="px-2 py-8 text-center text-sm font-medium text-muted-foreground">
+          Drop leads here
+        </p>
+      ) : null}
+    </BoardColumn>
+  );
+}
+
+function DropSlot({ height }: { height: number }) {
+  return (
+    <div
+      className="shrink-0 rounded-xl border-2 border-dashed border-primary/45 bg-primary/8"
+      style={{ height }}
+      aria-hidden
+    />
   );
 }
 
 function SortableLeadCard({
   lead,
-  stages,
-  showMoney = true,
+  state,
+  showMoney,
   disabled,
-  active,
-  onOpen,
+  selected,
+  collapsed,
 }: {
   lead: LeadRecord;
-  stages: LeadStageRecord[];
-  showMoney?: boolean;
-  disabled?: boolean;
-  active?: boolean;
-  onOpen: () => void;
+  state: LeadCardState;
+  showMoney: boolean;
+  disabled: boolean;
+  selected: boolean;
+  collapsed: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: lead.id,
+    data: { type: "lead" as const },
     disabled,
+    animateLayoutChanges: () => false,
   });
+  const hidden = collapsed || isDragging;
 
   return (
-    <div
+    <li
       ref={setNodeRef}
       style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
+        transform: hidden ? undefined : CSS.Translate.toString(transform),
+        transition: hidden ? undefined : transition,
       }}
-      className={cn(active && "ring-2 ring-sky-300 rounded-2xl")}
+      className={cn(
+        "list-none",
+        hidden && "pointer-events-none m-0 h-0 min-h-0 overflow-hidden border-0 p-0 opacity-0",
+      )}
       {...attributes}
       {...listeners}
     >
-      <BoardCardShell onClick={onOpen}>
-        <p className="truncate text-sm font-medium">{lead.name}</p>
-        {lead.company ? (
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{lead.company}</p>
-        ) : null}
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
-          <StatusChip tone={stageTone(lead.stage, stages)}>
-            {stageLabel(lead.stage, stages)}
-          </StatusChip>
-          {showMoney && lead.estimatedValueMinor != null ? (
-            <span className="text-[11px] tabular-nums text-muted-foreground">
-              {formatMoney({
-                amountMinor: lead.estimatedValueMinor,
-                currency: lead.currency,
-              })}
-            </span>
-          ) : null}
-          {isWonStage(lead.stage, stages) && !lead.clientId ? (
-            <span className="text-[11px] font-medium text-emerald-700">Become a client →</span>
-          ) : null}
-        </div>
-      </BoardCardShell>
-    </div>
+      <LeadBoardCard
+        lead={lead}
+        state={state}
+        showMoney={showMoney}
+        selected={selected}
+        onOpen={() => openLead(lead.id)}
+        draggable={!disabled}
+      />
+    </li>
   );
 }

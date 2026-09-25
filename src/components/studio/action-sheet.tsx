@@ -38,9 +38,14 @@ export function ActionSheet({
   side = "right",
   width = "default",
   footer,
+  headerAction,
+  narrow = false,
   children,
 }: {
   title: string;
+  headerAction?: ReactNode;
+  /** Temporarily shrinks a `wide` sheet (animated), e.g. for a single-column view. */
+  narrow?: boolean;
   description?: string;
   triggerLabel?: string;
   triggerVariant?: "default" | "outline" | "ghost" | "destructive";
@@ -92,22 +97,32 @@ export function ActionSheet({
           side === "right" &&
             "data-[side=right]:inset-y-2 data-[side=right]:right-2 data-[side=right]:h-auto data-[side=right]:max-w-none data-[side=right]:rounded-[2rem]",
           side === "right" &&
+            "[transition-property:opacity,transform,translate,width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          side === "right" &&
             (width === "wide"
-              ? "data-[side=right]:w-[calc(100%-1rem)] data-[side=right]:sm:max-w-none data-[side=right]:lg:w-[min(100%-1rem,64rem)]"
+              ? cn(
+                  "data-[side=right]:w-[calc(100%-1rem)] data-[side=right]:sm:max-w-none",
+                  narrow
+                    ? "data-[side=right]:sm:w-[min(100%-1rem,40rem)]"
+                    : "data-[side=right]:sm:w-[calc(100%-1rem)] data-[side=right]:lg:w-[min(100%-1rem,64rem)]",
+                )
               : "data-[side=right]:w-[min(100%,42rem)] sm:data-[side=right]:w-[min(100%-1rem,42rem)]"),
           side === "bottom" &&
             "data-[side=bottom]:inset-x-2 data-[side=bottom]:bottom-2 data-[side=bottom]:h-[min(92vh,56rem)] data-[side=bottom]:max-h-[min(92vh,56rem)] data-[side=bottom]:rounded-[2rem] data-[side=bottom]:border-0",
         )}
       >
-        <SheetHeader className="shrink-0 gap-1.5 border-b border-border/50 px-6 py-5 pr-14">
-          <SheetTitle className="font-heading text-2xl font-semibold tracking-tight">
-            {title}
-          </SheetTitle>
-          {description ? (
-            <SheetDescription className="text-sm leading-relaxed text-muted-foreground">
-              {description}
-            </SheetDescription>
-          ) : null}
+        <SheetHeader className="shrink-0 flex-row items-center gap-4 border-b border-border/50 px-6 py-5 pr-14">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <SheetTitle className="truncate font-heading text-2xl font-semibold tracking-tight">
+              {title}
+            </SheetTitle>
+            {description ? (
+              <SheetDescription className="text-sm leading-relaxed text-muted-foreground">
+                {description}
+              </SheetDescription>
+            ) : null}
+          </div>
+          {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
           {children}
