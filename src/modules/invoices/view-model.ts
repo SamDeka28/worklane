@@ -4,10 +4,14 @@ import type { InvoiceExtraField, InvoiceRecord } from "@/modules/invoices/types"
 import { amountInWords } from "@/modules/invoices/words";
 import { formatMoney } from "@/shared/money";
 
+export type InvoicePartyLineKind = "contact" | "address" | "email" | "phone" | "website";
+
+export type InvoicePartyLine = { kind: InvoicePartyLineKind; text: string };
+
 export type InvoiceParty = {
   label: string;
   name: string;
-  lines: string[];
+  lines: InvoicePartyLine[];
   facts: InvoiceExtraField[];
 };
 
@@ -60,6 +64,14 @@ function day(value: string | null | undefined) {
   });
 }
 
+function partyLines(
+  entries: [InvoicePartyLineKind, string | null | undefined][],
+): InvoicePartyLine[] {
+  return entries
+    .map(([kind, value]) => ({ kind, text: value?.trim() ?? "" }))
+    .filter((line) => line.text);
+}
+
 function compact(values: (string | null | undefined)[]) {
   return values.map((value) => value?.trim() ?? "").filter(Boolean);
 }
@@ -85,6 +97,7 @@ export function buildInvoiceView({
 }): InvoiceView {
   const money = (amountMinor: bigint) => formatMoney({ amountMinor, currency: invoice.currency });
   const business = brand.business;
+  const website = business.website.replace(/^https?:\/\//i, "").replace(/\/$/, "");
   const bill = invoice.billTo;
   const breakdown = invoiceBreakdown(invoice.lines);
   const taxes = invoiceTaxByRate(invoice.lines);
@@ -94,7 +107,12 @@ export function buildInvoiceView({
     label: "Billed by",
     name: business.legalName || brand.orgName,
     lines: brand.showBusinessDetails
-      ? compact([business.address, compact([business.email, business.phone]).join("  ·  "), business.website])
+      ? partyLines([
+          ["address", business.address],
+          ["email", business.email],
+          ["phone", business.phone],
+          ["website", website],
+        ])
       : [],
     facts: brand.showBusinessDetails
       ? [
@@ -107,10 +125,11 @@ export function buildInvoiceView({
   const billedTo: InvoiceParty = {
     label: "Billed to",
     name: bill?.name || clientName,
-    lines: compact([
-      bill?.contactName ? `Attn: ${bill.contactName}` : null,
-      bill?.address,
-      compact([bill?.email, bill?.phone]).join("  ·  "),
+    lines: partyLines([
+      ["contact", bill?.contactName],
+      ["address", bill?.address],
+      ["email", bill?.email],
+      ["phone", bill?.phone],
     ]),
     facts: [...(bill?.taxId ? [{ label: "Tax ID", value: bill.taxId }] : []), ...(bill?.extras ?? [])],
   };
@@ -154,7 +173,7 @@ export function buildInvoiceView({
   const footer = compact([
     business.legalName || brand.orgName,
     brand.showBusinessDetails ? business.email : null,
-    brand.showBusinessDetails ? business.website : null,
+    brand.showBusinessDetails ? website : null,
   ]).join("  ·  ");
 
   return {

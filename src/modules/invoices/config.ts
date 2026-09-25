@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { requireOrg } from "@/modules/identity/org";
 import {
   parseOrgInvoiceSettings,
@@ -11,7 +12,7 @@ export type OrgInvoiceConfig = OrgInvoiceSettings & {
   nextNumber: number;
 };
 
-export async function loadOrgInvoiceConfig(orgSlug: string): Promise<OrgInvoiceConfig> {
+export const loadOrgInvoiceConfig = cache(async (orgSlug: string): Promise<OrgInvoiceConfig> => {
   const ctx = await requireOrg(orgSlug);
   const { data, error } = await ctx.supabase
     .from("organizations")
@@ -25,7 +26,7 @@ export async function loadOrgInvoiceConfig(orgSlug: string): Promise<OrgInvoiceC
     ...settings,
     nextNumber: Number(data?.invoice_next_number ?? 1) || 1,
   };
-}
+});
 
 export async function resolveInvoiceBrand(
   orgSlug: string,
@@ -36,7 +37,7 @@ export async function resolveInvoiceBrand(
   if (snap) {
     let logoUrl: string | null = null;
     if (snap.logoFileId) {
-      logoUrl = await signedLogoUrl(ctx.supabase, ctx.org.id, snap.logoFileId);
+      logoUrl = await signedLogoUrl(orgSlug, snap.logoFileId);
     }
     return {
       accentHex: snap.accentHex,
@@ -52,7 +53,7 @@ export async function resolveInvoiceBrand(
   const config = await loadOrgInvoiceConfig(orgSlug);
   let logoUrl: string | null = null;
   if (config.brand.logoFileId) {
-    logoUrl = await signedLogoUrl(ctx.supabase, ctx.org.id, config.brand.logoFileId);
+    logoUrl = await signedLogoUrl(orgSlug, config.brand.logoFileId);
   }
   return {
     accentHex: config.brand.accentHex,
@@ -76,16 +77,13 @@ export function brandToSnapshot(brand: InvoiceBrand): InvoiceBrandSnapshot {
   };
 }
 
-async function signedLogoUrl(
-  supabase: Awaited<ReturnType<typeof requireOrg>>["supabase"],
-  orgId: string,
-  fileId: string,
-): Promise<string | null> {
+const signedLogoUrl = cache(async (orgSlug: string, fileId: string): Promise<string | null> => {
+  const { supabase, org } = await requireOrg(orgSlug);
   const { data } = await supabase
     .from("files")
     .select("storage_path")
     .eq("id", fileId)
-    .eq("organization_id", orgId)
+    .eq("organization_id", org.id)
     .is("deleted_at", null)
     .maybeSingle();
   if (!data?.storage_path) return null;
@@ -93,4 +91,4 @@ async function signedLogoUrl(
     .from("org-files")
     .createSignedUrl(data.storage_path, 60 * 60);
   return signed?.signedUrl ?? null;
-}
+});

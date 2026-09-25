@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import { listClients } from "@/modules/clients/queries";
-import { OrgSettingsForm } from "@/modules/identity/components/org-settings-form";
+import {
+  OrgBusinessForm,
+  OrgSettingsForm,
+} from "@/modules/identity/components/org-settings-form";
+import { loadOrgInvoiceConfig } from "@/modules/invoices/config";
 import { requireOrg } from "@/modules/identity/org";
 import { listPartners } from "@/modules/partners/queries";
 import {
@@ -39,10 +43,11 @@ export default async function SettingsPage({
 }: PageProps<"/[orgSlug]/settings">) {
   const { orgSlug } = await params;
   const ctx = await requireOrg(orgSlug);
-  const [clients, partners, grants] = await Promise.all([
+  const [clients, partners, grants, invoiceConfig] = await Promise.all([
     ctx.org.modules.portal ? listClients(orgSlug) : Promise.resolve([]),
     ctx.org.modules.portal ? listPartners(orgSlug) : Promise.resolve([]),
     ctx.org.modules.portal ? listShareGrants(orgSlug) : Promise.resolve([]),
+    loadOrgInvoiceConfig(orgSlug),
   ]);
 
   return (
@@ -109,8 +114,21 @@ export default async function SettingsPage({
             ) : null}
           </div>
 
-          <div className="space-y-6 xl:col-span-7" id="invoices">
+          <div className="space-y-6 xl:col-span-7">
             <FormSection
+              id="business"
+              title="Business details"
+              hint="Your studio's legal name, address and registration numbers. Used in the Billed by block on invoices."
+            >
+              <OrgBusinessForm
+                orgSlug={orgSlug}
+                business={invoiceConfig.business}
+                canWrite={ctx.canWrite}
+              />
+            </FormSection>
+
+            <FormSection
+              id="invoices"
               title="Invoices"
               hint="Numbering, defaults, branding and templates live with your invoices."
             >

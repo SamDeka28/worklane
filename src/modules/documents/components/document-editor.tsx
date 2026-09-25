@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { DocumentStudioEditor } from "@/components/editor/document-studio-editor";
 import { HiddenDocFields, type MentionItem } from "@/components/editor/rich-editor";
 import { StatusChip } from "@/components/studio/status-chip";
+import { StudioDrawer } from "@/components/studio/studio-drawer";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -422,7 +423,7 @@ export function DocumentEditor({
         milestones={milestones}
       />
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lane-inset">
+      <div className="mb-16 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lane-inset lg:mb-0">
         <form
           id="document-studio-form"
           className="flex min-h-0 flex-1 flex-col"
@@ -689,7 +690,12 @@ export function DocumentEditor({
         </form>
       </div>
 
-      <aside className="flex w-full shrink-0 flex-col gap-3 overflow-y-auto pb-2 lg:w-80 xl:w-[22rem]">
+      <StudioDrawer
+        label="Document panel"
+        summary={`${KIND_LABEL[kind]} · ${STATUS_LABEL[document.status]} · v${version.versionNumber}`}
+        className="lg:w-80 lg:shrink-0 xl:w-[22rem]"
+        bodyClassName="flex flex-col gap-3 p-3 lg:p-0 lg:pb-2"
+      >
         <RailCard title="Linked to" description="Tags and tables pull live data from these records.">
           {canWrite && !editLocked ? (
             <div className="grid gap-3">
@@ -1096,7 +1102,7 @@ export function DocumentEditor({
             fullySigned={clientSigned && studioSigned}
           />
         ) : null}
-      </aside>
+      </StudioDrawer>
     </div>
   );
 }

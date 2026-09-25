@@ -17,13 +17,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   addContactAction,
   archiveClientAction,
   createClientAction,
   deleteClientAction,
   updateClientAction,
+  updateClientBillingAction,
 } from "@/modules/clients/actions";
+import { ExtraFieldsEditor } from "@/modules/invoices/components/extra-fields-editor";
+import type { InvoiceBillTo } from "@/modules/invoices/types";
 
 export function CreateClientDialog({
   orgSlug,
@@ -440,6 +444,111 @@ export function AddContactSheet({
         </label>
         <Button type="submit" size="lg" className="w-full" disabled={pending}>
           {pending ? "Adding…" : "Add contact"}
+        </Button>
+      </form>
+    </ActionSheet>
+  );
+}
+
+const BILLING_FIELD_SUGGESTIONS = ["Place of supply", "Vendor code", "PAN", "Cost center"];
+
+/** Edits the client's saved billing profile, which pre-fills "Billed to" on new invoices. */
+export function EditClientBillingSheet({
+  orgSlug,
+  clientId,
+  initial,
+  hasSaved,
+}: {
+  orgSlug: string;
+  clientId: string;
+  initial: InvoiceBillTo;
+  hasSaved: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, start] = useTransition();
+
+  return (
+    <ActionSheet
+      title="Billing details"
+      description="Used as the Billed to block on new invoices for this client. Existing invoices keep what they were issued with."
+      triggerLabel={hasSaved ? "Edit" : "Add"}
+      triggerVariant="ghost"
+      triggerSize="sm"
+      open={open}
+      onOpenChange={setOpen}
+    >
+      <form
+        className="grid gap-4"
+        action={(formData) => {
+          start(async () => {
+            const result = await updateClientBillingAction(orgSlug, clientId, formData);
+            if ("error" in result && result.error) {
+              toast.error(result.error);
+              return;
+            }
+            const drafts = ("draftsUpdated" in result ? result.draftsUpdated : 0) ?? 0;
+            toast.success(
+              drafts > 0
+                ? `Billing details saved and applied to ${drafts} draft invoice${drafts === 1 ? "" : "s"}`
+                : "Billing details saved",
+            );
+            setOpen(false);
+          });
+        }}
+      >
+        <Field label="Company or legal name" htmlFor="client_bill_name">
+          <Input id="client_bill_name" name="bill_to_name" defaultValue={initial.name} />
+        </Field>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Attention" htmlFor="client_bill_contact">
+            <Input
+              id="client_bill_contact"
+              name="bill_to_contact"
+              defaultValue={initial.contactName}
+              placeholder="Accounts payable"
+            />
+          </Field>
+          <Field label="Tax ID" htmlFor="client_bill_tax">
+            <Input
+              id="client_bill_tax"
+              name="bill_to_tax_id"
+              defaultValue={initial.taxId}
+              placeholder="GSTIN, VAT, EIN…"
+            />
+          </Field>
+          <Field label="Billing email" htmlFor="client_bill_email">
+            <Input
+              id="client_bill_email"
+              name="bill_to_email"
+              type="email"
+              defaultValue={initial.email}
+            />
+          </Field>
+          <Field label="Phone" htmlFor="client_bill_phone">
+            <Input id="client_bill_phone" name="bill_to_phone" defaultValue={initial.phone} />
+          </Field>
+        </div>
+        <Field label="Billing address" htmlFor="client_bill_address">
+          <Textarea
+            id="client_bill_address"
+            name="bill_to_address"
+            rows={3}
+            defaultValue={initial.address}
+          />
+        </Field>
+        <div className="grid gap-1.5">
+          <p className="text-sm font-semibold tracking-tight">Other details</p>
+          <p className="text-xs text-muted-foreground/80">
+            Printed under the address, e.g. PAN or vendor code.
+          </p>
+          <ExtraFieldsEditor
+            prefix="bill_to_extra"
+            initial={initial.extras}
+            suggestions={BILLING_FIELD_SUGGESTIONS}
+          />
+        </div>
+        <Button type="submit" size="lg" className="w-full" disabled={pending}>
+          {pending ? "Saving…" : "Save billing details"}
         </Button>
       </form>
     </ActionSheet>

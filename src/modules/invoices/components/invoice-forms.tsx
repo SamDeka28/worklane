@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { Check, Download, Pencil, Plus, Trash2, UserRound } from "lucide-react";
+import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { Check, Download, Loader2, Pencil, Plus, Trash2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ActionSheet } from "@/components/studio/action-sheet";
@@ -21,12 +21,15 @@ import {
   updateInvoiceLineAction,
   voidInvoiceAction,
 } from "@/modules/invoices/actions";
+import { useReportInvoiceBusy } from "@/modules/invoices/components/invoice-busy";
 import { ExtraFieldsEditor } from "@/modules/invoices/components/extra-fields-editor";
 import { IssueInvoiceButton } from "@/modules/invoices/components/invoice-flow";
+import { InvoiceLayoutThumb } from "@/modules/invoices/components/layout-thumb";
 import { percentFieldToBps } from "@/modules/invoices/components/tax-field";
+import { INVOICE_LAYOUT_SPECS } from "@/modules/invoices/layouts";
 import type { BillingContact, LineSuggestion } from "@/modules/invoices/queries";
 import type { InvoiceTemplate } from "@/modules/invoices/templates";
-import type { InvoiceLine, InvoiceRecord } from "@/modules/invoices/types";
+import type { InvoiceBillTo, InvoiceLine, InvoiceRecord } from "@/modules/invoices/types";
 import { lineTotalMinor } from "@/modules/invoices/totals";
 import { formatMoney, fromMinor, type IsoCurrency } from "@/shared/money";
 
@@ -50,6 +53,7 @@ export function CreateInvoiceDialog({
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const [firstLine, setFirstLine] = useState(false);
   const defaultTemplateId =
     templates.find((row) => row.isDefault)?.id ?? templates[0]?.id ?? "";
@@ -87,7 +91,6 @@ export function CreateInvoiceDialog({
             toast.success("Draft invoice created");
             close();
             router.push(`/${orgSlug}/invoices/${result.id}`);
-            router.refresh();
           });
         }}
       >
@@ -196,8 +199,8 @@ export function AddInvoiceLineForm({
   defaultTaxBps?: number;
   suggestions?: LineSuggestion[];
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const defaultTax = String(defaultTaxBps / 100);
   const [description, setDescription] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -236,7 +239,6 @@ export function AddInvoiceLineForm({
           }
           toast.success("Line added");
           reset();
-          router.refresh();
         });
       }}
     >
@@ -359,8 +361,8 @@ export function InvoiceLineEditor({
   orgSlug: string;
   invoice: InvoiceRecord;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   if (invoice.issuedAt || invoice.status !== "draft") return null;
@@ -393,7 +395,6 @@ export function InvoiceLineEditor({
                 else {
                   toast.success("Line updated");
                   setEditingId(null);
-                  router.refresh();
                 }
               });
             }}
@@ -442,7 +443,6 @@ export function InvoiceLineEditor({
                   if (result.error) toast.error(result.error);
                   else {
                     toast.success("Line removed");
-                    router.refresh();
                   }
                 });
               }}
@@ -545,8 +545,8 @@ export function InvoiceActions({
   invoice: InvoiceRecord;
   canWrite: boolean;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const issued = Boolean(invoice.issuedAt);
   const isDraft = invoice.status === "draft" && !issued;
 
@@ -586,7 +586,6 @@ export function InvoiceActions({
               const result = await voidInvoiceAction(orgSlug, invoice.id);
               if (result.error) toast.error(result.error);
               else toast.success("Invoice voided");
-              router.refresh();
             });
           }}
         >
@@ -604,16 +603,17 @@ export function BillToForm({
   invoice,
   clientName,
   contacts = [],
-  hasClientDefault = false,
+  clientBilling = null,
 }: {
   orgSlug: string;
   invoice: InvoiceRecord;
   clientName: string;
   contacts?: BillingContact[];
-  hasClientDefault?: boolean;
+  clientBilling?: InvoiceBillTo | null;
 }) {
-  const router = useRouter();
+  const hasClientDefault = Boolean(clientBilling?.name);
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const bill = invoice.billTo;
   const [values, setValues] = useState({
     name: bill?.name || clientName,
@@ -623,9 +623,37 @@ export function BillToForm({
     taxId: bill?.taxId ?? "",
     address: bill?.address ?? "",
   });
+  const [extras, setExtras] = useState(bill?.extras ?? []);
+  const [extrasKey, setExtrasKey] = useState(0);
   const set = (key: keyof typeof values) => (event: { target: { value: string } }) =>
     setValues((current) => ({ ...current, [key]: event.target.value }));
   const usable = contacts.filter((contact) => contact.name || contact.email);
+  const clientDiffers =
+    clientBilling?.name &&
+    JSON.stringify({ ...values, extras }) !==
+      JSON.stringify({
+        name: clientBilling.name,
+        contactName: clientBilling.contactName,
+        email: clientBilling.email,
+        phone: clientBilling.phone,
+        taxId: clientBilling.taxId,
+        address: clientBilling.address,
+        extras: clientBilling.extras,
+      });
+
+  function applyClientBilling() {
+    if (!clientBilling) return;
+    setValues({
+      name: clientBilling.name,
+      contactName: clientBilling.contactName,
+      email: clientBilling.email,
+      phone: clientBilling.phone,
+      taxId: clientBilling.taxId,
+      address: clientBilling.address,
+    });
+    setExtras(clientBilling.extras);
+    setExtrasKey((key) => key + 1);
+  }
 
   return (
     <form
@@ -641,11 +669,22 @@ export function BillToForm({
                 ? "Saved, and remembered for this client"
                 : "Billed-to details saved",
             );
-            router.refresh();
           }
         });
       }}
     >
+      {clientDiffers ? (
+        <div className="flex items-center justify-between gap-2 rounded-lg bg-primary/5 px-2.5 py-2 text-[11px] text-muted-foreground ring-1 ring-primary/15">
+          <span className="min-w-0">{clientName}&apos;s saved billing details differ from this invoice.</span>
+          <button
+            type="button"
+            onClick={applyClientBilling}
+            className="shrink-0 font-semibold text-primary hover:underline"
+          >
+            Use them
+          </button>
+        </div>
+      ) : null}
       {usable.length > 0 ? (
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] text-muted-foreground">Fill from contact:</span>
@@ -735,8 +774,9 @@ export function BillToForm({
       <div className="grid gap-1.5">
         <p className="text-xs font-medium text-muted-foreground">More details</p>
         <ExtraFieldsEditor
+          key={extrasKey}
           prefix="bill_to_extra"
-          initial={bill?.extras ?? []}
+          initial={extras}
           suggestions={BILL_TO_FIELD_SUGGESTIONS}
         />
       </div>
@@ -760,15 +800,14 @@ export function BillToForm({
 }
 
 function useInvoicePatch(orgSlug: string, invoiceId: string, success: string) {
-  const router = useRouter();
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const submit = (formData: FormData) => {
     start(async () => {
       const result = await updateInvoiceAction(orgSlug, invoiceId, formData);
       if (result.error) toast.error(result.error);
       else {
         toast.success(success);
-        router.refresh();
       }
     });
   };
@@ -858,47 +897,67 @@ export function InvoiceTemplatePicker({
   orgSlug,
   invoice,
   templates,
+  defaultAccent,
 }: {
   orgSlug: string;
   invoice: InvoiceRecord;
   templates: InvoiceTemplate[];
+  defaultAccent: string;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
+  const [selected, setSelected] = useOptimistic(invoice.templateId);
+  const [applying, setApplying] = useState<string | null>(null);
+
+  function apply(template: InvoiceTemplate) {
+    setApplying(template.id);
+    const toastId = toast.loading(`Applying ${template.name}…`);
+    start(async () => {
+      setSelected(template.id);
+      const result = await applyInvoiceTemplateAction(orgSlug, invoice.id, template.id);
+      setApplying(null);
+      if (result.error) toast.error(result.error, { id: toastId });
+      else toast.success(`${template.name} look applied`, { id: toastId });
+    });
+  }
+
   return (
-    <div className="grid gap-1.5">
+    <div className="grid grid-cols-3 gap-2">
       {templates.map((template) => {
-        const active = invoice.templateId === template.id;
+        const active = selected === template.id;
+        const loading = pending && applying === template.id;
         return (
           <button
             key={template.id}
             type="button"
             aria-pressed={active}
-            disabled={pending}
-            onClick={() => {
-              start(async () => {
-                const result = await applyInvoiceTemplateAction(orgSlug, invoice.id, template.id);
-                if (result.error) toast.error(result.error);
-                else {
-                  toast.success(`Applied ${template.name}`);
-                  router.refresh();
-                }
-              });
-            }}
+            disabled={pending || active}
+            title={INVOICE_LAYOUT_SPECS[template.layout].description}
+            onClick={() => apply(template)}
             className={cn(
-              "flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm ring-1 transition-colors disabled:opacity-60",
-              active ? "bg-primary/5 ring-2 ring-primary" : "ring-border/60 hover:bg-muted/50",
+              "relative rounded-xl p-1.5 text-left ring-1 transition-all disabled:cursor-default",
+              active ? "bg-primary/5 ring-2 ring-primary" : "ring-border/60 hover:ring-border",
+              pending && !loading && !active && "opacity-50",
             )}
           >
-            <span
-              className="size-6 shrink-0 rounded-md ring-1 ring-black/5"
-              style={{ backgroundColor: template.accentHex || "#1d4ed8" }}
-            />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate font-medium">{template.name}</span>
-              <span className="block text-xs text-muted-foreground capitalize">{template.layout}</span>
+            <span className="relative block">
+              <InvoiceLayoutThumb
+                layout={template.layout}
+                accent={template.accentHex || defaultAccent}
+                className="rounded-md"
+              />
+              {loading ? (
+                <span className="absolute inset-0 flex items-center justify-center rounded-md bg-background/55">
+                  <Loader2 className="size-5 animate-spin text-primary" />
+                </span>
+              ) : null}
             </span>
-            {active ? <Check className="size-4 text-primary" /> : null}
+            <span className="mt-1.5 block truncate px-0.5 text-xs font-medium">{template.name}</span>
+            {active && !loading ? (
+              <span className="absolute top-2.5 right-2.5 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <Check className="size-3" />
+              </span>
+            ) : null}
           </button>
         );
       })}

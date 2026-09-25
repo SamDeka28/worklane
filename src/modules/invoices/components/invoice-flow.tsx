@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import {
   AlarmClock,
   Ban,
@@ -28,6 +27,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { formatDay } from "@/modules/finance/presentation";
+import { useReportInvoiceBusy } from "@/modules/invoices/components/invoice-busy";
 import {
   issueInvoiceAction,
   markInvoiceSentAction,
@@ -121,8 +121,8 @@ export function IssueInvoiceButton({
   disabled?: boolean;
   className?: string;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const [confirmDouble, setConfirmDouble] = useState(false);
   return (
     <Button
@@ -145,7 +145,6 @@ export function IssueInvoiceButton({
           }
           toast.success(`Issued ${result.number ?? "invoice"}`);
           setConfirmDouble(false);
-          router.refresh();
         });
       }}
     >
@@ -321,8 +320,8 @@ function StepCard({
 }
 
 function MarkSentButton({ orgSlug, invoiceId }: { orgSlug: string; invoiceId: string }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   return (
     <Button
       type="button"
@@ -336,7 +335,6 @@ function MarkSentButton({ orgSlug, invoiceId }: { orgSlug: string; invoiceId: st
           if (result.error) toast.error(result.error);
           else {
             toast.success("Marked as sent");
-            router.refresh();
           }
         });
       }}
@@ -357,9 +355,9 @@ export function SendInvoiceDialog({
   balanceLabel: string;
   reminder?: boolean;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
 
   return (
     <>
@@ -393,7 +391,6 @@ export function SendInvoiceDialog({
                 }
                 toast.success(reminder ? `Reminder sent to ${result.to}` : `Emailed ${result.to}`);
                 setOpen(false);
-                router.refresh();
               });
             }}
           >
@@ -451,9 +448,9 @@ export function RecordPaymentDialog({
   invoice: InvoiceRecord;
   balanceMinor: bigint;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -483,7 +480,6 @@ export function RecordPaymentDialog({
                 }
                 toast.success(result.fullyPaid ? "Invoice paid in full" : "Payment recorded");
                 setOpen(false);
-                router.refresh();
               });
             }}
           >

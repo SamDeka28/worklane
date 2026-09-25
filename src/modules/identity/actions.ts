@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { requireSupabase } from "@/shared/db/require-user";
 import { requireOrg, requireWritableOrg } from "@/modules/identity/org";
+import { parseInvoiceBusiness } from "@/modules/invoices/settings";
+import { extraFieldsFromForm } from "@/modules/invoices/types";
 
 export async function signOutAction() {
   const supabase = await requireSupabase();
@@ -60,6 +62,47 @@ export async function updateOrgAction(orgSlug: string, formData: FormData) {
   return { ok: true as const };
 }
 
+/** Studio legal identity; stored with invoice settings so invoices print the same details. */
+export async function updateOrgBusinessAction(orgSlug: string, formData: FormData) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const business = parseInvoiceBusiness({
+    legalName: formData.get("business_legal_name"),
+    address: formData.get("business_address"),
+    email: formData.get("business_email"),
+    phone: formData.get("business_phone"),
+    taxId: formData.get("business_tax_id"),
+    website: formData.get("business_website"),
+    extras: extraFieldsFromForm(formData, "business_extra"),
+  });
+
+  const { data: orgRow, error: loadError } = await ctx.supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", ctx.org.id)
+    .single();
+  if (loadError) return { error: loadError.message };
+
+  const settings =
+    orgRow?.settings && typeof orgRow.settings === "object"
+      ? (orgRow.settings as Record<string, unknown>)
+      : {};
+  const invoice =
+    settings.invoice && typeof settings.invoice === "object"
+      ? (settings.invoice as Record<string, unknown>)
+      : {};
+
+  const { error } = await ctx.supabase
+    .from("organizations")
+    .update({ settings: { ...settings, invoice: { ...invoice, business } } })
+    .eq("id", ctx.org.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/${orgSlug}/settings`);
+  revalidatePath(`/${orgSlug}/invoices`);
+  revalidatePath("/[orgSlug]/invoices/[invoiceId]", "page");
+  return { ok: true as const };
+}
+
 /** Sync display name + Google picture into profiles after OAuth. */
 export async function syncProfileFromAuthUser(user: User) {
   const supabase = await requireSupabase();
@@ -100,11 +143,17 @@ export async function updateProfileAction(orgSlug: string, formData: FormData) {
   const displayName = String(formData.get("display_name") ?? "").trim();
   if (!displayName) return { error: "Display name is required" };
   if (displayName.length > 80) return { error: "Keep the name under 80 characters" };
+  const optional = (key: string, max: number) =>
+    String(formData.get(key) ?? "").trim().slice(0, max) || null;
 
   const { error } = await ctx.supabase
     .from("profiles")
     .update({
       display_name: displayName,
+      job_title: optional("job_title", 80),
+      phone: optional("phone", 40),
+      location: optional("location", 120),
+      address: optional("address", 500),
       updated_at: new Date().toISOString(),
     })
     .eq("id", ctx.userId);

@@ -14,7 +14,10 @@ import {
   moneyFill,
 } from "@/components/studio/chrome";
 import { StatusChip } from "@/components/studio/status-chip";
-import { AddContactSheet } from "@/modules/clients/components/client-forms";
+import {
+  AddContactSheet,
+  EditClientBillingSheet,
+} from "@/modules/clients/components/client-forms";
 import { ClientHubChrome } from "@/modules/clients/components/client-hub-chrome";
 import { clientNextStep } from "@/modules/clients/next-step";
 import {
@@ -25,7 +28,17 @@ import {
 } from "@/modules/clients/queries";
 import type { ClientActivityItem } from "@/modules/clients/types";
 import { cn } from "@/lib/utils";
-import { Activity, BadgeCheck, Receipt, UserPlus } from "lucide-react";
+import {
+  Activity,
+  BadgeCheck,
+  Mail,
+  MapPin,
+  Phone,
+  Receipt,
+  UserPlus,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 import { listClientProjects } from "@/modules/delivery/queries";
 import { CollectComposer } from "@/modules/finance/components/finance-forms";
 import { ChargeRows } from "@/modules/finance/components/charge-board";
@@ -35,6 +48,8 @@ import { loadClientFinance } from "@/modules/finance/queries";
 import { requireOrg } from "@/modules/identity/org";
 import { canDeleteModule, canSeeMoney } from "@/modules/identity/permissions";
 import { CreateDocumentDialog } from "@/modules/documents/components/document-forms";
+import { getClientBillingProfile } from "@/modules/invoices/queries";
+import { EMPTY_BILL_TO, type InvoiceBillTo } from "@/modules/invoices/types";
 import { listDocuments } from "@/modules/documents/queries";
 
 const ACTIVITY_ICON: Record<ClientActivityItem["kind"], typeof Receipt> = {
@@ -74,12 +89,13 @@ export default async function ClientProfilePage({
   const selectedChargeId = typeof query.charge === "string" ? query.charge : undefined;
   const showCollect =
     seeMoney && (query.collect === "1" || Boolean(selectedChargeId));
-  const [contacts, activity, financeLoaded, projects, documents] = await Promise.all([
+  const [contacts, activity, financeLoaded, projects, documents, billing] = await Promise.all([
     listContacts(orgSlug, clientId),
     listClientActivity(orgSlug, clientId),
     seeMoney ? loadClientFinance(orgSlug, clientId) : Promise.resolve(null),
     listClientProjects(orgSlug, clientId),
     listDocuments(orgSlug).catch(() => []),
+    getClientBillingProfile(orgSlug, clientId),
   ]);
   const finance = financeLoaded ?? {
     charges: [],
@@ -108,6 +124,13 @@ export default async function ClientProfilePage({
   const moneyWhole =
     dueMinor + collectedMinor > BigInt(0) ? dueMinor + collectedMinor : BigInt(1);
   const primary = contacts.find((c) => c.isPrimary) ?? contacts[0] ?? null;
+  const billingDraft: InvoiceBillTo = billing ?? {
+    ...EMPTY_BILL_TO,
+    name: client.name,
+    contactName: primary?.name ?? "",
+    email: primary?.email ?? "",
+    phone: primary?.phone ?? "",
+  };
   const moneyStatus =
     dueMinor > BigInt(0) ? "due" : collectedMinor > BigInt(0) ? "paid" : "planning";
 
@@ -454,6 +477,30 @@ export default async function ClientProfilePage({
 
             <SoftCard className="overflow-hidden">
               <InspectorHeader
+                title="Billing details"
+                action={
+                  ctx.canWrite ? (
+                    <EditClientBillingSheet
+                      orgSlug={orgSlug}
+                      clientId={client.id}
+                      initial={billingDraft}
+                      hasSaved={Boolean(billing)}
+                    />
+                  ) : null
+                }
+              />
+              {billing ? (
+                <BillingSummary billing={billing} />
+              ) : (
+                <p className="px-4 py-4 text-sm text-muted-foreground">
+                  Add the legal name, address and tax ID you bill to. New invoices fill it in
+                  automatically.
+                </p>
+              )}
+            </SoftCard>
+
+            <SoftCard className="overflow-hidden">
+              <InspectorHeader
                 title="Contacts"
                 action={
                   ctx.canWrite ? (
@@ -565,6 +612,47 @@ function MetaRow({ label, children }: { label: string; children: ReactNode }) {
     <div className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm">
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 truncate text-right font-medium text-foreground">{children}</dd>
+    </div>
+  );
+}
+
+const BILLING_ICON: [keyof InvoiceBillTo, LucideIcon][] = [
+  ["contactName", UserRound],
+  ["address", MapPin],
+  ["email", Mail],
+  ["phone", Phone],
+];
+
+function BillingSummary({ billing }: { billing: InvoiceBillTo }) {
+  const facts = [
+    ...(billing.taxId ? [{ label: "Tax ID", value: billing.taxId }] : []),
+    ...billing.extras,
+  ];
+  return (
+    <div className="grid gap-2 px-4 py-3.5 text-sm">
+      {billing.name ? <p className="font-semibold tracking-tight">{billing.name}</p> : null}
+      <ul className="grid gap-1">
+        {BILLING_ICON.map(([key, Icon]) => {
+          const value = billing[key];
+          if (typeof value !== "string" || !value.trim()) return null;
+          return (
+            <li key={key} className="flex items-start gap-2 text-muted-foreground">
+              <Icon className="mt-[3px] size-3.5 shrink-0 opacity-70" aria-hidden />
+              <span className="min-w-0 break-words whitespace-pre-line">{value}</span>
+            </li>
+          );
+        })}
+      </ul>
+      {facts.length > 0 ? (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+          {facts.map((fact, index) => (
+            <div key={`${fact.label}-${index}`} className="contents">
+              <dt className="text-muted-foreground">{fact.label || "·"}</dt>
+              <dd className="min-w-0 font-medium break-words">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
     </div>
   );
 }

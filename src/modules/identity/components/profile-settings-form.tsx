@@ -8,6 +8,7 @@ import { AvatarMark } from "@/components/studio/avatar-mark";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   removeAvatarAction,
   updateProfileAction,
@@ -19,11 +20,18 @@ export function ProfileSettingsForm({
   displayName,
   email,
   avatarUrl,
+  details,
 }: {
   orgSlug: string;
   displayName: string;
   email: string | null;
   avatarUrl: string | null;
+  details: {
+    jobTitle: string | null;
+    phone: string | null;
+    location: string | null;
+    address: string | null;
+  };
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -126,6 +134,52 @@ export function ProfileSettingsForm({
             value={email ?? ""}
             disabled
             readOnly
+            className="rounded-2xl"
+          />
+        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Job title" htmlFor="job_title">
+            <Input
+              id="job_title"
+              name="job_title"
+              defaultValue={details.jobTitle ?? ""}
+              maxLength={80}
+              placeholder="Designer, Project lead…"
+              className="rounded-2xl"
+            />
+          </Field>
+          <Field label="Phone" htmlFor="phone">
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              defaultValue={details.phone ?? ""}
+              maxLength={40}
+              className="rounded-2xl"
+            />
+          </Field>
+        </div>
+        <Field label="Location" htmlFor="location" hint="City and country, shown on the team page">
+          <Input
+            id="location"
+            name="location"
+            defaultValue={details.location ?? ""}
+            maxLength={120}
+            placeholder="Bengaluru, India"
+            className="rounded-2xl"
+          />
+        </Field>
+        <Field
+          label="Mailing address"
+          htmlFor="address"
+          hint="Optional. Teammates in your studios can see your profile details."
+        >
+          <Textarea
+            id="address"
+            name="address"
+            rows={3}
+            defaultValue={details.address ?? ""}
+            maxLength={500}
             className="rounded-2xl"
           />
         </Field>

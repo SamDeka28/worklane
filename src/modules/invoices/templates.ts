@@ -1,4 +1,5 @@
 import { requireOrg } from "@/modules/identity/org";
+import { asInvoiceLayout } from "@/modules/invoices/layouts";
 import type { InvoiceLayout } from "@/modules/invoices/settings";
 
 export type InvoiceTemplateStarterLine = {
@@ -45,7 +46,7 @@ type TemplateRow = {
 };
 
 function asLayout(value: string): InvoiceLayout {
-  return value === "minimal" || value === "bold" ? value : "classic";
+  return asInvoiceLayout(value);
 }
 
 function mapStarterLines(raw: unknown): InvoiceTemplateStarterLine[] {
@@ -150,6 +151,54 @@ export async function ensureDefaultInvoiceTemplates(orgSlug: string): Promise<In
       layout: "bold",
       is_default: false,
       terms: "Net 14. Late fees may apply after the due date.",
+    },
+    {
+      name: "Modern",
+      layout: "modern",
+      is_default: false,
+      terms: "Payment due within 14 days of invoice date.",
+    },
+    {
+      name: "Elegant",
+      layout: "elegant",
+      is_default: false,
+      terms: "With thanks for your business.",
+    },
+    {
+      name: "Studio",
+      layout: "studio",
+      is_default: false,
+      terms: "Net 14. Please quote the invoice number with your payment.",
+    },
+    {
+      name: "Corporate",
+      layout: "corporate",
+      is_default: false,
+      terms: "Payment due within 30 days. Late payments may incur interest.",
+    },
+    {
+      name: "Swiss",
+      layout: "swiss",
+      is_default: false,
+      terms: "Payment due within 14 days.",
+    },
+    {
+      name: "Edge",
+      layout: "edge",
+      is_default: false,
+      terms: "Net 14. Thank you for working with us.",
+    },
+    {
+      name: "Letterhead",
+      layout: "letterhead",
+      is_default: false,
+      terms: "Payment due within 30 days of invoice date.",
+    },
+    {
+      name: "Ribbon",
+      layout: "ribbon",
+      is_default: false,
+      terms: "Thanks! Payment due within 14 days.",
     },
   ];
 

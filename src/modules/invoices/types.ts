@@ -94,6 +94,20 @@ export function parseBillTo(raw: unknown): InvoiceBillTo | null {
   };
 }
 
+/** Reads the shared `bill_to_*` form fields (invoice "Billed to" and client billing details). */
+export function billToFromForm(formData: FormData): InvoiceBillTo {
+  const field = (key: string, max: number) => String(formData.get(key) ?? "").trim().slice(0, max);
+  return {
+    name: field("bill_to_name", 200),
+    contactName: field("bill_to_contact", 200),
+    email: field("bill_to_email", 200),
+    phone: field("bill_to_phone", 60),
+    address: field("bill_to_address", 500),
+    taxId: field("bill_to_tax_id", 80),
+    extras: extraFieldsFromForm(formData, "bill_to_extra"),
+  };
+}
+
 export const INVOICE_PAYMENT_METHODS = ["bank", "stripe", "upwork", "other"] as const;
 export type InvoicePaymentMethod = (typeof INVOICE_PAYMENT_METHODS)[number];
 

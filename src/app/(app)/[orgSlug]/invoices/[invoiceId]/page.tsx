@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import { StatusChip } from "@/components/studio/status-chip";
+import { STUDIO_DRAWER_CLEARANCE, StudioDrawer } from "@/components/studio/studio-drawer";
 import { getClient } from "@/modules/clients/queries";
 import { formatDay } from "@/modules/finance/presentation";
 import { resolveInvoiceBrand, loadOrgInvoiceConfig } from "@/modules/invoices/config";
@@ -32,6 +33,10 @@ import {
   InvoiceTemplatePicker,
 } from "@/modules/invoices/components/invoice-forms";
 import { InvoiceSettingsDialog } from "@/modules/invoices/components/invoice-settings-form";
+import {
+  InvoiceBusyOverlay,
+  InvoiceBusyProvider,
+} from "@/modules/invoices/components/invoice-busy";
 import { InvoicePreview } from "@/modules/invoices/preview";
 import {
   getClientBillingProfile,
@@ -210,213 +215,228 @@ export default async function InvoiceDetailPage({
   const clientName = client?.name ?? "Client";
 
   return (
-    <WorkSurface>
-      <StudioToolbar
-        title={invoice.number}
-        subtitle={
-          <span className="inline-flex items-center gap-2">
-            <Link
-              href={`/${orgSlug}/invoices`}
-              className="inline-flex items-center gap-1 font-medium transition-colors hover:text-foreground"
-            >
-              <ArrowLeft className="size-3.5" />
-              Invoices
-            </Link>
-            <span aria-hidden>/</span>
-            {client ? (
+    <InvoiceBusyProvider>
+      <WorkSurface>
+        <StudioToolbar
+          title={invoice.number}
+          subtitle={
+            <span className="inline-flex items-center gap-2">
               <Link
-                href={`/${orgSlug}/clients/${client.id}`}
-                className="truncate transition-colors hover:text-foreground"
+                href={`/${orgSlug}/invoices`}
+                className="inline-flex items-center gap-1 font-medium transition-colors hover:text-foreground"
               >
-                {client.name}
+                <ArrowLeft className="size-3.5" />
+                Invoices
               </Link>
-            ) : (
-              <span>Client</span>
-            )}
-          </span>
-        }
-        actions={
-          <>
-            <InvoiceSettingsDialog
-              orgSlug={orgSlug}
-              orgId={ctx.org.id}
-              config={config}
-              logoUrl={orgBrand.logoUrl ?? null}
-              templates={templates}
-              canWrite={ctx.canWrite}
-              label="Settings"
-            />
-            <InvoiceActions orgSlug={orgSlug} invoice={invoice} canWrite={ctx.canWrite} />
-          </>
-        }
-      />
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/40 px-4 py-2.5 text-sm sm:px-6">
-            <StatusChip tone={STATUS_TONE[status]}>{INVOICE_DISPLAY_LABELS[status]}</StatusChip>
-            <span className="text-muted-foreground">
-              {invoice.issuedOn ? `Issued ${formatDay(invoice.issuedOn)}` : "Not issued yet"}
-              {invoice.dueOn ? ` · Due ${formatDay(invoice.dueOn)}` : ""}
-              {invoice.sentAt ? ` · Sent ${formatDay(invoice.sentAt.slice(0, 10))}` : ""}
-            </span>
-            <span className="ml-auto flex items-center gap-3 text-muted-foreground">
-              <span>
-                Total{" "}
-                <span className="font-semibold text-foreground tabular-nums">{money(total)}</span>
-              </span>
-              {issued && status !== "void" ? (
-                <span>
-                  Balance{" "}
-                  <span
-                    className={
-                      balance > BigInt(0)
-                        ? "font-semibold text-foreground tabular-nums"
-                        : "font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
-                    }
-                  >
-                    {money(balance)}
-                  </span>
-                </span>
-              ) : null}
-            </span>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[#ebe9e4] dark:bg-black/25">
-            <div className="mx-auto w-full max-w-[52rem] px-3 py-6 sm:px-8 sm:py-10">
-              <InvoicePreview
-                invoice={invoice}
-                clientName={clientName}
-                brand={brand}
-                paidMinor={paidMinor}
-              />
-            </div>
-          </div>
-        </div>
-
-        <aside className="flex max-h-[55vh] w-full shrink-0 flex-col overflow-y-auto border-t border-border/50 bg-card lg:max-h-none lg:w-[22rem] lg:border-t-0 lg:border-l xl:w-[24rem]">
-          <div className="divide-y divide-border/40">
-            <section className="grid gap-4 px-5 py-5">
-              <InvoiceSteps invoice={invoice} status={status} />
-              <InvoiceNextStep
-                orgSlug={orgSlug}
-                invoice={invoice}
-                status={status}
-                paidMinor={paidMinor}
-                canWrite={ctx.canWrite}
-                canRecordPayment={ctx.canWrite && canWriteModule(ctx.permissions, "finance")}
-              />
-            </section>
-
-            {editable ? (
-              <div className="divide-y divide-border/40">
-                <StudioSection
-                  icon={Building2}
-                  title="Billed to"
-                  done={Boolean(invoice.billTo?.name)}
-                  summary={
-                    [invoice.billTo?.name || clientName, invoice.billTo?.email]
-                      .filter(Boolean)
-                      .join(" · ") || "Add billing details"
-                  }
+              <span aria-hidden>/</span>
+              {client ? (
+                <Link
+                  href={`/${orgSlug}/clients/${client.id}`}
+                  className="truncate transition-colors hover:text-foreground"
                 >
-                  <BillToForm
-                    orgSlug={orgSlug}
+                  {client.name}
+                </Link>
+              ) : (
+                <span>Client</span>
+              )}
+            </span>
+          }
+          actions={
+            <>
+              <InvoiceSettingsDialog
+                orgSlug={orgSlug}
+                orgId={ctx.org.id}
+                config={config}
+                logoUrl={orgBrand.logoUrl ?? null}
+                templates={templates}
+                canWrite={ctx.canWrite}
+                label="Settings"
+              />
+              <InvoiceActions orgSlug={orgSlug} invoice={invoice} canWrite={ctx.canWrite} />
+            </>
+          }
+        />
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          <div
+            className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${STUDIO_DRAWER_CLEARANCE}`}
+          >
+            <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/40 px-4 py-2.5 text-sm sm:px-6">
+              <StatusChip tone={STATUS_TONE[status]}>{INVOICE_DISPLAY_LABELS[status]}</StatusChip>
+              <span className="text-muted-foreground">
+                {invoice.issuedOn ? `Issued ${formatDay(invoice.issuedOn)}` : "Not issued yet"}
+                {invoice.dueOn ? ` · Due ${formatDay(invoice.dueOn)}` : ""}
+                {invoice.sentAt ? ` · Sent ${formatDay(invoice.sentAt.slice(0, 10))}` : ""}
+              </span>
+              <span className="ml-auto flex items-center gap-3 text-muted-foreground">
+                <span>
+                  Total{" "}
+                  <span className="font-semibold text-foreground tabular-nums">{money(total)}</span>
+                </span>
+                {issued && status !== "void" ? (
+                  <span>
+                    Balance{" "}
+                    <span
+                      className={
+                        balance > BigInt(0)
+                          ? "font-semibold text-foreground tabular-nums"
+                          : "font-semibold text-emerald-600 tabular-nums dark:text-emerald-400"
+                      }
+                    >
+                      {money(balance)}
+                    </span>
+                  </span>
+                ) : null}
+              </span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#ebe9e4] dark:bg-black/25">
+              <div className="mx-auto w-full max-w-[52rem] px-3 py-6 sm:px-8 sm:py-10">
+                <InvoiceBusyOverlay>
+                  <InvoicePreview
                     invoice={invoice}
                     clientName={clientName}
-                    contacts={contacts}
-                    hasClientDefault={Boolean(clientBilling?.name)}
+                    brand={brand}
+                    paidMinor={paidMinor}
                   />
-                </StudioSection>
-                <StudioSection
-                  icon={ListPlus}
-                  title="Items"
-                  done={invoice.lines.length > 0}
-                  defaultOpen
-                  summary={
-                    invoice.lines.length
-                      ? `${invoice.lines.length} item${invoice.lines.length === 1 ? "" : "s"} · ${money(total)}`
-                      : "No items yet"
-                  }
-                >
-                  <InvoiceLineEditor orgSlug={orgSlug} invoice={invoice} />
-                  <AddInvoiceLineForm
-                    orgSlug={orgSlug}
-                    invoiceId={invoice.id}
-                    currency={invoice.currency}
-                    defaultTaxBps={config.defaultTaxBps}
-                    suggestions={suggestions}
-                  />
-                </StudioSection>
-                <StudioSection
-                  icon={CalendarDays}
-                  title="Dates & reference"
-                  done={Boolean(invoice.dueOn)}
-                  summary={
-                    [
-                      invoice.dueOn ? `Due ${formatDay(invoice.dueOn)}` : "Due on receipt",
-                      invoice.reference,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")
-                  }
-                >
-                  <InvoiceDatesForm orgSlug={orgSlug} invoice={invoice} />
-                </StudioSection>
-                <StudioSection
-                  icon={Landmark}
-                  title="Payment details & notes"
-                  done={Boolean(invoice.paymentInstructions)}
-                  summary={
-                    [
-                      invoice.paymentInstructions ? "Payment details" : null,
-                      invoice.memo ? "Notes" : null,
-                      invoice.terms ? "Terms" : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || "How the client should pay you"
-                  }
-                >
-                  <InvoiceNotesForm orgSlug={orgSlug} invoice={invoice} />
-                </StudioSection>
-                <StudioSection
-                  icon={Store}
-                  title="Billed by"
-                  done={Boolean(brand.business.legalName || brand.business.address)}
-                  summary={
-                    [brand.business.legalName || brand.orgName, brand.business.taxId]
-                      .filter(Boolean)
-                      .join(" · ")
-                  }
-                >
-                  <BilledBySummary brand={brand} orgSlug={orgSlug} invoiceId={invoice.id} />
-                </StudioSection>
-                {templates.length > 0 ? (
+                </InvoiceBusyOverlay>
+              </div>
+            </div>
+          </div>
+
+          <StudioDrawer
+            label={editable ? "Edit invoice" : "Invoice actions"}
+            summary={
+              issued && status !== "void"
+                ? `${INVOICE_DISPLAY_LABELS[status]} · Balance ${money(balance)}`
+                : `${INVOICE_DISPLAY_LABELS[status]} · ${money(total)}`
+            }
+            className="lg:w-[22rem] lg:shrink-0 lg:border-l lg:border-border/50 lg:bg-card xl:w-[24rem]"
+          >
+            <div className="divide-y divide-border/40">
+              <section className="grid gap-4 px-5 py-5">
+                <InvoiceSteps invoice={invoice} status={status} />
+                <InvoiceNextStep
+                  orgSlug={orgSlug}
+                  invoice={invoice}
+                  status={status}
+                  paidMinor={paidMinor}
+                  canWrite={ctx.canWrite}
+                  canRecordPayment={ctx.canWrite && canWriteModule(ctx.permissions, "finance")}
+                />
+              </section>
+
+              {editable ? (
+                <div className="divide-y divide-border/40">
                   <StudioSection
-                    icon={Palette}
-                    title="Look"
+                    icon={Building2}
+                    title="Billed to"
+                    done={Boolean(invoice.billTo?.name)}
                     summary={
-                      templates.find((template) => template.id === invoice.templateId)?.name ??
-                      "Workspace default"
+                      [invoice.billTo?.name || clientName, invoice.billTo?.email]
+                        .filter(Boolean)
+                        .join(" · ") || "Add billing details"
                     }
                   >
-                    <InvoiceTemplatePicker
+                    <BillToForm
                       orgSlug={orgSlug}
                       invoice={invoice}
-                      templates={templates}
+                      clientName={clientName}
+                      contacts={contacts}
+                      clientBilling={clientBilling}
                     />
                   </StudioSection>
-                ) : null}
-              </div>
-            ) : null}
+                  <StudioSection
+                    icon={ListPlus}
+                    title="Items"
+                    done={invoice.lines.length > 0}
+                    defaultOpen
+                    summary={
+                      invoice.lines.length
+                        ? `${invoice.lines.length} item${invoice.lines.length === 1 ? "" : "s"} · ${money(total)}`
+                        : "No items yet"
+                    }
+                  >
+                    <InvoiceLineEditor orgSlug={orgSlug} invoice={invoice} />
+                    <AddInvoiceLineForm
+                      orgSlug={orgSlug}
+                      invoiceId={invoice.id}
+                      currency={invoice.currency}
+                      defaultTaxBps={config.defaultTaxBps}
+                      suggestions={suggestions}
+                    />
+                  </StudioSection>
+                  <StudioSection
+                    icon={CalendarDays}
+                    title="Dates & reference"
+                    done={Boolean(invoice.dueOn)}
+                    summary={
+                      [
+                        invoice.dueOn ? `Due ${formatDay(invoice.dueOn)}` : "Due on receipt",
+                        invoice.reference,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                    }
+                  >
+                    <InvoiceDatesForm orgSlug={orgSlug} invoice={invoice} />
+                  </StudioSection>
+                  <StudioSection
+                    icon={Landmark}
+                    title="Payment details & notes"
+                    done={Boolean(invoice.paymentInstructions)}
+                    summary={
+                      [
+                        invoice.paymentInstructions ? "Payment details" : null,
+                        invoice.memo ? "Notes" : null,
+                        invoice.terms ? "Terms" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "How the client should pay you"
+                    }
+                  >
+                    <InvoiceNotesForm orgSlug={orgSlug} invoice={invoice} />
+                  </StudioSection>
+                  <StudioSection
+                    icon={Store}
+                    title="Billed by"
+                    done={Boolean(brand.business.legalName || brand.business.address)}
+                    summary={
+                      [brand.business.legalName || brand.orgName, brand.business.taxId]
+                        .filter(Boolean)
+                        .join(" · ")
+                    }
+                  >
+                    <BilledBySummary brand={brand} orgSlug={orgSlug} invoiceId={invoice.id} />
+                  </StudioSection>
+                  {templates.length > 0 ? (
+                    <StudioSection
+                      icon={Palette}
+                      title="Look"
+                      summary={
+                        templates.find((template) => template.id === invoice.templateId)?.name ??
+                        "Workspace default"
+                      }
+                    >
+                      <InvoiceTemplatePicker
+                        orgSlug={orgSlug}
+                        invoice={invoice}
+                        templates={templates}
+                        defaultAccent={orgBrand.accentHex}
+                      />
+                    </StudioSection>
+                  ) : null}
+                </div>
+              ) : null}
 
-            {issued ? (
-              <AsideSection title="Payments" meta={paidMinor > BigInt(0) ? money(paidMinor) : null}>
-                <InvoicePaymentsList invoice={invoice} payments={payments} paidMinor={paidMinor} />
-              </AsideSection>
-            ) : null}
-          </div>
-        </aside>
-      </div>
-    </WorkSurface>
+              {issued ? (
+                <AsideSection title="Payments" meta={paidMinor > BigInt(0) ? money(paidMinor) : null}>
+                  <InvoicePaymentsList invoice={invoice} payments={payments} paidMinor={paidMinor} />
+                </AsideSection>
+              ) : null}
+            </div>
+          </StudioDrawer>
+        </div>
+      </WorkSurface>
+    </InvoiceBusyProvider>
   );
 }

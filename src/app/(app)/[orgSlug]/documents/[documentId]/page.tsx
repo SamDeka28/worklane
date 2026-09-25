@@ -21,10 +21,12 @@ export default async function DocumentDetailPage({
   const { orgSlug, documentId } = await params;
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
-  const document = await getDocument(orgSlug, documentId);
+  const [document, versions] = await Promise.all([
+    getDocument(orgSlug, documentId),
+    listDocumentVersions(orgSlug, documentId),
+  ]);
   if (!document) notFound();
 
-  const versions = await listDocumentVersions(orgSlug, documentId);
   const versionId =
     typeof query.version === "string" && versions.some((row) => row.id === query.version)
       ? query.version
@@ -32,8 +34,18 @@ export default async function DocumentDetailPage({
   const version = versions.find((row) => row.id === versionId) ?? versions[0];
   if (!version) notFound();
 
-  const [signatures, clients, projects, refs, primaryContacts, sends, clientContacts, feedback] =
-    await Promise.all([
+  const [
+    signatures,
+    clients,
+    projects,
+    refs,
+    primaryContacts,
+    sends,
+    clientContacts,
+    feedback,
+    milestones,
+    tasks,
+  ] = await Promise.all([
       listSignaturesForVersion(orgSlug, version.id),
       listClients(orgSlug),
       listProjects(orgSlug),
@@ -44,12 +56,9 @@ export default async function DocumentDetailPage({
         ? listClientBillingContacts(orgSlug, document.clientId)
         : Promise.resolve([]),
       listDocumentFeedback(orgSlug, documentId),
+      document.projectId ? listMilestones(orgSlug, document.projectId) : Promise.resolve([]),
+      document.projectId ? listTasks(orgSlug, document.projectId) : Promise.resolve([]),
     ]);
-
-  const milestones = document.projectId
-    ? await listMilestones(orgSlug, document.projectId)
-    : [];
-  const tasks = document.projectId ? await listTasks(orgSlug, document.projectId) : [];
 
   const clientName = clients.find((c) => c.id === document.clientId)?.name ?? null;
   const project = projects.find((p) => p.id === document.projectId);

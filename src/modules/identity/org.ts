@@ -35,6 +35,10 @@ export type OrgContext = {
     email: string | null;
     displayName: string | null;
     avatarUrl: string | null;
+    jobTitle: string | null;
+    phone: string | null;
+    location: string | null;
+    address: string | null;
   };
 };
 
@@ -115,7 +119,7 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
       .maybeSingle(),
     supabase
       .from("profiles")
-      .select("email, display_name, avatar_url, theme")
+      .select("email, display_name, avatar_url, theme, job_title, phone, location, address")
       .eq("id", user.id)
       .maybeSingle(),
   ]);
@@ -160,6 +164,10 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
         (user.user_metadata?.avatar_url as string | undefined) ??
         (user.user_metadata?.picture as string | undefined) ??
         null,
+      jobTitle: (profile?.job_title as string | null) ?? null,
+      phone: (profile?.phone as string | null) ?? null,
+      location: (profile?.location as string | null) ?? null,
+      address: (profile?.address as string | null) ?? null,
     },
   };
 });
@@ -233,18 +241,28 @@ export async function listOrgMembers(slug: string) {
   const userIds = (data ?? []).map((row) => row.user_id as string);
   const profileMap = new Map<
     string,
-    { email: string; displayName: string | null; avatarUrl: string | null }
+    {
+      email: string;
+      displayName: string | null;
+      avatarUrl: string | null;
+      jobTitle: string | null;
+      phone: string | null;
+      location: string | null;
+    }
   >();
   if (userIds.length > 0) {
     const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, email, display_name, avatar_url")
+      .select("id, email, display_name, avatar_url, job_title, phone, location")
       .in("id", userIds);
     for (const profile of profiles ?? []) {
       profileMap.set(profile.id as string, {
         email: profile.email as string,
         displayName: (profile.display_name as string | null) ?? null,
         avatarUrl: (profile.avatar_url as string | null) ?? null,
+        jobTitle: (profile.job_title as string | null) ?? null,
+        phone: (profile.phone as string | null) ?? null,
+        location: (profile.location as string | null) ?? null,
       });
     }
   }
@@ -259,6 +277,9 @@ export async function listOrgMembers(slug: string) {
       email: profile?.email ?? null,
       displayName: profile?.displayName ?? null,
       avatarUrl: profile?.avatarUrl ?? null,
+      jobTitle: profile?.jobTitle ?? null,
+      phone: profile?.phone ?? null,
+      location: profile?.location ?? null,
       createdAt: row.created_at as string,
       isYou: row.user_id === userId,
       permissions: parseMemberPermissions(row.permissions),

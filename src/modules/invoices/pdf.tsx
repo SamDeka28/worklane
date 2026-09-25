@@ -1,7 +1,25 @@
-import { Document, Image, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import {
+  Circle,
+  Document,
+  Image,
+  Page,
+  Path,
+  Rect,
+  StyleSheet,
+  Svg,
+  Text,
+  View,
+  pdf,
+} from "@react-pdf/renderer";
+import { invoiceLayoutSpec } from "@/modules/invoices/layouts";
 import type { InvoiceBrand } from "@/modules/invoices/settings";
 import type { InvoiceRecord } from "@/modules/invoices/types";
-import { buildInvoiceView, type InvoiceParty, type InvoiceView } from "@/modules/invoices/view-model";
+import {
+  buildInvoiceView,
+  type InvoiceParty,
+  type InvoicePartyLineKind,
+  type InvoiceView,
+} from "@/modules/invoices/view-model";
 
 type PdfProps = {
   invoice: InvoiceRecord;
@@ -33,13 +51,14 @@ function tint(hex: string, amount: number) {
 
 export function InvoicePdfDocument({ invoice, clientName, brand, paidMinor }: PdfProps) {
   const view = buildInvoiceView({ invoice, clientName, brand, paidMinor });
-  const { accent, layout } = view;
+  const { accent } = view;
+  const spec = invoiceLayoutSpec(view.layout);
   const soft = tint(accent, 0.08);
 
   return (
     <Document title={`Invoice ${view.number}`} author={view.orgName}>
-      <Page size="A4" style={s.page}>
-        {layout === "classic" ? <View style={[s.topBar, { backgroundColor: accent }]} fixed /> : null}
+      <Page size="A4" style={[s.page, spec.serif ? { fontFamily: "Times-Roman" } : {}]}>
+        {spec.topBar ? <View style={[s.topBar, { backgroundColor: accent }]} fixed /> : null}
         <Header view={view} />
 
         <View style={s.body}>
@@ -100,9 +119,10 @@ export function InvoicePdfDocument({ invoice, clientName, brand, paidMinor }: Pd
             `${view.footer}   ·   ${view.number}   ·   Page ${pageNumber} of ${totalPages}`
           }
         />
-        {layout === "classic" ? (
+        {spec.bottomBar ? (
           <View style={[s.bottomBar, { backgroundColor: accent }]} fixed />
         ) : null}
+        {spec.sideBar ? <View style={[s.sideBar, { backgroundColor: accent }]} fixed /> : null}
       </Page>
     </Document>
   );
@@ -118,24 +138,95 @@ function Logo({ view, light }: { view: InvoiceView; light?: boolean }) {
 }
 
 function Header({ view }: { view: InvoiceView }) {
-  if (view.layout === "bold") {
+  const spec = invoiceLayoutSpec(view.layout);
+  const accent = view.accent;
+
+  if (spec.header === "band") {
     return (
-      <View style={[s.banner, { backgroundColor: view.accent }]}>
-        <Logo view={view} light />
-        <View style={{ alignItems: "flex-end" }}>
+      <View>
+        <View style={[s.banner, { backgroundColor: spec.band === "ink" ? INK : accent }]}>
+          <Logo view={view} light />
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={s.bannerTitle}>INVOICE</Text>
+            <Text style={s.bannerNumber}># {view.number}</Text>
+          </View>
+        </View>
+        {spec.band === "ink" ? <View style={{ height: 4, backgroundColor: accent }} /> : null}
+      </View>
+    );
+  }
+
+  if (spec.header === "block") {
+    return (
+      <View style={s.blockHeader}>
+        <View style={{ justifyContent: "center", paddingTop: 34 }}>
+          <Logo view={view} />
+        </View>
+        <View style={[s.titleBlock, { backgroundColor: accent }]}>
           <Text style={s.bannerTitle}>INVOICE</Text>
           <Text style={s.bannerNumber}># {view.number}</Text>
         </View>
       </View>
     );
   }
-  const minimal = view.layout === "minimal";
+
+  if (spec.header === "letterhead") {
+    return (
+      <View style={s.letterhead}>
+        <View style={{ alignItems: "center" }}>
+          <Logo view={view} />
+          {view.footer ? <Text style={s.letterheadLine}>{t(view.footer)}</Text> : null}
+        </View>
+        <View style={{ marginTop: 14, height: 1.75, backgroundColor: accent }} />
+        <View style={{ marginTop: 2, height: 0.6, backgroundColor: accent }} />
+        <View style={s.letterheadTitleRow}>
+          <Text style={[s.minimalTitle, { color: accent }]}>INVOICE</Text>
+          <Text style={[s.minimalNumber, { marginTop: 0 }]}># {view.number}</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (spec.header === "ribbon") {
+    return (
+      <View style={s.header}>
+        <View>
+          <Text style={[s.ribbon, { backgroundColor: accent }]}>INVOICE</Text>
+          <Text style={[s.minimalNumber, { marginTop: 8 }]}># {view.number}</Text>
+        </View>
+        <Logo view={view} />
+      </View>
+    );
+  }
+
+  if (spec.header === "centered") {
+    return (
+      <View style={s.centeredHeader}>
+        <Logo view={view} />
+        <View style={s.centeredTitleRow}>
+          <View style={[s.centeredRule, { backgroundColor: accent }]} />
+          <Text style={[s.centeredTitle, { color: accent }]}>INVOICE</Text>
+          <View style={[s.centeredRule, { backgroundColor: accent }]} />
+        </View>
+        <Text style={s.minimalNumber}>No. {view.number}</Text>
+      </View>
+    );
+  }
+
+  const tinted = spec.header === "tint";
+  const small = spec.title === "small";
   return (
-    <View style={s.header}>
+    <View style={[s.header, tinted ? { backgroundColor: tint(accent, 0.07), paddingBottom: 24 } : {}]}>
       <Logo view={view} />
       <View style={{ alignItems: "flex-end" }}>
-        <Text style={minimal ? [s.minimalTitle, { color: view.accent }] : s.title}>INVOICE</Text>
-        <Text style={minimal ? s.minimalNumber : s.number}># {view.number}</Text>
+        <Text
+          style={
+            small ? [s.minimalTitle, { color: accent }] : [s.title, tinted ? { color: accent } : {}]
+          }
+        >
+          INVOICE
+        </Text>
+        <Text style={small ? s.minimalNumber : s.number}># {view.number}</Text>
       </View>
     </View>
   );
@@ -143,7 +234,7 @@ function Header({ view }: { view: InvoiceView }) {
 
 function Meta({ view, soft }: { view: InvoiceView; soft: string }) {
   const items = view.meta.filter((item) => item.label !== "Invoice no.");
-  const minimal = view.layout === "minimal";
+  const minimal = invoiceLayoutSpec(view.layout).meta === "rules";
   return (
     <View style={[s.meta, minimal ? s.metaMinimal : {}]}>
       {items.map((item, index) => (
@@ -165,15 +256,55 @@ function Meta({ view, soft }: { view: InvoiceView; soft: string }) {
   );
 }
 
+/** Lucide outlines (24px grid), drawn as vectors so they stay crisp in the PDF. */
+function PartyIcon({ kind, color }: { kind: InvoicePartyLineKind; color: string }) {
+  const stroke = { stroke: color, strokeWidth: 2, fill: "none" } as const;
+  return (
+    <Svg viewBox="0 0 24 24" style={s.partyIcon}>
+      {kind === "contact" ? (
+        <>
+          <Circle cx="12" cy="8" r="5" {...stroke} />
+          <Path d="M20 21a8 8 0 0 0-16 0" {...stroke} />
+        </>
+      ) : kind === "address" ? (
+        <>
+          <Path
+            d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"
+            {...stroke}
+          />
+          <Circle cx="12" cy="10" r="3" {...stroke} />
+        </>
+      ) : kind === "email" ? (
+        <>
+          <Rect x="2" y="4" width="20" height="16" rx="2" {...stroke} />
+          <Path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" {...stroke} />
+        </>
+      ) : kind === "phone" ? (
+        <Path
+          d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"
+          {...stroke}
+        />
+      ) : (
+        <>
+          <Circle cx="12" cy="12" r="10" {...stroke} />
+          <Path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" {...stroke} />
+          <Path d="M2 12h20" {...stroke} />
+        </>
+      )}
+    </Svg>
+  );
+}
+
 function Party({ party, accent }: { party: InvoiceParty; accent: string }) {
   return (
     <View style={s.party}>
       <Text style={[s.label, { color: accent }]}>{party.label}</Text>
       <Text style={s.partyName}>{t(party.name)}</Text>
       {party.lines.map((line, index) => (
-        <Text key={index} style={s.partyLine}>
-          {t(line)}
-        </Text>
+        <View key={index} style={s.partyLineRow}>
+          <PartyIcon kind={line.kind} color={FAINT} />
+          <Text style={s.partyLine}>{t(line.text)}</Text>
+        </View>
       ))}
       {party.facts.length > 0 ? (
         <View style={{ marginTop: 4 }}>
@@ -190,18 +321,34 @@ function Party({ party, accent }: { party: InvoiceParty; accent: string }) {
 }
 
 function Lines({ view, soft }: { view: InvoiceView; soft: string }) {
+  const head = invoiceLayoutSpec(view.layout).tableHead;
   const headBg =
-    view.layout === "bold" ? view.accent : view.layout === "classic" ? soft : undefined;
+    head === "accent" ? view.accent : head === "ink" ? INK : head === "tint" ? soft : undefined;
   const headColor =
-    view.layout === "bold" ? "#fff" : view.layout === "classic" ? view.accent : INK;
+    head === "accent" || head === "ink"
+      ? "#fff"
+      : head === "tint" || head === "underline"
+        ? view.accent
+        : INK;
   const headText = [s.headText, { color: headColor }];
+  const headLines =
+    head === "underline"
+      ? { borderBottomWidth: 2, borderBottomColor: view.accent }
+      : head === "fine"
+        ? {
+            borderTopWidth: 0.75,
+            borderTopColor: view.accent,
+            borderBottomWidth: 0.75,
+            borderBottomColor: view.accent,
+          }
+        : s.headMinimal;
   return (
     <View style={s.table}>
       <View
         style={[
           s.row,
           s.head,
-          headBg ? { backgroundColor: headBg, borderBottomWidth: 0 } : s.headMinimal,
+          headBg ? { backgroundColor: headBg, borderBottomWidth: 0 } : headLines,
         ]}
         fixed
       >
@@ -232,7 +379,9 @@ function Lines({ view, soft }: { view: InvoiceView; soft: string }) {
 }
 
 function Totals({ view }: { view: InvoiceView }) {
-  const minimal = view.layout === "minimal";
+  const due = invoiceLayoutSpec(view.layout).due;
+  const minimal = due === "rule";
+  const outline = due === "outline";
   return (
     <View style={s.totals}>
       {view.totals.map((row) => (
@@ -256,13 +405,20 @@ function Totals({ view }: { view: InvoiceView }) {
           s.dueBox,
           minimal
             ? { borderTopWidth: 2, borderTopColor: INK, paddingHorizontal: 0 }
-            : { backgroundColor: view.accent },
+            : outline
+              ? { borderWidth: 1.25, borderColor: view.accent }
+              : { backgroundColor: due === "ink" ? INK : view.accent },
         ]}
       >
-        <Text style={[s.dueLabel, minimal ? { color: INK } : { color: "#fff" }]}>
+        <Text
+          style={[
+            s.dueLabel,
+            minimal ? { color: INK } : outline ? { color: view.accent } : { color: "#fff" },
+          ]}
+        >
           {view.balanceLabel.toUpperCase()}
         </Text>
-        <Text style={[s.dueValue, minimal ? { color: view.accent } : { color: "#fff" }]}>
+        <Text style={[s.dueValue, minimal || outline ? { color: view.accent } : { color: "#fff" }]}>
           {t(view.balanceDue)}
         </Text>
       </View>
@@ -290,10 +446,10 @@ const s = StyleSheet.create({
   logo: { width: 120, height: 42, objectFit: "contain" },
   logoCard: { backgroundColor: "#ffffff", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   orgName: { fontSize: 15, fontWeight: 700, color: INK },
-  title: { fontSize: 24, letterSpacing: 3, color: INK, fontWeight: 700 },
-  number: { marginTop: 4, fontSize: 10, color: MUTED },
+  title: { fontSize: 24, lineHeight: 1.2, letterSpacing: 3, color: INK, fontWeight: 700 },
+  number: { marginTop: 6, fontSize: 10, lineHeight: 1.2, color: MUTED },
   minimalTitle: { fontSize: 10, letterSpacing: 4, fontWeight: 700 },
-  minimalNumber: { marginTop: 3, fontSize: 17, color: INK, fontWeight: 700 },
+  minimalNumber: { marginTop: 3, fontSize: 17, lineHeight: 1.2, color: INK, fontWeight: 700 },
   banner: {
     paddingHorizontal: 44,
     paddingVertical: 28,
@@ -301,8 +457,41 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  bannerTitle: { color: "#fff", fontSize: 22, letterSpacing: 4, fontWeight: 700 },
-  bannerNumber: { color: "#fff", fontSize: 10, marginTop: 4, opacity: 0.85 },
+  sideBar: { position: "absolute", top: 0, bottom: 0, left: 0, width: 6 },
+  letterhead: { paddingHorizontal: 44, paddingTop: 36 },
+  letterheadLine: { marginTop: 6, fontSize: 8, color: MUTED, lineHeight: 1.2 },
+  letterheadTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    marginTop: 14,
+  },
+  ribbon: {
+    alignSelf: "flex-start",
+    color: "#fff",
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 4,
+    lineHeight: 1.2,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  blockHeader: { flexDirection: "row", justifyContent: "space-between", paddingLeft: 44 },
+  titleBlock: {
+    alignItems: "flex-end",
+    justifyContent: "flex-end",
+    paddingHorizontal: 44,
+    paddingTop: 40,
+    paddingBottom: 18,
+    borderBottomLeftRadius: 18,
+  },
+  centeredHeader: { alignItems: "center", paddingHorizontal: 44, paddingTop: 40 },
+  centeredTitleRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 16 },
+  centeredRule: { width: 40, height: 0.75 },
+  centeredTitle: { fontSize: 9.5, letterSpacing: 5, fontWeight: 700 },
+  bannerTitle: { color: "#fff", fontSize: 22, lineHeight: 1.2, letterSpacing: 4, fontWeight: 700 },
+  bannerNumber: { color: "#fff", fontSize: 10, lineHeight: 1.2, marginTop: 6, opacity: 0.85 },
   body: { paddingHorizontal: 44 },
   meta: {
     flexDirection: "row",
@@ -325,7 +514,9 @@ const s = StyleSheet.create({
   parties: { flexDirection: "row", gap: 28, marginTop: 22 },
   party: { flex: 1 },
   partyName: { fontSize: 11.5, fontWeight: 700, color: INK, marginTop: 4, marginBottom: 2 },
-  partyLine: { fontSize: 9, color: "#475569", marginBottom: 1 },
+  partyLineRow: { flexDirection: "row", alignItems: "flex-start", marginBottom: 1.5 },
+  partyIcon: { width: 7, height: 7, marginTop: 2, marginRight: 4 },
+  partyLine: { fontSize: 9, color: "#475569", flex: 1, lineHeight: 1.35 },
   fact: { flexDirection: "row", marginBottom: 1 },
   factLabel: { fontSize: 8.5, color: MUTED, width: 62 },
   factValue: { fontSize: 8.5, color: INK, flex: 1 },

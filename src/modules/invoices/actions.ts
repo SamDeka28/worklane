@@ -9,6 +9,7 @@ import {
   loadOrgInvoiceConfig,
   resolveInvoiceBrand,
 } from "@/modules/invoices/config";
+import { asInvoiceLayout } from "@/modules/invoices/layouts";
 import { getInvoice, listInvoicePayments } from "@/modules/invoices/queries";
 import { invoicePaidMinor, renderInvoicePdf } from "@/modules/invoices/render";
 import {
@@ -22,6 +23,7 @@ import { getInvoiceTemplate } from "@/modules/invoices/templates";
 import {
   EMPTY_BILL_TO,
   INVOICE_PAYMENT_METHODS,
+  billToFromForm,
   extraFieldsFromForm,
   parseBillTo,
   type InvoiceBillTo,
@@ -40,18 +42,6 @@ function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
 
 function field(formData: FormData, key: string, max = 500): string {
   return String(formData.get(key) ?? "").trim().slice(0, max);
-}
-
-function billToFromForm(formData: FormData): InvoiceBillTo {
-  return {
-    name: field(formData, "bill_to_name", 200),
-    contactName: field(formData, "bill_to_contact", 200),
-    email: field(formData, "bill_to_email", 200),
-    phone: field(formData, "bill_to_phone", 60),
-    address: field(formData, "bill_to_address", 500),
-    taxId: field(formData, "bill_to_tax_id", 80),
-    extras: extraFieldsFromForm(formData, "bill_to_extra"),
-  };
 }
 
 async function defaultBillTo(
@@ -480,6 +470,18 @@ export async function updateInvoiceBillToAction(
       .eq("id", invoice.client_id as string)
       .eq("organization_id", ctx.org.id);
     savedToClient = !clientError;
+    if (savedToClient) {
+      await ctx.supabase
+        .from("invoices")
+        .update({ bill_to: billTo })
+        .eq("organization_id", ctx.org.id)
+        .eq("client_id", invoice.client_id as string)
+        .eq("status", "draft")
+        .is("issued_at", null)
+        .neq("id", invoiceId);
+      revalidatePath(`/${orgSlug}/clients/${invoice.client_id as string}`);
+      revalidatePath("/[orgSlug]/invoices/[invoiceId]", "page");
+    }
   }
 
   revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
@@ -594,16 +596,17 @@ export async function applyInvoiceTemplateAction(
   templateId: string,
 ) {
   const ctx = await requireWritableOrg(orgSlug);
-  const invoice = await getInvoice(orgSlug, invoiceId);
+  const [invoice, template, config] = await Promise.all([
+    getInvoice(orgSlug, invoiceId),
+    getInvoiceTemplate(orgSlug, templateId),
+    loadOrgInvoiceConfig(orgSlug),
+  ]);
   if (!invoice) return { error: "Invoice not found" };
   if (invoice.status !== "draft" || invoice.issuedAt) {
     return { error: "Only draft invoices can be edited" };
   }
-
-  const template = await getInvoiceTemplate(orgSlug, templateId);
   if (!template) return { error: "Template not found" };
 
-  const config = await loadOrgInvoiceConfig(orgSlug);
   const dueDays = template.defaultDueDays ?? config.defaultDueDays;
 
   const { error } = await ctx.supabase
@@ -945,9 +948,7 @@ export async function saveOrgInvoiceSettingsAction(orgSlug: string, formData: Fo
   const defaultDueDays = Number(formData.get("default_due_days") ?? 14);
   const defaultTaxBps = Number(formData.get("default_tax_bps") ?? 0);
   const accentHex = String(formData.get("accent_hex") ?? "#1d4ed8").trim();
-  const layoutRaw = String(formData.get("layout") ?? "classic");
-  const layout =
-    layoutRaw === "minimal" || layoutRaw === "bold" ? layoutRaw : "classic";
+  const layout = asInvoiceLayout(String(formData.get("layout") ?? "classic"));
   const logoFileId = String(formData.get("logo_file_id") ?? "").trim() || null;
   const clearLogo = String(formData.get("clear_logo") ?? "") === "1";
 
@@ -1017,6 +1018,7 @@ export async function saveOrgInvoiceSettingsAction(orgSlug: string, formData: Fo
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}/settings`);
   revalidatePath(`/${orgSlug}/invoices`);
+  revalidatePath("/[orgSlug]/invoices/[invoiceId]", "page");
   return { ok: true as const };
 }
 
@@ -1026,9 +1028,7 @@ export async function upsertInvoiceTemplateAction(orgSlug: string, formData: For
   const name = String(formData.get("name") ?? "").trim();
   if (!name) return { error: "Name is required" };
 
-  const layoutRaw = String(formData.get("layout") ?? "classic");
-  const layout =
-    layoutRaw === "minimal" || layoutRaw === "bold" ? layoutRaw : "classic";
+  const layout = asInvoiceLayout(String(formData.get("layout") ?? "classic"));
   const accent = String(formData.get("accent_hex") ?? "").trim();
   const accentHex = accent && /^#[0-9A-Fa-f]{6}$/.test(accent) ? accent : null;
   const dueRaw = String(formData.get("default_due_days") ?? "").trim();
@@ -1073,6 +1073,7 @@ export async function upsertInvoiceTemplateAction(orgSlug: string, formData: For
 
   revalidatePath(`/${orgSlug}/settings`);
   revalidatePath(`/${orgSlug}/invoices`);
+  revalidatePath("/[orgSlug]/invoices/[invoiceId]", "page");
   return { ok: true as const };
 }
 
@@ -1085,6 +1086,8 @@ export async function deleteInvoiceTemplateAction(orgSlug: string, templateId: s
     .eq("organization_id", ctx.org.id);
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}/settings`);
+  revalidatePath(`/${orgSlug}/invoices`);
+  revalidatePath("/[orgSlug]/invoices/[invoiceId]", "page");
   return { ok: true as const };
 }
 

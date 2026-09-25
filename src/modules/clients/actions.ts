@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
+import { billToFromForm } from "@/modules/invoices/types";
 import { notifyOwners } from "@/modules/notifications/service";
 
 async function recordActivity(
@@ -130,6 +131,58 @@ export async function updateClientAction(orgSlug: string, clientId: string, form
   await recordActivity(ctx, "updated", "client", clientId, { name });
   revalidatePath(`/${orgSlug}/clients/${clientId}`);
   return { ok: true as const };
+}
+
+export async function updateClientBillingAction(
+  orgSlug: string,
+  clientId: string,
+  formData: FormData,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const billing = billToFromForm(formData);
+  const empty =
+    !billing.name &&
+    !billing.contactName &&
+    !billing.email &&
+    !billing.phone &&
+    !billing.address &&
+    !billing.taxId &&
+    billing.extras.length === 0;
+
+  const { data: client, error } = await ctx.supabase
+    .from("clients")
+    .update({ billing: empty ? null : billing })
+    .eq("id", clientId)
+    .eq("organization_id", ctx.org.id)
+    .select("name")
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!client) return { error: "Client not found" };
+
+  let draftsUpdated = 0;
+  if (!empty) {
+    const { data: drafts } = await ctx.supabase
+      .from("invoices")
+      .update({ bill_to: billing })
+      .eq("organization_id", ctx.org.id)
+      .eq("client_id", clientId)
+      .eq("status", "draft")
+      .is("issued_at", null)
+      .select("id");
+    draftsUpdated = drafts?.length ?? 0;
+  }
+
+  await recordActivity(ctx, "updated", "client", clientId, {
+    name: client.name,
+    field: "billing",
+  });
+  revalidatePath(`/${orgSlug}/clients/${clientId}`);
+  if (draftsUpdated > 0) {
+    revalidatePath(`/${orgSlug}/invoices`);
+    revalidatePath("/[orgSlug]/invoices/[invoiceId]", "page");
+  }
+  return { ok: true as const, draftsUpdated };
 }
 
 export async function addContactAction(orgSlug: string, clientId: string, formData: FormData) {

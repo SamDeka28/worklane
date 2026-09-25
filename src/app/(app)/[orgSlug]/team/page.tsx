@@ -115,11 +115,19 @@ export default async function TeamPage({
                                 member.email ||
                                 member.userId.slice(0, 8)}
                           </p>
-                          {member.email && !member.isYou ? (
-                            <p className="truncate text-xs text-muted-foreground">
-                              {member.email}
-                            </p>
-                          ) : null}
+                          {(() => {
+                            const line = [
+                              member.jobTitle,
+                              member.isYou ? null : member.email,
+                              member.phone,
+                              member.location,
+                            ].filter(Boolean);
+                            return line.length > 0 ? (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {line.join(" · ")}
+                              </p>
+                            ) : null;
+                          })()}
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">

@@ -22,6 +22,9 @@ import {
   upsertInvoiceTemplateAction,
 } from "@/modules/invoices/actions";
 import type { OrgInvoiceConfig } from "@/modules/invoices/config";
+import { useReportInvoiceBusy } from "@/modules/invoices/components/invoice-busy";
+import { InvoiceLayoutThumb } from "@/modules/invoices/components/layout-thumb";
+import { INVOICE_ACCENT_PRESETS, INVOICE_LAYOUT_SPECS } from "@/modules/invoices/layouts";
 import { INVOICE_LAYOUTS, type InvoiceLayout } from "@/modules/invoices/settings";
 import type { InvoiceTemplate } from "@/modules/invoices/templates";
 import { ExtraFieldsEditor } from "@/modules/invoices/components/extra-fields-editor";
@@ -36,11 +39,9 @@ const TABS: { id: SettingsTab; label: string }[] = [
   { id: "templates", label: "Templates" },
 ];
 
-const LAYOUT_LABEL: Record<InvoiceLayout, string> = {
-  classic: "Classic",
-  minimal: "Minimal",
-  bold: "Bold",
-};
+const LAYOUT_LABEL = Object.fromEntries(
+  INVOICE_LAYOUTS.map((layout) => [layout, INVOICE_LAYOUT_SPECS[layout].label]),
+) as Record<InvoiceLayout, string>;
 
 export function InvoiceSettingsDialog({
   orgSlug,
@@ -112,7 +113,12 @@ export function InvoiceSettingsDialog({
               ))}
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <div
+            className={cn(
+              "min-h-0 flex-1 overflow-y-auto px-6 pt-5",
+              tab === "templates" && "pb-5",
+            )}
+          >
             {tab === "templates" ? (
               <InvoiceTemplatesPanel orgSlug={orgSlug} templates={templates} canWrite={canWrite} />
             ) : (
@@ -150,8 +156,8 @@ export function InvoiceSettingsForm({
   tab?: Exclude<SettingsTab, "templates">;
   onSaved?: () => void;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const [logoFileId, setLogoFileId] = useState(config.brand.logoFileId);
   const [previewUrl, setPreviewUrl] = useState(logoUrl);
   const [layout, setLayout] = useState<InvoiceLayout>(config.brand.layout);
@@ -189,7 +195,6 @@ export function InvoiceSettingsForm({
           if (result.error) toast.error(result.error);
           else {
             toast.success("Invoice settings saved");
-            router.refresh();
             onSaved?.();
           }
         });
@@ -283,7 +288,7 @@ export function InvoiceSettingsForm({
         <section className="grid gap-3">
           <SectionTitle
             title="Billed by"
-            hint="Printed in the Billed by block of invoices and PDFs. Leave legal name empty to use the workspace name."
+            hint="Printed in the Billed by block of invoices and PDFs. Same details as Business details in Studio settings. Leave legal name empty to use the workspace name."
           />
           <Field label="Legal / business name" htmlFor="business_legal_name">
             <Input
@@ -371,7 +376,7 @@ export function InvoiceSettingsForm({
         <section className="grid gap-3">
           <SectionTitle title="Layout" />
           <input type="hidden" name="layout" value={layout} />
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
             {INVOICE_LAYOUTS.map((option) => (
               <button
                 key={option}
@@ -385,8 +390,11 @@ export function InvoiceSettingsForm({
                     : "ring-border/60 hover:ring-border",
                 )}
               >
-                <LayoutThumb layout={option} accent={accent} />
+                <InvoiceLayoutThumb layout={option} accent={accent} />
                 <span className="mt-2 block px-1 text-sm font-medium">{LAYOUT_LABEL[option]}</span>
+                <span className="block px-1 text-[11px] leading-snug text-muted-foreground">
+                  {INVOICE_LAYOUT_SPECS[option].description}
+                </span>
               </button>
             ))}
           </div>
@@ -413,6 +421,7 @@ export function InvoiceSettingsForm({
               aria-label="Accent hex"
             />
           </div>
+          <AccentSwatches value={accent} onChange={setAccent} />
         </section>
 
         <section className="grid gap-3">
@@ -483,7 +492,7 @@ export function InvoiceSettingsForm({
         </section>
       </div>
 
-      <div className="sticky bottom-0 -mx-6 -mb-5 flex justify-end gap-2 border-t border-border/50 bg-popover px-6 py-3">
+      <div className="sticky bottom-0 -mx-6 flex justify-end gap-2 border-t border-border/50 bg-popover px-6 py-3">
         <Button type="submit" disabled={pending}>
           {pending ? "Saving…" : "Save settings"}
         </Button>
@@ -501,31 +510,6 @@ function SectionTitle({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
-function LayoutThumb({ layout, accent }: { layout: InvoiceLayout; accent: string }) {
-  return (
-    <div className="relative aspect-[4/5] overflow-hidden rounded-lg bg-white p-2.5 ring-1 ring-black/5">
-      {layout === "classic" ? (
-        <div className="absolute inset-x-0 top-0 h-1" style={{ backgroundColor: accent }} />
-      ) : null}
-      {layout === "bold" ? (
-        <div className="-mx-2.5 -mt-2.5 mb-2 h-6" style={{ backgroundColor: accent }} />
-      ) : (
-        <div className="mb-2 h-2 w-1/2 rounded-full" style={{ backgroundColor: accent, opacity: 0.8 }} />
-      )}
-      <div className="mb-1 h-1.5 w-2/3 rounded-full bg-slate-200" />
-      <div className="mb-3 h-1.5 w-1/3 rounded-full bg-slate-200" />
-      <div
-        className="mb-1.5 h-2 rounded-sm"
-        style={{ backgroundColor: layout === "classic" ? `${accent}22` : "#e2e8f0" }}
-      />
-      <div className="mb-1 h-1 rounded-full bg-slate-100" />
-      <div className="mb-1 h-1 rounded-full bg-slate-100" />
-      <div className="mb-3 h-1 rounded-full bg-slate-100" />
-      <div className="ml-auto h-2 w-1/3 rounded-full" style={{ backgroundColor: accent }} />
-    </div>
-  );
-}
-
 export function InvoiceTemplatesPanel({
   orgSlug,
   templates,
@@ -535,8 +519,8 @@ export function InvoiceTemplatesPanel({
   templates: InvoiceTemplate[];
   canWrite: boolean;
 }) {
-  const router = useRouter();
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const [editing, setEditing] = useState<InvoiceTemplate | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -552,7 +536,6 @@ export function InvoiceTemplatesPanel({
         onSaved={() => {
           setCreating(false);
           setEditing(null);
-          router.refresh();
         }}
       />
     );
@@ -575,9 +558,10 @@ export function InvoiceTemplatesPanel({
               key={template.id}
               className="flex items-center gap-3 rounded-2xl bg-muted/40 px-3 py-2.5 text-sm"
             >
-              <span
-                className="size-8 shrink-0 rounded-lg ring-1 ring-black/5"
-                style={{ backgroundColor: template.accentHex || "#1d4ed8" }}
+              <InvoiceLayoutThumb
+                layout={template.layout}
+                accent={template.accentHex || "#1d4ed8"}
+                className="w-9 shrink-0 rounded-md"
               />
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1.5 truncate font-medium">
@@ -618,7 +602,6 @@ export function InvoiceTemplatesPanel({
                         if (result.error) toast.error(result.error);
                         else {
                           toast.success("Template deleted");
-                          router.refresh();
                         }
                       });
                     }}
@@ -658,6 +641,7 @@ function TemplateEditor({
   onSaved: () => void;
 }) {
   const [pending, start] = useTransition();
+  useReportInvoiceBusy(pending);
   const [layout, setLayout] = useState<InvoiceLayout>(
     (template?.layout as InvoiceLayout) ?? "classic",
   );
@@ -687,7 +671,7 @@ function TemplateEditor({
         <Input id="tpl_name" name="name" required defaultValue={template?.name ?? ""} />
       </Field>
       <input type="hidden" name="layout" value={layout} />
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
         {INVOICE_LAYOUTS.map((option) => (
           <button
             key={option}
@@ -699,11 +683,12 @@ function TemplateEditor({
               layout === option ? "bg-primary/5 ring-2 ring-primary" : "ring-border/60 hover:ring-border",
             )}
           >
-            <LayoutThumb layout={option} accent={accent} />
+            <InvoiceLayoutThumb layout={option} accent={accent} />
             <span className="mt-2 block px-1 text-sm font-medium">{LAYOUT_LABEL[option]}</span>
           </button>
         ))}
       </div>
+      <AccentSwatches value={accent} onChange={setAccent} />
       <div className="grid gap-3 sm:grid-cols-3">
         <Field label="Accent" htmlFor="tpl_accent">
           <input
@@ -774,5 +759,30 @@ function TemplateEditor({
         </Button>
       </div>
     </form>
+  );
+}
+
+function AccentSwatches({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Accent presets">
+      {INVOICE_ACCENT_PRESETS.map((preset) => {
+        const active = value.toLowerCase() === preset.hex.toLowerCase();
+        return (
+          <button
+            key={preset.hex}
+            type="button"
+            title={preset.name}
+            aria-label={preset.name}
+            aria-pressed={active}
+            onClick={() => onChange(preset.hex)}
+            className={cn(
+              "size-7 rounded-full ring-offset-2 ring-offset-background transition hover:scale-110",
+              active ? "ring-2 ring-foreground" : "ring-1 ring-black/10",
+            )}
+            style={{ backgroundColor: preset.hex }}
+          />
+        );
+      })}
+    </div>
   );
 }

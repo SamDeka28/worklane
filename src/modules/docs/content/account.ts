@@ -105,8 +105,14 @@ export const ACCOUNT: DocArticle[] = [
           { title: "Account menu → Profile", body: "" },
           { title: "Photo", body: "**Upload photo** — a square PNG, JPEG, WebP, or GIF under 5 MB. Google photos sync on sign-in unless you've uploaded your own." },
           { title: "Display name", body: "Shown on cards, comments, and mentions." },
+          { title: "Contact details", body: "**Job title**, **Phone**, and **Location** show next to your name on the Team page. **Mailing address** is optional. Everyone in your studios can see your profile details." },
           { title: "Click Save profile", body: "" },
         ],
+      },
+      { type: "h2", text: "Studio business details" },
+      {
+        type: "p",
+        text: "In **Studio settings → Business details**, owners and editors set the studio's legal name, address, email, phone, tax ID, website, and registration numbers like PAN or CIN. Invoices print these in **Billed by**. They're the same details as the **Business details** tab in invoice settings, so editing either place updates both.",
       },
       { type: "h2", text: "Themes" },
       {

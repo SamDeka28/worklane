@@ -249,7 +249,7 @@ export const MONEY: DocArticle[] = [
           ["Dates & reference", "**Due on** (or due on receipt) and **Reference / PO**."],
           ["Payment details & notes", "**Payment details** (bank account, UPI ID, or a payment link, printed next to the totals), **Notes to client**, and **Terms & conditions**."],
           ["Billed by", "Your business details as they'll print. Shared by all invoices; **Edit business details** opens settings."],
-          ["Look", "Apply another template to this draft. It swaps the layout, accent, payment terms, and notes; an empty invoice also gets the template's starter lines."],
+          ["Look", "A gallery of your templates with a thumbnail of each look. Click one to apply it to this draft. It swaps the layout, accent, payment terms, and notes; an empty invoice also gets the template's starter lines."],
         ],
       },
       { type: "h3", text: "Billed to" },
@@ -385,15 +385,15 @@ export const MONEY: DocArticle[] = [
       {
         type: "list",
         items: [
-          "**Layout**: **Classic**, **Minimal**, or **Bold**.",
-          "**Accent colour**: used for headings, totals, and the bold header.",
+          "**Layout**: eleven looks, each previewed with your accent colour. **Classic** (accent bars, tinted table header), **Minimal** (typographic, no fills), **Bold** (solid accent header band), **Modern** (soft tinted header, accent underlines), **Elegant** (centred serif with fine rules), **Studio** (charcoal header with an accent edge), **Corporate** (logo left, accent title block right), **Swiss** (large black type with heavy rules), **Edge** (accent stripe down the left side), **Letterhead** (centred logo over a double rule), and **Ribbon** (accent pill title with an outlined total).",
+          "**Accent colour**: used for headings, totals, and the bold header. Pick a preset swatch or enter any hex colour.",
           "**Logo**: PNG, JPEG, or WebP, shown on the invoice and PDF. Upload it, then save to apply.",
         ],
       },
       { type: "h2", text: "Templates" },
       {
         type: "p",
-        text: "Templates are presets for new drafts. Three are created for you: Classic, Minimal, and Bold. Click **New template** to add your own with a name, layout, accent, **Due after (days)**, **Tax rate (%)**, payment terms, and notes. Leave due days or tax empty to use the studio defaults. Tick **Use for new invoices by default** to preselect it in New invoice; the default one is marked **Default** in the list.",
+        text: "Templates are presets for new drafts. One is created for each look: Classic, Minimal, Bold, Modern, Elegant, Studio, Corporate, Swiss, Edge, Letterhead, and Ribbon. Click **New template** to add your own with a name, layout, accent, **Due after (days)**, **Tax rate (%)**, payment terms, and notes. Leave due days or tax empty to use the studio defaults. Tick **Use for new invoices by default** to preselect it in New invoice; the default one is marked **Default** in the list.",
       },
       {
         type: "callout",

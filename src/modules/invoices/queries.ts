@@ -155,28 +155,28 @@ export async function getInvoice(
   invoiceId: string,
 ): Promise<InvoiceRecord | null> {
   const ctx = await requireOrg(orgSlug);
-  const { data, error } = await ctx.supabase
-    .from("invoices")
-    .select(INVOICE_SELECT)
-    .eq("organization_id", ctx.org.id)
-    .eq("id", invoiceId)
-    .maybeSingle();
+  const [{ data, error }, { data: lines, error: linesError }] = await Promise.all([
+    ctx.supabase
+      .from("invoices")
+      .select(INVOICE_SELECT)
+      .eq("organization_id", ctx.org.id)
+      .eq("id", invoiceId)
+      .maybeSingle(),
+    ctx.supabase
+      .from("invoice_lines")
+      .select(
+        "id, invoice_id, description, quantity, unit_amount_minor, tax_bps, discount_minor, milestone_id, work_log_id, charge_id, position",
+      )
+      .eq("organization_id", ctx.org.id)
+      .eq("invoice_id", invoiceId)
+      .order("position"),
+  ]);
 
   if (error) {
     if (error.message.includes("invoices") || error.code === "42P01") return null;
     throw new Error(error.message);
   }
   if (!data) return null;
-
-  const { data: lines, error: linesError } = await ctx.supabase
-    .from("invoice_lines")
-    .select(
-      "id, invoice_id, description, quantity, unit_amount_minor, tax_bps, discount_minor, milestone_id, work_log_id, charge_id, position",
-    )
-    .eq("organization_id", ctx.org.id)
-    .eq("invoice_id", invoiceId)
-    .order("position");
-
   if (linesError) throw new Error(linesError.message);
 
   return mapInvoice(

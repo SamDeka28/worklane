@@ -1,4 +1,16 @@
-export const INVOICE_LAYOUTS = ["classic", "minimal", "bold"] as const;
+export const INVOICE_LAYOUTS = [
+  "classic",
+  "minimal",
+  "bold",
+  "modern",
+  "elegant",
+  "studio",
+  "corporate",
+  "swiss",
+  "edge",
+  "letterhead",
+  "ribbon",
+] as const;
 export type InvoiceLayout = (typeof INVOICE_LAYOUTS)[number];
 
 import { parseExtraFields, type InvoiceExtraField } from "@/modules/invoices/types";
