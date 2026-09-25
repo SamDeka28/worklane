@@ -4,12 +4,13 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ActionSheet } from "@/components/studio/action-sheet";
+import { DangerZone } from "@/components/studio/type-to-confirm";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { MemberPermissions } from "@/modules/identity/permissions";
 import type { OrgRole } from "@/modules/identity/types";
-import { updateMemberAccessAction } from "@/modules/team/actions";
+import { removeMemberAction, updateMemberAccessAction } from "@/modules/team/actions";
 import {
   AccessPermissionsFields,
   presetNeedsWrite,
@@ -60,6 +61,10 @@ export function EditMemberAccessSheet({
     member.displayName?.trim() || member.email || member.userId.slice(0, 8);
   const lockedOwner = member.role === "owner";
   const canEditAdmins = actorRole === "owner";
+  const canRemove =
+    !member.isYou &&
+    (actorRole === "owner" || (actorRole === "admin" && member.role !== "admin"));
+  const confirmValue = (member.email || member.displayName || "").trim();
 
   if (lockedOwner) return null;
 
@@ -169,6 +174,25 @@ export function EditMemberAccessSheet({
           {pending ? "Saving…" : "Save access"}
         </Button>
       </form>
+      {canRemove && confirmValue ? (
+        <DangerZone
+          className="mt-8"
+          heading="Remove from studio"
+          summary="They lose access to this studio and its projects right away. Their work stays."
+          buttonLabel="Remove member"
+          title={`Remove ${label}?`}
+          description="They’ll be signed out of this studio and removed from every project team. Tasks, work logs, and comments they created are kept. You can invite them again later."
+          confirmValue={confirmValue}
+          actionLabel="Remove this member"
+          pendingLabel="Removing…"
+          onConfirm={() => removeMemberAction(orgSlug, member.id, confirmValue)}
+          onDone={() => {
+            toast.success(`Removed ${label}`);
+            setOpen(false);
+            router.refresh();
+          }}
+        />
+      ) : null}
     </ActionSheet>
   );
 }

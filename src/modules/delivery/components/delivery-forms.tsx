@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";
 import { Composer, ComposerBar } from "@/components/studio/composer";
+import { DangerZone } from "@/components/studio/type-to-confirm";
 import { composerControlClassName } from "@/components/studio/chrome";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ import {
   createProjectAction,
   createTaskAction,
   createWorkLogAction,
+  deleteProjectAction,
   postContractedChargeAction,
   updateProjectAction,
   updateTaskStatusAction,
@@ -326,12 +328,14 @@ export function ProjectSettingsSheet({
   defaultOpen = false,
   hideTrigger = false,
   returnHref,
+  canDelete = false,
 }: {
   orgSlug: string;
   project: ProjectRecord;
   defaultOpen?: boolean;
   hideTrigger?: boolean;
   returnHref?: string;
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
@@ -360,7 +364,36 @@ export function ProjectSettingsSheet({
       }}
     >
       <EditProjectForm orgSlug={orgSlug} project={project} />
+      {canDelete ? <ProjectDangerZone orgSlug={orgSlug} project={project} /> : null}
     </ActionSheet>
+  );
+}
+
+function ProjectDangerZone({
+  orgSlug,
+  project,
+}: {
+  orgSlug: string;
+  project: ProjectRecord;
+}) {
+  const router = useRouter();
+  return (
+    <DangerZone
+      className="mt-8"
+      heading="Delete project"
+      summary="Permanently removes milestones, tasks, work logs, and the split. This can’t be undone."
+      buttonLabel="Delete project"
+      title={`Delete ${project.name}?`}
+      description="This permanently deletes the project with its milestones, tasks, work logs, comments, and partner split. Charges, invoices, and documents are kept but no longer linked to it."
+      confirmValue={project.name}
+      actionLabel="Delete this project"
+      onConfirm={() => deleteProjectAction(orgSlug, project.id, project.name)}
+      onDone={() => {
+        toast.success(`Deleted ${project.name}`);
+        router.replace(`/${orgSlug}/projects`);
+        router.refresh();
+      }}
+    />
   );
 }
 

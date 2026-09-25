@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import type { JSONContent } from "@tiptap/react";
 import { ActionSheet } from "@/components/studio/action-sheet";
 import { Field } from "@/components/studio/field";
+import { TypeToConfirmDialog, useTypeToConfirm } from "@/components/studio/type-to-confirm";
 import {
   HiddenDocFields,
   RichEditor,
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 import {
   convertLeadToClientAction,
   createLeadAction,
+  deleteLeadAction,
   updateLeadAction,
 } from "@/modules/crm/actions";
 import { setCrmUrl } from "@/modules/crm/components/crm-url";
@@ -573,6 +575,7 @@ export function LeadDetailSheet({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const confirmDelete = useTypeToConfirm();
 
   if (!lead) return null;
 
@@ -634,7 +637,17 @@ export function LeadDetailSheet({
       onOpenChange={onOpenChange}
       footer={
         canWrite ? (
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="mr-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={confirmDelete.open}
+              disabled={pending}
+            >
+              <Trash2 />
+              Delete
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -646,6 +659,19 @@ export function LeadDetailSheet({
             <Button type="submit" form={formId} disabled={pending}>
               {pending ? "Saving…" : "Save changes"}
             </Button>
+            <TypeToConfirmDialog
+              {...confirmDelete.dialogProps}
+              title={`Delete ${lead.name}?`}
+              description="This permanently deletes the lead, its notes, and attachments. A client already created from it is kept. This can’t be undone."
+              confirmValue={lead.name}
+              actionLabel="Delete this lead"
+              onConfirm={() => deleteLeadAction(orgSlug, lead.id, lead.name)}
+              onDone={() => {
+                toast.success(`Deleted ${lead.name}`);
+                onOpenChange(false);
+                router.refresh();
+              }}
+            />
           </div>
         ) : undefined
       }

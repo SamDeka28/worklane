@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";
+import { DangerZone } from "@/components/studio/type-to-confirm";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,7 @@ import {
   addContactAction,
   archiveClientAction,
   createClientAction,
+  deleteClientAction,
   updateClientAction,
 } from "@/modules/clients/actions";
 
@@ -317,6 +319,7 @@ export function EditClientSheet({
   notesDoc,
   open,
   onOpenChange,
+  canDelete = false,
 }: {
   orgSlug: string;
   clientId: string;
@@ -326,7 +329,9 @@ export function EditClientSheet({
   notesDoc?: Record<string, unknown> | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canDelete?: boolean;
 }) {
+  const router = useRouter();
   return (
     <ActionSheet
       title="Edit profile"
@@ -343,6 +348,25 @@ export function EditClientSheet({
         notes={notes}
         notesDoc={notesDoc}
       />
+      {canDelete ? (
+        <DangerZone
+          className="mt-8"
+          heading="Delete client"
+          summary="Only possible when the client has no projects, charges, invoices, or payments."
+          buttonLabel="Delete client"
+          title={`Delete ${name}?`}
+          description="This permanently deletes the client and its contacts. Leads and documents linked to it are kept but unlinked. This can’t be undone."
+          confirmValue={name}
+          actionLabel="Delete this client"
+          onConfirm={() => deleteClientAction(orgSlug, clientId, name)}
+          onDone={() => {
+            toast.success(`Deleted ${name}`);
+            onOpenChange(false);
+            router.replace(`/${orgSlug}/clients`);
+            router.refresh();
+          }}
+        />
+      ) : null}
     </ActionSheet>
   );
 }

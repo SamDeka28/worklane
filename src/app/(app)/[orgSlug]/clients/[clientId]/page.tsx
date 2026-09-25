@@ -138,6 +138,7 @@ export default async function ClientProfilePage({
             }}
             next={next}
             canWrite={ctx.canWrite}
+            canDelete={ctx.role === "owner" || ctx.role === "admin"}
             seeMoney={seeMoney}
             editOpen={query.edit === "1"}
             contactOpen={query.contact === "1"}

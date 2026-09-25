@@ -486,3 +486,38 @@ export async function convertLeadToClientAction(
   revalidatePath(`/${orgSlug}`);
   return { clientId: client.id as string, projectId };
 }
+
+export async function deleteLeadAction(orgSlug: string, leadId: string, confirmName: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (ctx.permissions.crm?.access !== "write" && ctx.role !== "owner" && ctx.role !== "admin") {
+    return { error: "You don’t have permission to delete leads" };
+  }
+  const { data: lead } = await ctx.supabase
+    .from("leads")
+    .select("id, name")
+    .eq("id", leadId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!lead) return { error: "Lead not found" };
+  if (confirmName.trim() !== String(lead.name).trim()) {
+    return { error: "Lead name doesn’t match" };
+  }
+
+  const { error, count } = await ctx.supabase
+    .from("leads")
+    .delete({ count: "exact" })
+    .eq("id", leadId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+  if (!count) return { error: "You don’t have permission to delete this lead" };
+
+  await ctx.supabase
+    .from("files")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("organization_id", ctx.org.id)
+    .eq("entity_type", "lead")
+    .eq("entity_id", leadId);
+
+  revalidatePath(`/${orgSlug}/crm`);
+  return { ok: true as const };
+}

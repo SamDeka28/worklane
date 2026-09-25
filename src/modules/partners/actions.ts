@@ -516,3 +516,63 @@ export async function voidPartnerSettlementAction(orgSlug: string, settlementId:
   revalidatePath(`/${orgSlug}/partners`);
   return { ok: true as const };
 }
+
+export async function deletePartnerAction(
+  orgSlug: string,
+  partnerId: string,
+  confirmName: string,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (ctx.role !== "owner" && ctx.role !== "admin") {
+    return { error: "Only owners and admins can delete partners" };
+  }
+  const { data: partner } = await ctx.supabase
+    .from("partners")
+    .select("id, name")
+    .eq("id", partnerId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!partner) return { error: "Partner not found" };
+  if (confirmName.trim() !== String(partner.name).trim()) {
+    return { error: "Partner name doesn’t match" };
+  }
+
+  const linked = await Promise.all(
+    (
+      [
+        ["distribution_lines", "project split"],
+        ["partner_allocations", "earning"],
+        ["partner_settlements", "settlement"],
+      ] as const
+    ).map(async ([table, noun]) => {
+      const { count } = await ctx.supabase
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("partner_id", partnerId);
+      return count ? `${count} ${noun}${count === 1 ? "" : "s"}` : null;
+    }),
+  );
+  const blockers = linked.filter(Boolean);
+  if (blockers.length > 0) {
+    return {
+      error: `${partner.name} has ${blockers.join(", ")} on record. Set them to Inactive instead to keep the history.`,
+    };
+  }
+
+  const { error, count } = await ctx.supabase
+    .from("partners")
+    .delete({ count: "exact" })
+    .eq("id", partnerId)
+    .eq("organization_id", ctx.org.id);
+  if (error) {
+    if (error.code === "23503") {
+      return { error: "This partner has earnings history, so it can’t be deleted. Set them to Inactive instead." };
+    }
+    return { error: error.message };
+  }
+  if (!count) return { error: "You don’t have permission to delete this partner" };
+
+  revalidatePath(`/${orgSlug}/partners`);
+  revalidatePath(`/${orgSlug}/finance`);
+  return { ok: true as const };
+}

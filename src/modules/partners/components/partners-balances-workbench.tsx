@@ -100,6 +100,7 @@ export function PartnersBalancesWorkbench({
   projectsByPartnerId,
   canWrite,
   canInvite,
+  canDelete = false,
   initialPartnerId,
 }: {
   orgSlug: string;
@@ -109,6 +110,7 @@ export function PartnersBalancesWorkbench({
   projectsByPartnerId: Record<string, { id: string; name: string }[]>;
   canWrite: boolean;
   canInvite: boolean;
+  canDelete?: boolean;
   initialPartnerId?: string;
 }) {
   const partnersById = useMemo(
@@ -245,6 +247,7 @@ export function PartnersBalancesWorkbench({
                   <EditPartnerDialog
                     orgSlug={orgSlug}
                     partner={selectedPartner}
+                    canDelete={canDelete}
                   />
                 ) : null}
               </div>

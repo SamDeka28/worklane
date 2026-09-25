@@ -232,6 +232,7 @@ export default async function PartnersPage({
               projectsByPartnerId={projectsByPartnerId}
               canWrite={ctx.canWrite}
               canInvite={canInvite}
+              canDelete={ctx.role === "owner" || ctx.role === "admin"}
               initialPartnerId={selectedId}
             />
           )

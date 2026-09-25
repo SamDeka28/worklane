@@ -25,6 +25,7 @@ export function ClientHubChrome({
   chargeOpen,
   seeMoney = true,
   attachableDocuments = [],
+  canDelete = false,
 }: {
   orgSlug: string;
   client: {
@@ -43,6 +44,7 @@ export function ClientHubChrome({
   chargeOpen?: boolean;
   seeMoney?: boolean;
   attachableDocuments?: AttachableDocument[];
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [edit, setEdit] = useState(Boolean(editOpen));
@@ -123,6 +125,7 @@ export function ClientHubChrome({
         kind={client.kind}
         notes={client.notes}
         notesDoc={client.notesDoc}
+        canDelete={canWrite && canDelete}
         open={edit}
         onOpenChange={(nextOpen) => {
           setEdit(nextOpen);

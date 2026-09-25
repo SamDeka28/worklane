@@ -174,3 +174,72 @@ export async function archiveClientAction(orgSlug: string, clientId: string) {
   revalidatePath(`/${orgSlug}/clients`);
   return { ok: true as const };
 }
+
+export async function deleteClientAction(
+  orgSlug: string,
+  clientId: string,
+  confirmName: string,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (ctx.role !== "owner" && ctx.role !== "admin") {
+    return { error: "Only owners and admins can delete clients" };
+  }
+  const { data: client } = await ctx.supabase
+    .from("clients")
+    .select("id, name")
+    .eq("id", clientId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!client) return { error: "Client not found" };
+  if (confirmName.trim() !== String(client.name).trim()) {
+    return { error: "Client name doesn’t match" };
+  }
+
+  const linked = await Promise.all(
+    (
+      [
+        ["projects", "project"],
+        ["invoices", "invoice"],
+        ["charges", "charge"],
+        ["payments", "payment"],
+      ] as const
+    ).map(async ([table, noun]) => {
+      const { count } = await ctx.supabase
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", ctx.org.id)
+        .eq("client_id", clientId);
+      return count ? `${count} ${noun}${count === 1 ? "" : "s"}` : null;
+    }),
+  );
+  const blockers = linked.filter(Boolean);
+  if (blockers.length > 0) {
+    return {
+      error: `${client.name} still has ${blockers.join(", ")}. Delete those first, or archive the client instead.`,
+    };
+  }
+
+  const { error, count } = await ctx.supabase
+    .from("clients")
+    .delete({ count: "exact" })
+    .eq("id", clientId)
+    .eq("organization_id", ctx.org.id);
+  if (error) {
+    if (error.code === "23503") {
+      return { error: "This client has billing history, so it can’t be deleted. Archive it instead." };
+    }
+    return { error: error.message };
+  }
+  if (!count) return { error: "You don’t have permission to delete this client" };
+
+  await ctx.supabase
+    .from("files")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("organization_id", ctx.org.id)
+    .eq("entity_type", "client")
+    .eq("entity_id", clientId);
+
+  revalidatePath(`/${orgSlug}/clients`);
+  revalidatePath(`/${orgSlug}`);
+  return { ok: true as const };
+}

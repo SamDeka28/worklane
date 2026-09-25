@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition, type ReactNode } from "rea
 import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";
+import { DangerZone } from "@/components/studio/type-to-confirm";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import {
   addProjectMembersAction,
   addProjectPartnersAction,
   createPartnerAction,
+  deletePartnerAction,
   recordPartnerSettlementAction,
   removeProjectMemberAction,
   removeProjectPartnerAction,
@@ -233,9 +235,11 @@ export function EditPartnerDialog({
   triggerIcon = <Pencil className="size-3.5" />,
   triggerIconOnly = true,
   triggerAriaLabel,
+  canDelete = false,
 }: {
   orgSlug: string;
   partner: PartnerRecord;
+  canDelete?: boolean;
 } & SheetTriggerProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -318,6 +322,25 @@ export function EditPartnerDialog({
           {pending ? "Saving…" : "Save changes"}
         </Button>
       </form>
+      {canDelete ? (
+        <DangerZone
+          className="mt-8"
+          heading="Delete partner"
+          summary="Only possible before they’re in a split or have earnings. Otherwise set them to Inactive."
+          buttonLabel="Delete partner"
+          title={`Delete ${partner.name}?`}
+          description="This permanently deletes the partner record and removes them from project teams. Their login (if any) stays; manage it from Team. This can’t be undone."
+          confirmValue={partner.name}
+          actionLabel="Delete this partner"
+          onConfirm={() => deletePartnerAction(orgSlug, partner.id, partner.name)}
+          onDone={() => {
+            toast.success(`Deleted ${partner.name}`);
+            setOpen(false);
+            router.replace(`/${orgSlug}/partners`);
+            router.refresh();
+          }}
+        />
+      ) : null}
     </ActionSheet>
   );
 }

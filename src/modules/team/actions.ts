@@ -596,3 +596,52 @@ export async function markNotificationReadAction(notificationId: string) {
     .eq("user_id", user.id);
   return { ok: true as const };
 }
+
+export async function removeMemberAction(orgSlug: string, memberId: string, confirmValue: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (ctx.role !== "owner" && ctx.role !== "admin") {
+    return { error: "Only owners and admins can remove members" };
+  }
+
+  const { data: member } = await ctx.supabase
+    .from("organization_members")
+    .select("id, user_id, role")
+    .eq("id", memberId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!member) return { error: "Member not found" };
+  if (member.role === "owner") return { error: "The owner can’t be removed" };
+  if (member.user_id === ctx.userId) return { error: "You can’t remove yourself" };
+  if (ctx.role === "admin" && member.role === "admin") {
+    return { error: "Only owners can remove admins" };
+  }
+
+  const { data: profile } = await ctx.supabase
+    .from("profiles")
+    .select("email, display_name")
+    .eq("id", member.user_id)
+    .maybeSingle();
+  const expected = String(profile?.email || profile?.display_name || "").trim();
+  if (!expected || confirmValue.trim().toLowerCase() !== expected.toLowerCase()) {
+    return { error: "Confirmation doesn’t match" };
+  }
+
+  const { error: projectError } = await ctx.supabase
+    .from("project_members")
+    .delete()
+    .eq("organization_id", ctx.org.id)
+    .eq("user_id", member.user_id);
+  if (projectError) return { error: projectError.message };
+
+  const { error, count } = await ctx.supabase
+    .from("organization_members")
+    .delete({ count: "exact" })
+    .eq("id", memberId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+  if (!count) return { error: "You don’t have permission to remove this member" };
+
+  revalidatePath(`/${orgSlug}/team`);
+  revalidatePath(`/${orgSlug}/settings`);
+  return { ok: true as const };
+}

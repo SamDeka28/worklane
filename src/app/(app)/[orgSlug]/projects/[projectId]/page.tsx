@@ -516,6 +516,7 @@ export default async function ProjectDetailPage({
                 hideTrigger
                 defaultOpen={query.settings === "1"}
                 returnHref={tabHref(tab)}
+                canDelete={ctx.role === "owner" || ctx.role === "admin"}
               />
             </div>
           ) : null

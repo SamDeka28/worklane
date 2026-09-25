@@ -229,6 +229,65 @@ export async function createProjectAction(orgSlug: string, formData: FormData) {
   return { id: project.id as string };
 }
 
+export async function deleteProjectAction(
+  orgSlug: string,
+  projectId: string,
+  confirmName: string,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  if (ctx.role !== "owner" && ctx.role !== "admin") {
+    return { error: "Only owners and admins can delete projects" };
+  }
+  const project = await loadProjectRow(ctx, projectId);
+  if (!project) return { error: "Project not found" };
+  if (confirmName.trim() !== String(project.name).trim()) {
+    return { error: "Project name doesn’t match" };
+  }
+
+  const { data: taskRows } = await ctx.supabase
+    .from("tasks")
+    .select("id")
+    .eq("organization_id", ctx.org.id)
+    .eq("project_id", projectId);
+  const taskIds = (taskRows ?? []).map((row) => row.id as string);
+
+  const { error, count } = await ctx.supabase
+    .from("projects")
+    .delete({ count: "exact" })
+    .eq("id", projectId)
+    .eq("organization_id", ctx.org.id);
+  if (error) {
+    if (error.code === "23503") {
+      return {
+        error: "Partner payouts are recorded against this project’s split, so it can’t be deleted.",
+      };
+    }
+    return { error: error.message };
+  }
+  if (!count) return { error: "You don’t have permission to delete this project" };
+
+  const deletedAt = new Date().toISOString();
+  await ctx.supabase
+    .from("files")
+    .update({ deleted_at: deletedAt })
+    .eq("organization_id", ctx.org.id)
+    .eq("entity_type", "project")
+    .eq("entity_id", projectId);
+  if (taskIds.length > 0) {
+    await ctx.supabase
+      .from("files")
+      .update({ deleted_at: deletedAt })
+      .eq("organization_id", ctx.org.id)
+      .eq("entity_type", "task")
+      .in("entity_id", taskIds);
+  }
+
+  revalidatePath(`/${orgSlug}/projects`);
+  revalidatePath(`/${orgSlug}/board`);
+  revalidatePath(`/${orgSlug}`);
+  return { ok: true as const };
+}
+
 export async function updateProjectAction(
   orgSlug: string,
   projectId: string,
