@@ -92,7 +92,10 @@ export async function notify(input: NotifyInput): Promise<void> {
           html: notificationEmailHtml(mail),
           text: notificationEmailText(mail),
         });
-        if (!result.ok) return;
+        if (!result.ok) {
+          console.error(`notify email to ${email} failed: ${result.error}`);
+          return;
+        }
         const row = (rows ?? []).find((item) => item.user_id === profile.id);
         if (row) sentIds.push(row.id as string);
       }),

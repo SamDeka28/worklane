@@ -92,7 +92,7 @@ export function NotificationItem({
         className="absolute inset-0 rounded-xl focus-visible:ring-2 focus-visible:ring-ring/35 focus-visible:outline-none"
         aria-label={item.title}
       />
-      <div className="relative shrink-0">
+      <div className="relative size-7 shrink-0 self-start">
         {item.actor ? (
           <AvatarMark
             name={item.actor.name}
@@ -143,13 +143,11 @@ export function NotificationItem({
           {relativeTime(item.createdAt)}
         </p>
       </div>
-      <div className="relative flex shrink-0 flex-col items-end gap-1">
-        {unread ? (
-          <span
-            className="mt-1.5 size-2 rounded-full bg-primary"
-            aria-label="Unread"
-          />
-        ) : null}
+      <div className="relative flex shrink-0 flex-col items-center gap-1 self-stretch">
+        <span
+          className={cn("mt-2 size-2 rounded-full", unread ? "bg-primary" : "bg-transparent")}
+          aria-label={unread ? "Unread" : undefined}
+        />
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

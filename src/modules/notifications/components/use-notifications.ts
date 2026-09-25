@@ -60,35 +60,60 @@ export function useNotifications({
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
     if (!supabase) return;
-    // Topic must be unique per hook instance: the bell and inbox can mount together,
-    // and supabase-js returns the already-subscribed channel for a reused topic.
-    const channel = supabase
-      .channel(`notifications:${userId}:${crypto.randomUUID()}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "notifications",
-          filter: `user_id=eq.${userId}`,
-        },
-        (payload) => {
-          const row = payload.new as {
-            organization_id?: string | null;
-            title?: string;
-            body?: string | null;
-          };
-          if (row?.organization_id && row.organization_id !== organizationId)
-            return;
-          if (payload.eventType === "INSERT" && toastOnNew && row?.title) {
-            toast(row.title, { description: row.body ?? undefined });
-          }
-          void reload();
-        },
-      )
-      .subscribe();
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    // Realtime applies RLS using the socket's JWT. Joining before the session loads
+    // subscribes as anon, and every row is silently filtered out.
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.access_token) void supabase.realtime.setAuth(session.access_token);
+    });
+
+    void (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (data.session?.access_token) {
+        await supabase.realtime.setAuth(data.session.access_token);
+      }
+      if (cancelled) return;
+      // Topic must be unique per hook instance: the bell and inbox can mount together,
+      // and supabase-js returns the already-subscribed channel for a reused topic.
+      channel = supabase
+        .channel(`notifications:${userId}:${crypto.randomUUID()}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const row = payload.new as {
+              organization_id?: string | null;
+              title?: string;
+              body?: string | null;
+            };
+            if (row?.organization_id && row.organization_id !== organizationId) return;
+            if (payload.eventType === "INSERT" && toastOnNew && row?.title) {
+              toast(row.title, { description: row.body ?? undefined });
+            }
+            void reload();
+          },
+        )
+        .subscribe();
+    })();
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void reload();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
-      void supabase.removeChannel(channel);
+      cancelled = true;
+      authListener.subscription.unsubscribe();
+      document.removeEventListener("visibilitychange", onVisible);
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [userId, organizationId, reload, toastOnNew]);
 
