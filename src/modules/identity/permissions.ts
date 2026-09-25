@@ -12,10 +12,82 @@ export type ProjectTabKey =
 
 export type ModulePermission = {
   access: AccessLevel;
+  /** Permanent delete; only honoured with `write` access. Never implied by presets. */
+  delete?: boolean;
   tabs?: Partial<Record<ProjectTabKey, boolean>>;
 };
 
-export type MemberPermissions = Partial<Record<ModuleKey, ModulePermission>>;
+/** Modules with permanent-delete actions. `crm` covers leads and clients. */
+export const DELETABLE_MODULES = ["delivery", "crm", "partners"] as const;
+export type DeletableModule = (typeof DELETABLE_MODULES)[number];
+
+export function isDeletableModule(module: ModuleKey): module is DeletableModule {
+  return (DELETABLE_MODULES as readonly string[]).includes(module);
+}
+
+/** Owners and admins can always delete; others need write + the module's delete flag. */
+export function canDeleteModule(
+  input: { role: string; permissions: MemberPermissions },
+  module: DeletableModule,
+): boolean {
+  if (input.role === "owner" || input.role === "admin") return true;
+  if (input.role !== "member") return false;
+  const mod = input.permissions[module];
+  return mod?.access === "write" && mod.delete === true;
+}
+
+/** `team` is not an org module: `write` lets a member invite people and change access. */
+export type PermissionKey = ModuleKey | "team";
+
+export type MemberPermissions = Partial<Record<PermissionKey, ModulePermission>>;
+
+/** Owners and admins always; members with `team: write`. Partners and viewers never. */
+export function canManageTeam(input: { role: string; permissions: MemberPermissions }): boolean {
+  if (input.role === "owner" || input.role === "admin") return true;
+  return input.role === "member" && input.permissions.team?.access === "write";
+}
+
+const ACCESS_RANK: Record<AccessLevel, number> = { none: 0, read: 1, write: 2 };
+
+const GRANT_LABELS: Record<PermissionKey, string> = {
+  delivery: "Projects",
+  finance: "Finance",
+  partners: "Partners",
+  crm: "Leads",
+  documents: "Documents",
+  portal: "Portal",
+  team: "Team",
+};
+
+/**
+ * A non-admin team manager can only hand out access they hold themselves.
+ * Returns a human-readable reason when `target` exceeds `limit`, else null.
+ */
+export function grantViolation(
+  target: MemberPermissions,
+  limit: MemberPermissions,
+): string | null {
+  for (const key of Object.keys(target) as PermissionKey[]) {
+    const want = target[key];
+    if (!want) continue;
+    const have = limit[key];
+    const label = GRANT_LABELS[key] ?? key;
+    if (ACCESS_RANK[want.access] > ACCESS_RANK[have?.access ?? "none"]) {
+      return `You can’t grant ${label} ${want.access === "write" ? "edit" : "view"} access you don’t have`;
+    }
+    if (want.delete && !(have?.access === "write" && have.delete)) {
+      return `You can’t grant ${label} delete access you don’t have`;
+    }
+    if (key === "delivery" && want.access !== "none") {
+      for (const tab of PROJECT_TAB_KEYS) {
+        const wantTab = want.tabs?.[tab] !== false;
+        const haveTab = have?.tabs?.[tab] !== false;
+        if (wantTab && !haveTab) return `You can’t grant the ${tab} project tab`;
+      }
+    }
+  }
+  return null;
+}
 
 export const PROJECT_TAB_KEYS: ProjectTabKey[] = [
   "overview",
@@ -95,16 +167,29 @@ export function permissionsPreset(
 
 export function parseMemberPermissions(raw: unknown): MemberPermissions | null {
   if (!raw || typeof raw !== "object") return null;
-  return raw as MemberPermissions;
+  const parsed = raw as MemberPermissions;
+  const cleaned: MemberPermissions = {};
+  for (const key of Object.keys(parsed) as PermissionKey[]) {
+    const mod = parsed[key];
+    if (!mod) continue;
+    const allowDelete =
+      key !== "team" && isDeletableModule(key) && mod.access === "write" && mod.delete === true;
+    cleaned[key] = { ...mod, delete: allowDelete ? true : undefined };
+  }
+  return cleaned;
 }
 
 /** Partner and viewer roles can't write (RLS `can_write_org`), so cap every module at read. */
 export function readOnlyPermissions(permissions: MemberPermissions): MemberPermissions {
   const capped: MemberPermissions = {};
-  for (const key of Object.keys(permissions) as ModuleKey[]) {
+  for (const key of Object.keys(permissions) as PermissionKey[]) {
     const mod = permissions[key];
     if (!mod) continue;
-    capped[key] = { ...mod, access: mod.access === "write" ? "read" : mod.access };
+    capped[key] = {
+      ...mod,
+      access: mod.access === "write" ? "read" : mod.access,
+      delete: undefined,
+    };
   }
   return capped;
 }
@@ -134,10 +219,10 @@ export function resolveMemberPermissions(input: {
         : FULL_PERMISSIONS);
 
   const resolved: MemberPermissions = {};
-  for (const key of Object.keys(base) as ModuleKey[]) {
+  for (const key of Object.keys(base) as PermissionKey[]) {
     const mod = base[key];
     if (!mod) continue;
-    if (!input.orgModules[key] && key !== "portal") {
+    if (key !== "team" && key !== "portal" && !input.orgModules[key]) {
       resolved[key] = { ...mod, access: "none" };
       continue;
     }

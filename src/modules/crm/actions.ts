@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { slugifyStageName } from "@/modules/crm/types";
 import { requireWritableOrg } from "@/modules/identity/org";
+import { canDeleteModule } from "@/modules/identity/permissions";
 import { parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
@@ -489,7 +490,7 @@ export async function convertLeadToClientAction(
 
 export async function deleteLeadAction(orgSlug: string, leadId: string, confirmName: string) {
   const ctx = await requireWritableOrg(orgSlug);
-  if (ctx.permissions.crm?.access !== "write" && ctx.role !== "owner" && ctx.role !== "admin") {
+  if (!canDeleteModule(ctx, "crm")) {
     return { error: "You don’t have permission to delete leads" };
   }
   const { data: lead } = await ctx.supabase

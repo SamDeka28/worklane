@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireWritableOrg } from "@/modules/identity/org";
+import { canDeleteModule } from "@/modules/identity/permissions";
 
 async function recordActivity(
   ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
@@ -181,8 +182,8 @@ export async function deleteClientAction(
   confirmName: string,
 ) {
   const ctx = await requireWritableOrg(orgSlug);
-  if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return { error: "Only owners and admins can delete clients" };
+  if (!canDeleteModule(ctx, "crm")) {
+    return { error: "You don’t have permission to delete clients" };
   }
   const { data: client } = await ctx.supabase
     .from("clients")

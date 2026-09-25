@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireModuleWrite, requireWritableOrg } from "@/modules/identity/org";
+import { canDeleteModule } from "@/modules/identity/permissions";
 import {
   assertShareSum,
   compilePoolRemainderDistribution,
@@ -523,8 +524,8 @@ export async function deletePartnerAction(
   confirmName: string,
 ) {
   const ctx = await requireWritableOrg(orgSlug);
-  if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return { error: "Only owners and admins can delete partners" };
+  if (!canDeleteModule(ctx, "partners")) {
+    return { error: "You don’t have permission to delete partners" };
   }
   const { data: partner } = await ctx.supabase
     .from("partners")

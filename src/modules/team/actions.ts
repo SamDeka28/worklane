@@ -2,7 +2,12 @@
 
 import { createHash, randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
-import { requireWritableOrg } from "@/modules/identity/org";
+import { requireOrg } from "@/modules/identity/org";
+import {
+  canManageTeam,
+  grantViolation,
+  type MemberPermissions,
+} from "@/modules/identity/permissions";
 import type { OrgInvitation } from "@/modules/team/types";
 import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
 import {
@@ -16,12 +21,56 @@ import {
 
 export type { OrgInvitation };
 
+type TeamGate =
+  | { error: string }
+  | {
+      ctx: Awaited<ReturnType<typeof requireOrg>>;
+      db: Awaited<ReturnType<typeof requireOrg>>["supabase"];
+      elevated: boolean;
+    };
+
+/**
+ * Owners/admins act through their own RLS-scoped client. Members granted "Manage team"
+ * are not allowed by RLS, so their writes use the service client after the guardrails
+ * in each action (no admins, no self, no grants beyond their own access).
+ */
+async function requireTeamManager(orgSlug: string): Promise<TeamGate> {
+  const ctx = await requireOrg(orgSlug);
+  if (!canManageTeam(ctx)) return { error: "You don’t have permission to manage the team" };
+  const elevated = ctx.role === "owner" || ctx.role === "admin";
+  if (elevated) return { ctx, db: ctx.supabase, elevated };
+  const admin = createAdminSupabaseClient();
+  if (!admin) return { error: "Team management for members needs the service key configured" };
+  return { ctx, db: admin as typeof ctx.supabase, elevated };
+}
+
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
 function newInviteToken() {
   return randomBytes(24).toString("base64url");
+}
+
+/** "Manage team" is independent of presets; only members can hold it (admins have it implicitly). */
+function withTeamFlag(permissions: MemberPermissions, formData: FormData, role: string) {
+  const next: MemberPermissions = { ...permissions };
+  delete next.team;
+  if (role === "member" && String(formData.get("manage_team") ?? "") === "1") {
+    next.team = { access: "write" };
+  }
+  return next;
+}
+
+function grantGuard(
+  ctx: Awaited<ReturnType<typeof requireOrg>>,
+  elevated: boolean,
+  role: string,
+  permissions: MemberPermissions,
+): string | null {
+  if (elevated) return null;
+  if (role === "admin") return "Only owners can make someone an admin";
+  return grantViolation(permissions, ctx.permissions);
 }
 
 export async function listPendingInvitations(orgSlug: string): Promise<OrgInvitation[]> {
@@ -58,10 +107,9 @@ export async function listPendingInvitations(orgSlug: string): Promise<OrgInvita
 }
 
 export async function inviteOrgMemberAction(orgSlug: string, formData: FormData) {
-  const ctx = await requireWritableOrg(orgSlug);
-  if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return { error: "Only owners and admins can invite" };
-  }
+  const gate = await requireTeamManager(orgSlug);
+  if ("error" in gate) return { error: gate.error };
+  const { ctx, db, elevated } = gate;
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const roleRaw = String(formData.get("role") ?? "member");
@@ -98,11 +146,17 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
             permissionsPreset("full")
           : permissionsPreset("full");
   if (role === "partner") permissions = readOnlyPermissions(permissions);
+  permissions = withTeamFlag(permissions, formData, role);
+  const denied = grantGuard(ctx, elevated, role, permissions);
+  if (denied) return { error: denied };
+  if (partnerId && !elevated && ctx.permissions.partners?.access !== "write") {
+    return { error: "You need Partners edit access to link a partner login" };
+  }
 
   if (!email || !email.includes("@")) return { error: "Enter a valid email" };
 
   if (partnerId) {
-    const { data: partner } = await ctx.supabase
+    const { data: partner } = await db
       .from("partners")
       .select("id, email")
       .eq("id", partnerId)
@@ -138,7 +192,7 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
       .ilike("email", email)
       .maybeSingle();
     if (profile?.id) {
-      const { data: existing } = await ctx.supabase
+      const { data: existing } = await db
         .from("organization_members")
         .select("id, status")
         .eq("organization_id", ctx.org.id)
@@ -146,7 +200,7 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
         .maybeSingle();
       if (existing?.status === "active") {
         if (partnerId) {
-          await ctx.supabase
+          await db
             .from("partners")
             .update({ user_id: profile.id, email })
             .eq("id", partnerId)
@@ -166,7 +220,7 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
           return { ok: true as const, alreadyMember: true as const };
         }
         if (projectIds.length > 0) {
-          await ctx.supabase.from("project_members").upsert(
+          await db.from("project_members").upsert(
             projectIds.map((pid) => ({
               organization_id: ctx.org.id,
               project_id: pid,
@@ -199,14 +253,14 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString();
 
-  await ctx.supabase
+  await db
     .from("organization_invitations")
     .delete()
     .eq("organization_id", ctx.org.id)
     .ilike("email", email)
     .is("accepted_at", null);
 
-  const { error } = await ctx.supabase.from("organization_invitations").insert({
+  const { error } = await db.from("organization_invitations").insert({
     organization_id: ctx.org.id,
     email,
     role,
@@ -263,11 +317,19 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
 }
 
 export async function revokeInvitationAction(orgSlug: string, invitationId: string) {
-  const ctx = await requireWritableOrg(orgSlug);
-  if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return { error: "Only owners and admins can revoke invites" };
+  const gate = await requireTeamManager(orgSlug);
+  if ("error" in gate) return { error: gate.error };
+  const { ctx, db, elevated } = gate;
+  if (!elevated) {
+    const { data: invite } = await db
+      .from("organization_invitations")
+      .select("role")
+      .eq("id", invitationId)
+      .eq("organization_id", ctx.org.id)
+      .maybeSingle();
+    if (invite?.role === "admin") return { error: "Only owners and admins can revoke admin invites" };
   }
-  const { error } = await ctx.supabase
+  const { error } = await db
     .from("organization_invitations")
     .delete()
     .eq("id", invitationId)
@@ -285,10 +347,9 @@ export async function updateMemberAccessAction(
   memberId: string,
   formData: FormData,
 ) {
-  const ctx = await requireWritableOrg(orgSlug);
-  if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return { error: "Only owners and admins can edit access" };
-  }
+  const gate = await requireTeamManager(orgSlug);
+  if ("error" in gate) return { error: gate.error };
+  const { ctx, db, elevated } = gate;
 
   const roleRaw = String(formData.get("role") ?? "member");
   const role =
@@ -311,8 +372,9 @@ export async function updateMemberAccessAction(
           : parseMemberPermissions(permissionsJson ? JSON.parse(permissionsJson) : null) ??
             permissionsPreset("full");
   if (role === "partner") permissions = readOnlyPermissions(permissions);
+  permissions = withTeamFlag(permissions, formData, role);
 
-  const { data: member, error: loadError } = await ctx.supabase
+  const { data: member, error: loadError } = await db
     .from("organization_members")
     .select("id, user_id, role, status")
     .eq("id", memberId)
@@ -328,8 +390,14 @@ export async function updateMemberAccessAction(
   if (ctx.role === "admin" && (member.role === "admin" || role === "admin")) {
     return { error: "Only owners can change admin access" };
   }
+  if (!elevated) {
+    if (member.user_id === ctx.userId) return { error: "You can’t change your own access" };
+    if (member.role === "admin") return { error: "Only owners can change admin access" };
+  }
+  const denied = grantGuard(ctx, elevated, role, permissions);
+  if (denied) return { error: denied };
 
-  const { error } = await ctx.supabase
+  const { error } = await db
     .from("organization_members")
     .update({ role, permissions })
     .eq("id", memberId)
@@ -359,7 +427,7 @@ export async function updateMemberAccessAction(
     }
   }
 
-  const { data: existingProjectRows, error: existingError } = await ctx.supabase
+  const { data: existingProjectRows, error: existingError } = await db
     .from("project_members")
     .select("project_id")
     .eq("organization_id", ctx.org.id)
@@ -370,10 +438,19 @@ export async function updateMemberAccessAction(
     (existingProjectRows ?? []).map((row) => row.project_id as string),
   );
   const nextIds = new Set(projectIds);
-  const toRemove = [...existingIds].filter((id) => !nextIds.has(id));
+  let toRemove = [...existingIds].filter((id) => !nextIds.has(id));
+  if (!elevated && toRemove.length > 0) {
+    const { data: visible } = await ctx.supabase
+      .from("projects")
+      .select("id")
+      .eq("organization_id", ctx.org.id)
+      .in("id", toRemove);
+    const visibleIds = new Set((visible ?? []).map((row) => row.id as string));
+    toRemove = toRemove.filter((id) => visibleIds.has(id));
+  }
 
   if (toRemove.length > 0) {
-    const { error: removeError } = await ctx.supabase
+    const { error: removeError } = await db
       .from("project_members")
       .delete()
       .eq("organization_id", ctx.org.id)
@@ -383,7 +460,7 @@ export async function updateMemberAccessAction(
   }
 
   if (projectIds.length > 0) {
-    const { error: upsertError } = await ctx.supabase.from("project_members").upsert(
+    const { error: upsertError } = await db.from("project_members").upsert(
       projectIds.map((projectId) => ({
         organization_id: ctx.org.id,
         project_id: projectId,
@@ -405,12 +482,11 @@ export async function updateMemberAccessAction(
 }
 
 export async function resendInvitationAction(orgSlug: string, invitationId: string) {
-  const ctx = await requireWritableOrg(orgSlug);
-  if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return { error: "Only owners and admins can resend invites" };
-  }
+  const gate = await requireTeamManager(orgSlug);
+  if ("error" in gate) return { error: gate.error };
+  const { ctx, db, elevated } = gate;
 
-  const { data: invite, error: loadError } = await ctx.supabase
+  const { data: invite, error: loadError } = await db
     .from("organization_invitations")
     .select("id, email, role, project_id, partner_id, accepted_at")
     .eq("id", invitationId)
@@ -419,6 +495,9 @@ export async function resendInvitationAction(orgSlug: string, invitationId: stri
   if (loadError) return { error: loadError.message };
   if (!invite) return { error: "Invite not found" };
   if (invite.accepted_at) return { error: "Invite already accepted" };
+  if (!elevated && invite.role === "admin") {
+    return { error: "Only owners and admins can resend admin invites" };
+  }
 
   let projectName: string | null = null;
   if (invite.project_id) {
@@ -435,7 +514,7 @@ export async function resendInvitationAction(orgSlug: string, invitationId: stri
   const tokenHash = hashToken(token);
   const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString();
 
-  const { error: updateError } = await ctx.supabase
+  const { error: updateError } = await db
     .from("organization_invitations")
     .update({
       token_hash: tokenHash,
@@ -598,12 +677,11 @@ export async function markNotificationReadAction(notificationId: string) {
 }
 
 export async function removeMemberAction(orgSlug: string, memberId: string, confirmValue: string) {
-  const ctx = await requireWritableOrg(orgSlug);
-  if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return { error: "Only owners and admins can remove members" };
-  }
+  const gate = await requireTeamManager(orgSlug);
+  if ("error" in gate) return { error: gate.error };
+  const { ctx, db } = gate;
 
-  const { data: member } = await ctx.supabase
+  const { data: member } = await db
     .from("organization_members")
     .select("id, user_id, role")
     .eq("id", memberId)
@@ -612,11 +690,11 @@ export async function removeMemberAction(orgSlug: string, memberId: string, conf
   if (!member) return { error: "Member not found" };
   if (member.role === "owner") return { error: "The owner can’t be removed" };
   if (member.user_id === ctx.userId) return { error: "You can’t remove yourself" };
-  if (ctx.role === "admin" && member.role === "admin") {
+  if (member.role === "admin" && ctx.role !== "owner") {
     return { error: "Only owners can remove admins" };
   }
 
-  const { data: profile } = await ctx.supabase
+  const { data: profile } = await db
     .from("profiles")
     .select("email, display_name")
     .eq("id", member.user_id)
@@ -626,14 +704,14 @@ export async function removeMemberAction(orgSlug: string, memberId: string, conf
     return { error: "Confirmation doesn’t match" };
   }
 
-  const { error: projectError } = await ctx.supabase
+  const { error: projectError } = await db
     .from("project_members")
     .delete()
     .eq("organization_id", ctx.org.id)
     .eq("user_id", member.user_id);
   if (projectError) return { error: projectError.message };
 
-  const { error, count } = await ctx.supabase
+  const { error, count } = await db
     .from("organization_members")
     .delete({ count: "exact" })
     .eq("id", memberId)

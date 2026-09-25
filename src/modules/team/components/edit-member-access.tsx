@@ -22,6 +22,7 @@ export function EditMemberAccessSheet({
   orgSlug,
   member,
   actorRole,
+  actorPermissions,
   projects = [],
 }: {
   orgSlug: string;
@@ -37,6 +38,8 @@ export function EditMemberAccessSheet({
     projectRole?: "member" | "lead" | null;
   };
   actorRole: OrgRole;
+  /** The editor's own effective permissions; caps what a non-admin team manager can grant. */
+  actorPermissions: MemberPermissions;
   projects?: { id: string; name: string }[];
 }) {
   const router = useRouter();
@@ -60,13 +63,13 @@ export function EditMemberAccessSheet({
   const label =
     member.displayName?.trim() || member.email || member.userId.slice(0, 8);
   const lockedOwner = member.role === "owner";
+  const elevated = actorRole === "owner" || actorRole === "admin";
   const canEditAdmins = actorRole === "owner";
-  const canRemove =
-    !member.isYou &&
-    (actorRole === "owner" || (actorRole === "admin" && member.role !== "admin"));
+  const canRemove = !member.isYou && (actorRole === "owner" || member.role !== "admin");
   const confirmValue = (member.email || member.displayName || "").trim();
 
   if (lockedOwner) return null;
+  if (!elevated && (member.isYou || member.role === "admin")) return null;
 
   return (
     <ActionSheet
@@ -92,6 +95,7 @@ export function EditMemberAccessSheet({
           formData.set("permissions_preset", access.preset);
           formData.set("permissions", JSON.stringify(access.shownPermissions));
           formData.set("project_role", projectRole);
+          if (role === "member" && access.manageTeam) formData.set("manage_team", "1");
           for (const pid of selectedProjectIds) {
             formData.append("project_ids", pid);
           }
@@ -167,6 +171,10 @@ export function EditMemberAccessSheet({
             if (level === "write") promoteFromPartner();
             access.setModuleAccess(module, level);
           }}
+          onModuleDelete={access.setModuleDelete}
+          grantLimit={elevated ? undefined : actorPermissions}
+          manageTeam={access.manageTeam}
+          onManageTeamChange={role === "member" ? access.setManageTeam : undefined}
           onTabToggle={access.setTab}
         />
 

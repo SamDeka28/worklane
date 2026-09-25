@@ -5,6 +5,7 @@ import { StatusChip } from "@/components/studio/status-chip";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import { listOrgMembers, requireOrg } from "@/modules/identity/org";
 import {
+  canManageTeam,
   FULL_PERMISSIONS,
   PARTNER_DEFAULT_PERMISSIONS,
   resolveMemberPermissions,
@@ -22,7 +23,8 @@ export default async function TeamPage({
 }: PageProps<"/[orgSlug]/team">) {
   const { orgSlug } = await params;
   const ctx = await requireOrg(orgSlug);
-  const canManage = ctx.role === "owner" || ctx.role === "admin";
+  const canManage = canManageTeam(ctx);
+  const elevated = ctx.role === "owner" || ctx.role === "admin";
   const [members, board, pendingInvites, projectMembershipRows] = await Promise.all([
     listOrgMembers(orgSlug),
     listProjectBoard(orgSlug).catch(() => []),
@@ -127,11 +129,15 @@ export default async function TeamPage({
                         </Badge>
                         <span className="text-[11px] text-muted-foreground">
                           {accessHint}
+                          {member.role === "member" && member.permissions?.team?.access === "write"
+                            ? " · Manages team"
+                            : null}
                         </span>
                         {canManage ? (
                           <EditMemberAccessSheet
                             orgSlug={orgSlug}
                             actorRole={ctx.role}
+                            actorPermissions={ctx.permissions}
                             projects={projects}
                             member={{
                               ...member,
@@ -161,12 +167,16 @@ export default async function TeamPage({
                 <p className="mb-4 text-xs text-muted-foreground">
                   Email a teammate and set what they can see
                 </p>
-                <InviteMemberForm orgSlug={orgSlug} projects={projects} />
+                <InviteMemberForm
+                  orgSlug={orgSlug}
+                  projects={projects}
+                  grantLimit={elevated ? undefined : ctx.permissions}
+                />
               </SoftCard>
             ) : (
               <SoftCard className="p-4 sm:p-5">
                 <p className="text-sm text-muted-foreground">
-                  Only owners and admins can invite teammates.
+                  Only owners, admins, and teammates with team management can invite.
                 </p>
               </SoftCard>
             )}

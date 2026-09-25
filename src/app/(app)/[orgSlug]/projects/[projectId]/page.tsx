@@ -54,6 +54,7 @@ import { loadProjectFinance } from "@/modules/finance/queries";
 import { listFilesForEntity } from "@/modules/files/queries";
 import { requireOrg, listOrgMembers, requireModuleAccess } from "@/modules/identity/org";
 import {
+  canDeleteModule,
   canAccessProjectTab,
   canSeeMoney,
   firstAllowedProjectTab,
@@ -516,7 +517,7 @@ export default async function ProjectDetailPage({
                 hideTrigger
                 defaultOpen={query.settings === "1"}
                 returnHref={tabHref(tab)}
-                canDelete={ctx.role === "owner" || ctx.role === "admin"}
+                canDelete={canDeleteModule(ctx, "delivery")}
               />
             </div>
           ) : null

@@ -25,7 +25,7 @@ import { clientMoneySnapshot, moneyLabel } from "@/modules/finance/ledger";
 import { collectTargets } from "@/modules/finance/presentation";
 import { loadClientFinance } from "@/modules/finance/queries";
 import { requireOrg } from "@/modules/identity/org";
-import { canSeeMoney } from "@/modules/identity/permissions";
+import { canDeleteModule, canSeeMoney } from "@/modules/identity/permissions";
 import { CreateDocumentDialog } from "@/modules/documents/components/document-forms";
 import { listDocuments } from "@/modules/documents/queries";
 
@@ -138,7 +138,7 @@ export default async function ClientProfilePage({
             }}
             next={next}
             canWrite={ctx.canWrite}
-            canDelete={ctx.role === "owner" || ctx.role === "admin"}
+            canDelete={canDeleteModule(ctx, "crm")}
             seeMoney={seeMoney}
             editOpen={query.edit === "1"}
             contactOpen={query.contact === "1"}

@@ -24,6 +24,7 @@ import {
   type TaskStatus,
 } from "@/modules/delivery/types";
 import { requireWritableOrg } from "@/modules/identity/org";
+import { canDeleteModule } from "@/modules/identity/permissions";
 import {
   allocatePartnersForCharge,
 } from "@/modules/partners/allocate";
@@ -235,8 +236,8 @@ export async function deleteProjectAction(
   confirmName: string,
 ) {
   const ctx = await requireWritableOrg(orgSlug);
-  if (ctx.role !== "owner" && ctx.role !== "admin") {
-    return { error: "Only owners and admins can delete projects" };
+  if (!canDeleteModule(ctx, "delivery")) {
+    return { error: "You don’t have permission to delete projects" };
   }
   const project = await loadProjectRow(ctx, projectId);
   if (!project) return { error: "Project not found" };

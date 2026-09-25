@@ -23,6 +23,7 @@ import {
   ProjectSplitDialog,
   RecordSettlementDialog,
 } from "@/modules/partners/components/partner-forms";
+import { canDeleteModule, canManageTeam } from "@/modules/identity/permissions";
 import { PartnersBalancesWorkbench } from "@/modules/partners/components/partners-balances-workbench";
 import type { PartnerRecord } from "@/modules/partners/types";
 import {
@@ -42,7 +43,7 @@ export default async function PartnersPage({
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
   requireModuleAccess(ctx, "partners");
-  const canInvite = ctx.role === "owner" || ctx.role === "admin";
+  const canInvite = canManageTeam(ctx);
   const view =
     query.view === "month" || query.view === "history" || query.view === "register"
       ? query.view === "register"
@@ -232,7 +233,7 @@ export default async function PartnersPage({
               projectsByPartnerId={projectsByPartnerId}
               canWrite={ctx.canWrite}
               canInvite={canInvite}
-              canDelete={ctx.role === "owner" || ctx.role === "admin"}
+              canDelete={canDeleteModule(ctx, "partners")}
               initialPartnerId={selectedId}
             />
           )

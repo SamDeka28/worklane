@@ -14,6 +14,7 @@ export function CrmLeadSheet({
   initialLead,
   stages,
   canWrite,
+  canDelete = false,
   showMoney = true,
 }: {
   orgSlug: string;
@@ -22,6 +23,7 @@ export function CrmLeadSheet({
   initialLead: LeadRecord | null;
   stages: LeadStageRecord[];
   canWrite: boolean;
+  canDelete?: boolean;
   showMoney?: boolean;
 }) {
   const leadId = useSearchParams().get("lead");
@@ -44,6 +46,7 @@ export function CrmLeadSheet({
         if (!next) setCrmUrl({ lead: null });
       }}
       canWrite={canWrite}
+      canDelete={canDelete}
       showMoney={showMoney}
     />
   );

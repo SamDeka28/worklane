@@ -563,6 +563,7 @@ export function LeadDetailSheet({
   open,
   onOpenChange,
   canWrite,
+  canDelete = false,
   showMoney = true,
 }: {
   orgSlug: string;
@@ -571,6 +572,7 @@ export function LeadDetailSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canWrite: boolean;
+  canDelete?: boolean;
   showMoney?: boolean;
 }) {
   const router = useRouter();
@@ -638,16 +640,19 @@ export function LeadDetailSheet({
       footer={
         canWrite ? (
           <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="mr-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={confirmDelete.open}
-              disabled={pending}
-            >
-              <Trash2 />
-              Delete
-            </Button>
+            {canDelete ? (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={confirmDelete.open}
+                disabled={pending}
+              >
+                <Trash2 />
+                Delete
+              </Button>
+            ) : null}
+            <span className="flex-1" />
             <Button
               type="button"
               variant="ghost"

@@ -15,6 +15,7 @@ import {
   revokeInvitationAction,
 } from "@/modules/team/actions";
 import { invitePartnerLoginAction } from "@/modules/partners/actions";
+import type { MemberPermissions } from "@/modules/identity/permissions";
 import type { OrgInvitation } from "@/modules/team/types";
 import {
   AccessPermissionsFields,
@@ -23,16 +24,29 @@ import {
 } from "@/modules/team/components/access-permissions-fields";
 import { ProjectMultiSelect } from "@/modules/team/components/project-multi-select";
 
+/** A limited manager's own access, minus delete and team management, as the invite default. */
+function grantableSeed(limit: MemberPermissions): MemberPermissions {
+  const seed: MemberPermissions = {};
+  for (const [key, value] of Object.entries(limit) as [keyof MemberPermissions, MemberPermissions[keyof MemberPermissions]][]) {
+    if (!value || key === "team") continue;
+    seed[key] = { ...value, delete: undefined };
+  }
+  return seed;
+}
+
 export function InviteMemberForm({
   orgSlug,
   projects = [],
   defaultProjectId,
   compact = false,
+  grantLimit,
 }: {
   orgSlug: string;
   projects?: { id: string; name: string }[];
   defaultProjectId?: string;
   compact?: boolean;
+  /** Set for non-admin team managers: they can only grant up to their own access. */
+  grantLimit?: MemberPermissions;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -40,7 +54,10 @@ export function InviteMemberForm({
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(
     defaultProjectId ? [defaultProjectId] : [],
   );
-  const access = useAccessPermissionsState(null, "member");
+  const access = useAccessPermissionsState(
+    grantLimit ? grantableSeed(grantLimit) : null,
+    "member",
+  );
 
 
   function promoteFromPartner() {
@@ -57,6 +74,7 @@ export function InviteMemberForm({
       action={(formData) => {
         formData.set("permissions_preset", access.preset);
         formData.set("permissions", JSON.stringify(access.shownPermissions));
+        if (role === "member" && access.manageTeam) formData.set("manage_team", "1");
         for (const pid of selectedProjectIds) {
           formData.append("project_ids", pid);
         }
@@ -107,7 +125,7 @@ export function InviteMemberForm({
             else if (access.preset === "partner") access.applyPreset("full");
           }}
         >
-          <option value="admin">Admin</option>
+          {grantLimit ? null : <option value="admin">Admin</option>}
           <option value="member">Member</option>
           <option value="viewer">Viewer</option>
           <option value="partner">Partner</option>
@@ -168,6 +186,10 @@ export function InviteMemberForm({
           if (level === "write") promoteFromPartner();
           access.setModuleAccess(module, level);
         }}
+        onModuleDelete={access.setModuleDelete}
+        grantLimit={grantLimit}
+        manageTeam={access.manageTeam}
+        onManageTeamChange={role === "member" ? access.setManageTeam : undefined}
         onTabToggle={access.setTab}
       />
 

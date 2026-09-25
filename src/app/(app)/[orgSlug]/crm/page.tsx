@@ -26,7 +26,7 @@ import {
   stagesOrDefault,
 } from "@/modules/crm/types";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
-import { canSeeMoney } from "@/modules/identity/permissions";
+import { canDeleteModule, canSeeMoney } from "@/modules/identity/permissions";
 import { JOURNEY } from "@/shared/journey-copy";
 import { formatMoney } from "@/shared/money";
 
@@ -238,6 +238,7 @@ export default async function CrmPage({
         initialLead={selected}
         stages={stages}
         canWrite={ctx.canWrite}
+        canDelete={canDeleteModule(ctx, "crm")}
         showMoney={seeMoney}
       />
     </WorkSurface>
