@@ -18,6 +18,7 @@ import { invitePartnerLoginAction } from "@/modules/partners/actions";
 import type { OrgInvitation } from "@/modules/team/types";
 import {
   AccessPermissionsFields,
+  presetNeedsWrite,
   useAccessPermissionsState,
 } from "@/modules/team/components/access-permissions-fields";
 import { ProjectMultiSelect } from "@/modules/team/components/project-multi-select";
@@ -41,8 +42,12 @@ export function InviteMemberForm({
   );
   const access = useAccessPermissionsState(null, "member");
 
-  const effectivePreset =
-    role === "partner" && access.preset === "full" ? "partner" : access.preset;
+
+  function promoteFromPartner() {
+    if (role !== "partner") return;
+    setRole("member");
+    toast.info("Role changed to Member: partners can only view");
+  }
   const showProjectRole =
     selectedProjectIds.length > 0 || Boolean(defaultProjectId && projects.length === 0);
 
@@ -50,7 +55,7 @@ export function InviteMemberForm({
     <form
       className={compact ? "grid gap-3.5" : "grid gap-3.5"}
       action={(formData) => {
-        formData.set("permissions_preset", effectivePreset);
+        formData.set("permissions_preset", access.preset);
         formData.set("permissions", JSON.stringify(access.shownPermissions));
         for (const pid of selectedProjectIds) {
           formData.append("project_ids", pid);
@@ -153,10 +158,16 @@ export function InviteMemberForm({
       ) : null}
 
       <AccessPermissionsFields
-        preset={effectivePreset}
+        preset={access.preset}
         shownPermissions={access.shownPermissions}
-        onPresetChange={access.applyPreset}
-        onModuleAccess={access.setModuleAccess}
+        onPresetChange={(next) => {
+          if (presetNeedsWrite(next)) promoteFromPartner();
+          access.applyPreset(next);
+        }}
+        onModuleAccess={(module, level) => {
+          if (level === "write") promoteFromPartner();
+          access.setModuleAccess(module, level);
+        }}
         onTabToggle={access.setTab}
       />
 

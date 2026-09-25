@@ -98,6 +98,17 @@ export function parseMemberPermissions(raw: unknown): MemberPermissions | null {
   return raw as MemberPermissions;
 }
 
+/** Partner and viewer roles can't write (RLS `can_write_org`), so cap every module at read. */
+export function readOnlyPermissions(permissions: MemberPermissions): MemberPermissions {
+  const capped: MemberPermissions = {};
+  for (const key of Object.keys(permissions) as ModuleKey[]) {
+    const mod = permissions[key];
+    if (!mod) continue;
+    capped[key] = { ...mod, access: mod.access === "write" ? "read" : mod.access };
+  }
+  return capped;
+}
+
 /** Resolve effective permissions: null/empty jsonb → full staff; intersect with org modules. */
 export function resolveMemberPermissions(input: {
   role: string;

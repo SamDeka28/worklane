@@ -12,6 +12,7 @@ import type { OrgRole } from "@/modules/identity/types";
 import { updateMemberAccessAction } from "@/modules/team/actions";
 import {
   AccessPermissionsFields,
+  presetNeedsWrite,
   useAccessPermissionsState,
 } from "@/modules/team/components/access-permissions-fields";
 import { ProjectMultiSelect } from "@/modules/team/components/project-multi-select";
@@ -49,6 +50,12 @@ export function EditMemberAccessSheet({
   );
   const access = useAccessPermissionsState(member.permissions, member.role);
 
+  function promoteFromPartner() {
+    if (role !== "partner") return;
+    setRole("member");
+    toast.info("Role changed to Member: partners can only view");
+  }
+
   const label =
     member.displayName?.trim() || member.email || member.userId.slice(0, 8);
   const lockedOwner = member.role === "owner";
@@ -69,6 +76,7 @@ export function EditMemberAccessSheet({
           setSelectedProjectIds(member.projectIds ?? []);
           setProjectRole(member.projectRole === "lead" ? "lead" : "member");
           setRole(member.role === "owner" ? "admin" : member.role);
+          access.reset(member.permissions, member.role);
         }
       }}
     >
@@ -144,12 +152,16 @@ export function EditMemberAccessSheet({
 
         <AccessPermissionsFields
           idPrefix={`member_${member.id}`}
-          preset={
-            role === "partner" && access.preset === "full" ? "partner" : access.preset
-          }
+          preset={access.preset}
           shownPermissions={access.shownPermissions}
-          onPresetChange={access.applyPreset}
-          onModuleAccess={access.setModuleAccess}
+          onPresetChange={(next) => {
+            if (presetNeedsWrite(next)) promoteFromPartner();
+            access.applyPreset(next);
+          }}
+          onModuleAccess={(module, level) => {
+            if (level === "write") promoteFromPartner();
+            access.setModuleAccess(module, level);
+          }}
           onTabToggle={access.setTab}
         />
 

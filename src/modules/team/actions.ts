@@ -85,21 +85,19 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
   const displayName = String(formData.get("display_name") ?? "").trim() || null;
   const presetRaw = String(formData.get("permissions_preset") ?? "full");
   const permissionsJson = String(formData.get("permissions") ?? "").trim();
-  const { permissionsPreset, parseMemberPermissions } = await import(
+  const { permissionsPreset, parseMemberPermissions, readOnlyPermissions } = await import(
     "@/modules/identity/permissions"
   );
   let permissions =
     presetRaw === "progress"
       ? permissionsPreset("progress")
-      : presetRaw === "partner" || role === "partner"
+      : presetRaw === "partner"
         ? permissionsPreset("partner")
         : presetRaw === "custom"
           ? parseMemberPermissions(permissionsJson ? JSON.parse(permissionsJson) : null) ??
             permissionsPreset("full")
           : permissionsPreset("full");
-  if (role === "partner" && presetRaw === "full") {
-    permissions = permissionsPreset("partner");
-  }
+  if (role === "partner") permissions = readOnlyPermissions(permissions);
 
   if (!email || !email.includes("@")) return { error: "Enter a valid email" };
 
@@ -299,22 +297,20 @@ export async function updateMemberAccessAction(
       : "member";
   const presetRaw = String(formData.get("permissions_preset") ?? "custom");
   const permissionsJson = String(formData.get("permissions") ?? "").trim();
-  const { permissionsPreset, parseMemberPermissions } = await import(
+  const { permissionsPreset, parseMemberPermissions, readOnlyPermissions } = await import(
     "@/modules/identity/permissions"
   );
 
   let permissions =
     presetRaw === "progress"
       ? permissionsPreset("progress")
-      : presetRaw === "partner" || role === "partner"
+      : presetRaw === "partner"
         ? permissionsPreset("partner")
         : presetRaw === "full"
           ? permissionsPreset("full")
           : parseMemberPermissions(permissionsJson ? JSON.parse(permissionsJson) : null) ??
             permissionsPreset("full");
-  if (role === "partner" && presetRaw === "full") {
-    permissions = permissionsPreset("partner");
-  }
+  if (role === "partner") permissions = readOnlyPermissions(permissions);
 
   const { data: member, error: loadError } = await ctx.supabase
     .from("organization_members")

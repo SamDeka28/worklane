@@ -70,6 +70,11 @@ function summarizePermissions(permissions: MemberPermissions) {
   return parts.join(" · ");
 }
 
+/** Presets that include edit access, which the partner role can't hold (it's read-only in RLS). */
+export function presetNeedsWrite(preset: AccessPreset) {
+  return preset === "full" || preset === "progress";
+}
+
 export function inferAccessPreset(
   permissions: MemberPermissions | null | undefined,
   role?: string,
@@ -140,9 +145,19 @@ export function useAccessPermissionsState(
     }));
   }
 
+  function reset(next: MemberPermissions | null | undefined, role?: string) {
+    setPreset(inferAccessPreset(next, role));
+    setPermissions(
+      next
+        ? clonePermissions(next)
+        : clonePermissions(role === "partner" ? PARTNER_DEFAULT_PERMISSIONS : FULL_PERMISSIONS),
+    );
+  }
+
   return {
     preset,
     shownPermissions,
+    reset,
     applyPreset,
     setModuleAccess,
     setTab,
@@ -216,6 +231,7 @@ export function AccessPermissionsFields({
               <button
                 key={option.id}
                 type="button"
+                aria-pressed={active}
                 onClick={() => onPresetChange(option.id)}
                 className={cn(
                   "rounded-2xl px-3 py-2.5 text-left transition-colors ring-1",
