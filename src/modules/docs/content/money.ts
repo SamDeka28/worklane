@@ -220,7 +220,7 @@ export const MONEY: DocArticle[] = [
     blocks: [
       {
         type: "p",
-        text: "Open **Invoices** from the Finance toolbar or ⌘K. Every invoice opens in the invoice studio: a live preview of the page on the left and a step-by-step panel on the right. An invoice moves through **Draft → Issued → Sent → Paid**, and the panel always tells you the next thing to do.",
+        text: "Open **Invoices** from the sidebar (under Money), the Finance toolbar, or ⌘K. Every invoice opens in the invoice studio: a live preview of the page on the left and a step-by-step panel on the right. An invoice moves through **Draft → Issued → Sent → Paid**, and the panel always tells you the next thing to do.",
       },
       { type: "h2", text: "1. Create a draft" },
       {

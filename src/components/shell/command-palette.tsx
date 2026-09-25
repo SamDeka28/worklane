@@ -235,7 +235,7 @@ export function CommandPalette({
               <CommandItem onSelect={() => go(`${base}/finance?new=charge`)}>
                 <Plus /> New charge
               </CommandItem>
-              <CommandItem onSelect={() => go(`${base}/finance?view=invoices`)}>
+              <CommandItem onSelect={() => go(`${base}/invoices`)}>
                 <FileText /> Invoices
               </CommandItem>
             </>

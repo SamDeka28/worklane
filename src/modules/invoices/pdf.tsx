@@ -111,7 +111,8 @@ export function InvoicePdfDocument({ invoice, clientName, brand, paidMinor }: Pd
 function Logo({ view, light }: { view: InvoiceView; light?: boolean }) {
   if (view.logoUrl) {
     // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf Image
-    return <Image src={view.logoUrl} style={s.logo} />;
+    const image = <Image src={view.logoUrl} style={s.logo} />;
+    return light ? <View style={s.logoCard}>{image}</View> : image;
   }
   return <Text style={[s.orgName, light ? { color: "#fff" } : {}]}>{view.orgName}</Text>;
 }
@@ -287,6 +288,7 @@ const s = StyleSheet.create({
     paddingTop: 40,
   },
   logo: { width: 120, height: 42, objectFit: "contain" },
+  logoCard: { backgroundColor: "#ffffff", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7 },
   orgName: { fontSize: 15, fontWeight: 700, color: INK },
   title: { fontSize: 24, letterSpacing: 3, color: INK, fontWeight: 700 },
   number: { marginTop: 4, fontSize: 10, color: MUTED },

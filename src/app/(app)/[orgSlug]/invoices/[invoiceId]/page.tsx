@@ -49,7 +49,7 @@ import {
   invoiceDisplayStatus,
   type InvoiceDisplayStatus,
 } from "@/modules/invoices/types";
-import { requireOrg } from "@/modules/identity/org";
+import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { canWriteModule } from "@/modules/identity/permissions";
 import { formatMoney } from "@/shared/money";
 
@@ -179,6 +179,7 @@ export default async function InvoiceDetailPage({
 }: PageProps<"/[orgSlug]/invoices/[invoiceId]">) {
   const { orgSlug, invoiceId } = await params;
   const ctx = await requireOrg(orgSlug);
+  requireModuleAccess(ctx, "finance");
   if (!ctx.org.modules.finance) notFound();
 
   const invoice = await getInvoice(orgSlug, invoiceId);

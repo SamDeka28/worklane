@@ -11,6 +11,7 @@ import {
   Handshake,
   LayoutDashboard,
   Plus,
+  ReceiptText,
   Target,
   UserRound,
   Users,
@@ -65,6 +66,7 @@ const SECTIONS: Array<{ label: string | null; items: NavItem[] }> = [
     label: "Money",
     items: [
       { href: "/finance", label: "Finance", icon: Wallet, module: "finance" },
+      { href: "/invoices", label: "Invoices", icon: ReceiptText, module: "finance" },
       { href: "/partners", label: "Partners", icon: Handshake, module: "partners" },
     ],
   },

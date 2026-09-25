@@ -248,6 +248,42 @@ export async function listInvoicePayments(
   return [...byPayment.values()].sort((a, b) => b.paidOn.localeCompare(a.paidOn));
 }
 
+/** Posted receipts applied to each invoice's charges, keyed by invoice id. */
+export async function listInvoicePaidTotals(
+  orgSlug: string,
+  invoices: Pick<InvoiceRecord, "id" | "lines">[],
+): Promise<Map<string, bigint>> {
+  const invoiceByCharge = new Map<string, string>();
+  for (const invoice of invoices) {
+    for (const line of invoice.lines) {
+      if (line.chargeId) invoiceByCharge.set(line.chargeId, invoice.id);
+    }
+  }
+  const totals = new Map<string, bigint>();
+  if (invoiceByCharge.size === 0) return totals;
+
+  const ctx = await requireOrg(orgSlug);
+  const { data, error } = await ctx.supabase
+    .from("payment_allocations")
+    .select("charge_id, amount_minor, payment:payments(status, kind)")
+    .eq("organization_id", ctx.org.id)
+    .in("charge_id", [...invoiceByCharge.keys()]);
+  if (error) throw new Error(error.message);
+
+  for (const row of (data ?? []) as Array<{
+    charge_id: string;
+    amount_minor: string | number;
+    payment: { status: string; kind: string } | { status: string; kind: string }[] | null;
+  }>) {
+    const payment = Array.isArray(row.payment) ? row.payment[0] : row.payment;
+    if (!payment || payment.kind !== "receipt" || payment.status === "void") continue;
+    const invoiceId = invoiceByCharge.get(row.charge_id);
+    if (!invoiceId) continue;
+    totals.set(invoiceId, (totals.get(invoiceId) ?? BigInt(0)) + BigInt(row.amount_minor));
+  }
+  return totals;
+}
+
 export type LineSuggestion = {
   description: string;
   unitAmountMinor: string;

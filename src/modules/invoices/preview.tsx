@@ -99,13 +99,18 @@ export function InvoicePreview({ invoice, clientName, brand, paidMinor, classNam
 
 function Logo({ view, invert }: { view: InvoiceView; invert?: boolean }) {
   if (view.logoUrl) {
-    return (
+    const image = (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={view.logoUrl}
-        alt=""
-        className={cn("h-11 w-auto max-w-[11rem] object-contain", invert && "brightness-0 invert")}
+        alt={view.orgName}
+        className="h-11 w-auto max-w-[11rem] object-contain"
       />
+    );
+    return invert ? (
+      <span className="inline-flex shrink-0 rounded-xl bg-white px-3 py-2 shadow-sm">{image}</span>
+    ) : (
+      image
     );
   }
   return (

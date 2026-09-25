@@ -170,7 +170,7 @@ export const GETTING_STARTED: DocArticle[] = [
       { type: "h2", text: "Sidebar" },
       {
         type: "p",
-        text: "The sidebar is grouped the way work flows: **Home**, then **Sell** (Leads, Clients), **Deliver** (Projects, Board, Documents, Team), and **Money** (Finance, Partners).",
+        text: "The sidebar is grouped the way work flows: **Home**, then **Sell** (Leads, Clients), **Deliver** (Projects, Board, Documents, Team), and **Money** (Finance, Invoices, Partners).",
       },
       {
         type: "list",
