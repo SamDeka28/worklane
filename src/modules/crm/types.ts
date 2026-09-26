@@ -23,7 +23,11 @@ export type LeadStageRecord = {
   slug: string;
   position: number;
   systemKey: LeadStageSystemKey | null;
+  /** Win likelihood in basis points; null falls back to a position-based guess. */
+  probabilityBps: number | null;
 };
+
+export type LeadOrigin = "manual" | "intake" | "import";
 
 export type LeadRecord = {
   id: string;
@@ -46,9 +50,108 @@ export type LeadRecord = {
   position: number;
   clientId: string | null;
   dealShareBps: Record<string, unknown> | null;
+  nextAction: string | null;
+  nextActionOn: string | null;
+  lastTouchedAt: string;
+  closedAt: string | null;
+  lostReason: string | null;
+  lostNote: string | null;
+  origin: LeadOrigin;
   createdAt: string;
   updatedAt: string;
 };
+
+export const LEAD_ACTIVITY_KINDS = ["call", "email", "meeting", "message", "note"] as const;
+
+export type LeadActivityKind = (typeof LEAD_ACTIVITY_KINDS)[number] | "form";
+
+export const LEAD_ACTIVITY_LABEL: Record<LeadActivityKind, string> = {
+  call: "Call",
+  email: "Email",
+  meeting: "Meeting",
+  message: "Message",
+  note: "Note",
+  form: "Form enquiry",
+};
+
+export type LeadActivityRecord = {
+  id: string;
+  leadId: string;
+  kind: LeadActivityKind;
+  body: string | null;
+  happenedAt: string;
+  actorId: string | null;
+  actorLabel: string | null;
+  actorAvatarUrl: string | null;
+  /** Set when the entry is an email sent from Worklane. */
+  email?: LeadEmailInfo | null;
+};
+
+export type LeadEmailInfo = {
+  id: string;
+  toEmail: string;
+  subject: string;
+  trackOpens: boolean;
+  openCount: number;
+  firstOpenedAt: string | null;
+  lastOpenedAt: string | null;
+};
+
+/** One row in the lead timeline: a logged touchpoint or a stage move. */
+export type LeadTimelineItem =
+  | { type: "activity"; at: string; activity: LeadActivityRecord }
+  | {
+      type: "stage";
+      at: string;
+      id: string;
+      from: string | null;
+      to: string;
+      actorLabel: string | null;
+      actorAvatarUrl: string | null;
+    };
+
+export type CrmMember = {
+  userId: string;
+  name: string;
+  avatarUrl: string | null;
+};
+
+export type FollowState = "overdue" | "today" | "upcoming" | "none";
+
+export function todayIso(now = new Date()) {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+export function followState(lead: Pick<LeadRecord, "nextActionOn">, today = todayIso()): FollowState {
+  if (!lead.nextActionOn) return "none";
+  if (lead.nextActionOn < today) return "overdue";
+  if (lead.nextActionOn === today) return "today";
+  return "upcoming";
+}
+
+export function daysSince(iso: string, now = Date.now()) {
+  return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 86_400_000));
+}
+
+export function isStale(
+  lead: Pick<LeadRecord, "lastTouchedAt">,
+  staleDays: number,
+  now = Date.now(),
+) {
+  return staleDays > 0 && daysSince(lead.lastTouchedAt, now) >= staleDays;
+}
+
+export function stageProbabilityBps(stage: LeadStageRecord, stages: LeadStageRecord[]): number {
+  if (stage.probabilityBps != null) return stage.probabilityBps;
+  if (stage.systemKey === "won") return 10_000;
+  if (stage.systemKey === "lost") return 0;
+  const open = openPipelineStages(stages);
+  const index = open.findIndex((row) => row.id === stage.id);
+  return Math.round((10_000 * (index + 1)) / (open.length + 1));
+}
 
 export function stageLabel(
   slug: string,
@@ -87,6 +190,7 @@ export function stagesOrDefault(stages: LeadStageRecord[]): LeadStageRecord[] {
     slug: stage.slug,
     position,
     systemKey: stage.systemKey,
+    probabilityBps: null,
   }));
 }
 

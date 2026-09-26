@@ -10,6 +10,7 @@ import {
   FolderKanban,
   Handshake,
   LayoutDashboard,
+  MailCheck,
   Plus,
   ReceiptText,
   Target,
@@ -51,6 +52,7 @@ const SECTIONS: Array<{ label: string | null; items: NavItem[] }> = [
     items: [
       { href: "/crm", label: "Leads", icon: Target, module: "crm" },
       { href: "/clients", label: "Clients", icon: Users, module: null },
+      { href: "/emails", label: "Emails", icon: MailCheck, module: null },
     ],
   },
   {
@@ -76,7 +78,7 @@ function switchOrgPath(pathname: string, fromSlug: string, toSlug: string) {
   if (!pathname.startsWith(`/${fromSlug}`)) return `/${toSlug}`;
   const rest = pathname.slice(`/${fromSlug}`.length) || "";
   const kept = rest.match(
-    /^(\/(?:crm|clients|projects|board|documents|team|finance|partners|settings|profile|invoices)(?:\/[^/]+)?)/,
+    /^(\/(?:crm|clients|emails|projects|board|documents|team|finance|partners|settings|profile|invoices)(?:\/[^/]+)?)/,
   );
   if (kept?.[1]) return `/${toSlug}${kept[1]}`;
   if (rest === "" || rest === "/") return `/${toSlug}`;

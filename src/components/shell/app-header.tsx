@@ -3,7 +3,18 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { BookOpen, Menu, Plus, Search } from "lucide-react";
+import {
+  BookOpen,
+  FilePlus,
+  FolderPlus,
+  HandCoins,
+  Menu,
+  Plus,
+  Receipt,
+  Search,
+  Sparkles,
+  UserPlus,
+} from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { AvatarMark } from "@/components/studio/chrome";
 import { Button } from "@/components/ui/button";
@@ -152,29 +163,35 @@ export function AppHeader({
             <DropdownMenuContent align="end" className="min-w-44">
               {org.modules.crm && canAccessModule(permissions, "crm") ? (
                 <DropdownMenuItem onClick={() => router.push(`${base}/crm?new=1`)}>
+                  <Sparkles />
                   New lead
                 </DropdownMenuItem>
               ) : null}
               <DropdownMenuItem onClick={() => router.push(`${base}/clients?new=1`)}>
+                <UserPlus />
                 New client
               </DropdownMenuItem>
               {org.modules.delivery && canAccessModule(permissions, "delivery") ? (
                 <DropdownMenuItem onClick={() => router.push(`${base}/projects?new=1`)}>
+                  <FolderPlus />
                   New project
                 </DropdownMenuItem>
               ) : null}
               {org.modules.finance && canAccessModule(permissions, "finance") ? (
                 <>
                   <DropdownMenuItem onClick={() => router.push(`${base}/finance?new=charge`)}>
+                    <Receipt />
                     New charge
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => router.push(`${base}/finance?new=payment`)}>
+                    <HandCoins />
                     Collect
                   </DropdownMenuItem>
                 </>
               ) : null}
               {org.modules.documents && canAccessModule(permissions, "documents") ? (
                 <DropdownMenuItem onClick={() => router.push(`${base}/documents?new=1`)}>
+                  <FilePlus />
                   New document
                 </DropdownMenuItem>
               ) : null}

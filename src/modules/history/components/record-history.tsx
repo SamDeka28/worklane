@@ -30,6 +30,8 @@ const FIELD_LABEL: Record<string, string> = {
   whatsapp: "WhatsApp",
   source: "source",
   currency: "currency",
+  next_action: "next step",
+  lost_reason: "loss reason",
 };
 
 function B({ children }: { children: ReactNode }) {
@@ -115,6 +117,10 @@ function describeChange(
       ];
     case "due_on":
       return [fromTo("due date", change, (value) => (text(value) ? formatDay(String(value)) : null))];
+    case "next_action_on":
+      return [
+        fromTo("follow-up date", change, (value) => (text(value) ? formatDay(String(value)) : null)),
+      ];
     case "close_on":
       return [
         fromTo("expected close", change, (value) => (text(value) ? formatDay(String(value)) : null)),

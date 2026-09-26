@@ -24,12 +24,16 @@ import { cn } from "@/lib/utils";
 import { moveLeadStageAction } from "@/modules/crm/actions";
 import { openLead, openNewLead } from "@/modules/crm/components/crm-url";
 import { LeadBoardCard, type LeadCardState } from "@/modules/crm/components/lead-board-card";
+import { ConvertLeadDialog, LostReasonDialog } from "@/modules/crm/components/lead-outcome-dialogs";
 import {
   isLostStage,
   isWonStage,
+  type CrmMember,
   type LeadRecord,
   type LeadStageRecord,
 } from "@/modules/crm/types";
+
+type PendingLost = { lead: LeadRecord; stage: string; orderedIds: string[] };
 const OPEN_STAGE_DOTS = [
   "bg-slate-400",
   "bg-sky-500",
@@ -77,16 +81,28 @@ export function LeadBoard({
   stages,
   canWrite,
   showMoney = true,
+  members = [],
+  staleDays = 0,
+  lostReasons = [],
 }: {
   orgSlug: string;
   leads: LeadRecord[];
   stages: LeadStageRecord[];
   canWrite: boolean;
   showMoney?: boolean;
+  members?: CrmMember[];
+  staleDays?: number;
+  lostReasons?: string[];
 }) {
   const activeLeadId = useSearchParams().get("lead");
   const [, start] = useTransition();
   const [items, setItems] = useState(() => groupLeads(leads, stages));
+  const [pendingLost, setPendingLost] = useState<PendingLost | null>(null);
+  const [wonLead, setWonLead] = useState<LeadRecord | null>(null);
+  const memberMap = useMemo(
+    () => new Map(members.map((member) => [member.userId, member])),
+    [members],
+  );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -181,13 +197,40 @@ export function LeadBoard({
     }
     setItems(next);
 
+    const changedStage = fromStage !== targetStage;
+    if (changedStage && isLostStage(targetStage, stages)) {
+      setPendingLost({ lead: moving, stage: targetStage, orderedIds });
+      return;
+    }
+
     start(async () => {
       const result = await moveLeadStageAction(orgSlug, leadId, targetStage, orderedIds);
       if (result.error) {
         toast.error(result.error);
         setItems(groupLeads(leads, stages));
+        return;
+      }
+      if (changedStage && isWonStage(targetStage, stages) && !moving.clientId) {
+        setWonLead({ ...moving, stage: targetStage });
       }
     });
+  }
+
+  async function confirmLost(outcome: { lostReason: string; lostNote: string }) {
+    if (!pendingLost) return false;
+    const result = await moveLeadStageAction(
+      orgSlug,
+      pendingLost.lead.id,
+      pendingLost.stage,
+      pendingLost.orderedIds,
+      outcome,
+    );
+    if (result.error) {
+      toast.error(result.error);
+      return false;
+    }
+    setPendingLost(null);
+    return true;
   }
 
   return (
@@ -215,6 +258,8 @@ export function LeadBoard({
             showMoney={showMoney}
             canWrite={canWrite}
             disabled={!canWrite}
+            memberMap={memberMap}
+            staleDays={staleDays}
             selectedLeadId={activeLeadId}
             activeLeadId={activeId}
             dropActive={Boolean(activeId) && overStage === stage.slug}
@@ -232,6 +277,8 @@ export function LeadBoard({
                     lead={overlay}
                     state={stageState(overlay.stage, stages)}
                     showMoney={showMoney}
+                    owner={overlay.ownerUserId ? memberMap.get(overlay.ownerUserId) : null}
+                    staleDays={staleDays}
                     className="shadow-lift ring-primary/30"
                   />
                 </div>
@@ -240,6 +287,28 @@ export function LeadBoard({
             document.body,
           )
         : null}
+      <LostReasonDialog
+        open={Boolean(pendingLost)}
+        leadName={pendingLost?.lead.name ?? ""}
+        reasons={lostReasons}
+        onCancel={() => {
+          setPendingLost(null);
+          setItems(groupLeads(leads, stages));
+        }}
+        onConfirm={confirmLost}
+      />
+      {wonLead ? (
+        <ConvertLeadDialog
+          orgSlug={orgSlug}
+          lead={wonLead}
+          open
+          onOpenChange={(next) => {
+            if (!next) setWonLead(null);
+          }}
+          onSkip={() => setWonLead(null)}
+          skipLabel="Not yet"
+        />
+      ) : null}
     </DndContext>
   );
 }
@@ -252,6 +321,8 @@ function LeadColumn({
   showMoney,
   canWrite,
   disabled,
+  memberMap,
+  staleDays,
   selectedLeadId,
   activeLeadId,
   dropActive,
@@ -265,6 +336,8 @@ function LeadColumn({
   showMoney: boolean;
   canWrite: boolean;
   disabled: boolean;
+  memberMap: Map<string, CrmMember>;
+  staleDays: number;
   selectedLeadId: string | null;
   activeLeadId: string | null;
   dropActive: boolean;
@@ -316,6 +389,8 @@ function LeadColumn({
                 state={state}
                 showMoney={showMoney}
                 disabled={disabled}
+                owner={lead.ownerUserId ? (memberMap.get(lead.ownerUserId) ?? null) : null}
+                staleDays={staleDays}
                 selected={selectedLeadId === lead.id}
                 collapsed={lead.id === activeLeadId}
               />
@@ -348,6 +423,8 @@ function SortableLeadCard({
   state,
   showMoney,
   disabled,
+  owner,
+  staleDays,
   selected,
   collapsed,
 }: {
@@ -355,6 +432,8 @@ function SortableLeadCard({
   state: LeadCardState;
   showMoney: boolean;
   disabled: boolean;
+  owner: CrmMember | null;
+  staleDays: number;
   selected: boolean;
   collapsed: boolean;
 }) {
@@ -387,6 +466,8 @@ function SortableLeadCard({
         selected={selected}
         onOpen={() => openLead(lead.id)}
         draggable={!disabled}
+        owner={owner}
+        staleDays={staleDays}
       />
     </li>
   );

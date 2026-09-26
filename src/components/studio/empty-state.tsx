@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Inbox, type LucideIcon } from "lucide-react";
+import { Inbox, Plus, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -55,6 +55,7 @@ export function EmptyState({
           nativeButton={false}
           render={<Link href={actionHref} />}
         >
+          {/^(new|add)\b/i.test(actionLabel) ? <Plus /> : null}
           {actionLabel}
         </Button>
       ) : null}

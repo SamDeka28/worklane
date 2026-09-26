@@ -1,5 +1,6 @@
 "use client";
 
+import { FilePlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -42,6 +43,7 @@ export function CreateDocumentDialog({
       title="New document"
         description="Pick a template and context: client and project are filled in for you."
       triggerLabel={triggerLabel}
+      triggerIcon={<FilePlus />}
       triggerVariant={triggerVariant}
       open={open}
       onOpenChange={setOpen}

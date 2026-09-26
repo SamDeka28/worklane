@@ -10,6 +10,9 @@ export type SendEmailInput = {
   html: string;
   text?: string;
   replyTo?: string;
+  /** Message-ID of the email this answers, so it lands in the same thread. */
+  inReplyTo?: string;
+  references?: string[];
   attachments?: { filename: string; content: Buffer; contentType: string }[];
 };
 
@@ -41,6 +44,9 @@ export function isEmailConfigured() {
   return Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
+let pooled: { key: string; transport: ReturnType<typeof nodemailer.createTransport> } | null = null;
+
+/** Reuses one pooled SMTP connection; a fresh TLS handshake and login costs seconds per email. */
 function transporter() {
   const host = process.env.SMTP_HOST || "smtp.gmail.com";
   const port = Number(process.env.SMTP_PORT || 465);
@@ -49,12 +55,23 @@ function transporter() {
   const user = process.env.SMTP_USER ?? "";
   const pass = (process.env.SMTP_PASS ?? "").replace(/\s+/g, "");
   if (!user || !pass) return null;
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: { user, pass },
-  });
+  const key = `${host}:${port}:${secure}:${user}:${pass}`;
+  if (pooled?.key !== key) {
+    pooled?.transport.close();
+    pooled = {
+      key,
+      transport: nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass },
+        pool: true,
+        maxConnections: 3,
+        socketTimeout: 60_000,
+      }),
+    };
+  }
+  return pooled.transport;
 }
 
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
@@ -82,6 +99,8 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       html: input.html,
       text: input.text,
       replyTo: input.replyTo,
+      inReplyTo: input.inReplyTo,
+      references: input.references?.length ? input.references : undefined,
       attachments: [
         ...(input.html.includes(`cid:${EMAIL_LOGO_CID}`)
           ? [
@@ -118,5 +137,6 @@ export {
   invoiceEmailText,
   notificationEmailHtml,
   notificationEmailText,
+  personalEmailHtml,
   roleLabel,
 } from "./templates";

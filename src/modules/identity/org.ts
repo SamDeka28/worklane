@@ -107,24 +107,13 @@ export const listMyOrgs = cache(async (): Promise<
 /** Org + membership + profile once per slug per request. */
 export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
   const { supabase, user } = await requireUser();
-  const { data: orgRow, error } = await supabase
-    .from("organizations")
-    .select("id, slug, name, default_currency, timezone, settings")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(error.message);
-  }
-  if (!orgRow) {
-    notFound();
-  }
-
-  const [{ data: membership }, { data: profile }] = await Promise.all([
+  const [{ data: membership, error }, { data: profile }] = await Promise.all([
     supabase
       .from("organization_members")
-      .select("role, status, permissions, welcomed_at")
-      .eq("organization_id", orgRow.id)
+      .select(
+        "role, status, permissions, welcomed_at, organizations!inner ( id, slug, name, default_currency, timezone, settings )",
+      )
+      .eq("organizations.slug", slug)
       .eq("user_id", user.id)
       .eq("status", "active")
       .maybeSingle(),
@@ -137,12 +126,17 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
       .maybeSingle(),
   ]);
 
-  if (!membership) {
+  if (error) {
+    throw new Error(error.message);
+  }
+  const joined = membership?.organizations as unknown as OrgRow | OrgRow[] | null | undefined;
+  const orgRow = Array.isArray(joined) ? joined[0] : joined;
+  if (!membership || !orgRow) {
     notFound();
   }
 
   const role = membership.role as OrgRole;
-  const org = mapOrganization(orgRow as OrgRow);
+  const org = mapOrganization(orgRow);
   const permissions = resolveMemberPermissions({
     role,
     stored: parseMemberPermissions(membership.permissions),

@@ -31,6 +31,13 @@ export const JOURNEY = {
     emptyTitle: "Create a proposal or SOW",
     emptyBody: "Draft freely. Accept or sign freezes a permanent copy.",
   },
+  emails: {
+    purpose: "Send tracked emails, or track the ones you send from Gmail, Outlook, or Apple Mail",
+    primaryCta: "Track an email",
+    emptyTitle: "Track your first email",
+    emptyBody:
+      "Compose one here, or create a pixel to paste into an email in your own mail app. You’ll see here when it’s opened.",
+  },
   finance: {
     purpose: "Get paid: bill work, record what clients send, then see partner shares",
     primaryCta: "Collect",

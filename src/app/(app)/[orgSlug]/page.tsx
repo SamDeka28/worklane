@@ -15,7 +15,7 @@ import {
 import { MoneyDonut, MONEY_COLORS } from "@/components/studio/money-donut";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
-import { Target, Users } from "lucide-react";
+import { ArrowRight, Target, Users } from "lucide-react";
 import { listClients, listOrgActivity } from "@/modules/clients/queries";
 import { listLeads, listLeadStages } from "@/modules/crm/queries";
 import {
@@ -297,6 +297,7 @@ export default async function DashboardPage({
                   {seeMoney && doNext.amountMinor != null && doNext.currency
                     ? ` · ${moneyLabel(doNext.amountMinor, doNext.currency)}`
                     : ""}
+                  <ArrowRight data-icon="inline-end" />
                 </Button>
               }
             />

@@ -107,7 +107,8 @@ export function RichEditor({
   const [uploading, setUploading] = useState(false);
   const createRef = useRef(onCreateMention);
   createRef.current = onCreateMention;
-  const allMentions = useMentionCatalog(orgSlug, mentions, editable);
+  const [focused, setFocused] = useState(false);
+  const allMentions = useMentionCatalog(orgSlug, mentions, editable && focused);
   const mentionsRef = useRef(allMentions);
   mentionsRef.current = allMentions;
 
@@ -151,6 +152,7 @@ export function RichEditor({
           .replace(/\s*mso-[^:;"]+:[^;"]+;?/gi, "");
       },
     },
+    onFocus: () => setFocused(true),
     onUpdate: ({ editor: current }) => {
       const json = current.getJSON();
       onChange?.(json, docToPlainText(json));

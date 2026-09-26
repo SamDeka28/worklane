@@ -29,6 +29,7 @@ import {
   deleteTaskAction,
   updateTaskAction,
 } from "@/modules/delivery/actions";
+import { CopyTaskLinkButton } from "@/modules/delivery/components/copy-task-link";
 import { TaskDetailFields } from "@/modules/delivery/components/task-detail-fields";
 import { ActivityPanel, ActivityToggle } from "@/modules/history/components/activity-view";
 import { relativeTime } from "@/modules/notifications/components/notification-item";
@@ -223,11 +224,13 @@ export function TaskModal({
             </DialogDescription>
           </div>
           {task ? (
-            <ActivityToggle
-              active={showActivity}
-              onToggle={() => setActivityFor(showActivity ? null : task.id)}
-              className="shrink-0"
-            />
+            <div className="flex shrink-0 items-center gap-2">
+              <CopyTaskLinkButton taskId={task.id} />
+              <ActivityToggle
+                active={showActivity}
+                onToggle={() => setActivityFor(showActivity ? null : task.id)}
+              />
+            </div>
           ) : null}
         </DialogHeader>
 

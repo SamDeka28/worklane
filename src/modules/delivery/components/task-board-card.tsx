@@ -17,6 +17,7 @@ import { AvatarStack } from "@/components/studio/avatar-mark";
 import { ProjectChip, TagRow, projectToneClass } from "@/components/studio/project-chip";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
+import { CopyTaskLinkIcon } from "@/modules/delivery/components/copy-task-link";
 import { formatDay } from "@/modules/finance/presentation";
 import type { TaskKind, TaskPriority } from "@/modules/delivery/types";
 
@@ -145,9 +146,12 @@ export function TaskBoardCard({
   selected = false,
   dragHandle,
   onOpen,
+  shareId,
   className,
 }: {
   title: string;
+  /** Task id; shows a copy-link icon on hover. */
+  shareId?: string;
   /** Kept for callers; intentionally not shown on the card face. */
   description?: string | null;
   priority: TaskPriority;
@@ -263,6 +267,12 @@ export function TaskBoardCard({
           )}
         </div>
       </div>
+      {shareId ? (
+        <CopyTaskLinkIcon
+          taskId={shareId}
+          className="absolute top-2.5 right-10 bg-card opacity-0 group-hover/card:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
+        />
+      ) : null}
     </div>
   );
 }

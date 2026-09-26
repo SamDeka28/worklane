@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useOptimistic, useState, useTransition } from "react";
-import { Check, Download, Loader2, Pencil, Plus, Trash2, UserRound } from "lucide-react";
+import {
+  Check,
+  Download,
+  Loader2,
+  Pencil,
+  Plus,
+  ReceiptText,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ActionSheet } from "@/components/studio/action-sheet";
@@ -72,6 +81,7 @@ export function CreateInvoiceDialog({
       title="New invoice"
       description="Billing details, terms and payment details fill in from the client and your defaults."
       triggerLabel="New invoice"
+      triggerIcon={<ReceiptText />}
       open={open}
       onOpenChange={(next) => {
         if (!next) close();

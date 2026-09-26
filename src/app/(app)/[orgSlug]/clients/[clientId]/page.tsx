@@ -46,11 +46,13 @@ import { clientMoneySnapshot, moneyLabel } from "@/modules/finance/ledger";
 import { collectTargets } from "@/modules/finance/presentation";
 import { loadClientFinance } from "@/modules/finance/queries";
 import { requireOrg } from "@/modules/identity/org";
-import { canDeleteModule, canSeeMoney } from "@/modules/identity/permissions";
+import { canAccessModule, canDeleteModule, canSeeMoney } from "@/modules/identity/permissions";
 import { CreateDocumentDialog } from "@/modules/documents/components/document-forms";
 import { getClientBillingProfile } from "@/modules/invoices/queries";
 import { EMPTY_BILL_TO, type InvoiceBillTo } from "@/modules/invoices/types";
 import { listDocuments } from "@/modules/documents/queries";
+import { listClientLeads, listLeadStages } from "@/modules/crm/queries";
+import { isClosedStage, stageLabel, stageTone, stagesOrDefault } from "@/modules/crm/types";
 
 const ACTIVITY_ICON: Record<ClientActivityItem["kind"], typeof Receipt> = {
   charge: Receipt,
@@ -89,14 +91,19 @@ export default async function ClientProfilePage({
   const selectedChargeId = typeof query.charge === "string" ? query.charge : undefined;
   const showCollect =
     seeMoney && (query.collect === "1" || Boolean(selectedChargeId));
-  const [contacts, activity, financeLoaded, projects, documents, billing] = await Promise.all([
-    listContacts(orgSlug, clientId),
-    listClientActivity(orgSlug, clientId),
-    seeMoney ? loadClientFinance(orgSlug, clientId) : Promise.resolve(null),
-    listClientProjects(orgSlug, clientId),
-    listDocuments(orgSlug).catch(() => []),
-    getClientBillingProfile(orgSlug, clientId),
-  ]);
+  const showDeals = ctx.org.modules.crm && canAccessModule(ctx.permissions, "crm");
+  const [contacts, activity, financeLoaded, projects, documents, billing, deals, stageRows] =
+    await Promise.all([
+      listContacts(orgSlug, clientId),
+      listClientActivity(orgSlug, clientId),
+      seeMoney ? loadClientFinance(orgSlug, clientId) : Promise.resolve(null),
+      listClientProjects(orgSlug, clientId),
+      listDocuments(orgSlug).catch(() => []),
+      getClientBillingProfile(orgSlug, clientId),
+      showDeals ? listClientLeads(orgSlug, clientId) : Promise.resolve([]),
+      showDeals ? listLeadStages(orgSlug) : Promise.resolve([]),
+    ]);
+  const dealStages = stagesOrDefault(stageRows);
   const finance = financeLoaded ?? {
     charges: [],
     snapshot: clientMoneySnapshot([], [], []),
@@ -317,6 +324,63 @@ export default async function ClientProfilePage({
                 </ul>
               )}
             </HubSection>
+
+            {showDeals && (deals.length > 0 || ctx.canWrite) ? (
+              <HubSection
+                variant="panel"
+                title="Deals"
+                action={
+                  ctx.canWrite ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      nativeButton={false}
+                      render={<Link href={`/${orgSlug}/crm?new=1&client=${client.id}`} />}
+                    >
+                      New deal
+                    </Button>
+                  ) : null
+                }
+              >
+                {deals.length === 0 ? (
+                  <p className="px-4 py-4 text-sm text-muted-foreground">
+                    Track upsells and repeat work in the pipeline.
+                  </p>
+                ) : (
+                  <ul className="divide-y divide-border/50">
+                    {deals.map((deal) => (
+                      <li key={deal.id}>
+                        <Link
+                          href={`/${orgSlug}/crm?view=list&lead=${deal.id}`}
+                          className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/40"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[15px] font-semibold tracking-tight group-hover:text-primary">
+                              {deal.name}
+                            </p>
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <StatusChip tone={stageTone(deal.stage, dealStages)}>
+                                {stageLabel(deal.stage, dealStages)}
+                              </StatusChip>
+                              {!isClosedStage(deal.stage, dealStages) && deal.nextAction ? (
+                                <span className="truncate text-xs text-muted-foreground">
+                                  {deal.nextAction}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          {seeMoney && deal.estimatedValueMinor != null ? (
+                            <p className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                              {moneyLabel(deal.estimatedValueMinor, deal.currency)}
+                            </p>
+                          ) : null}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </HubSection>
+            ) : null}
 
             {seeMoney &&
             (owing.length > 0 ||

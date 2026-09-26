@@ -396,6 +396,7 @@ export default async function FinancePage({
               nativeButton={false}
               render={<Link href={`/${orgSlug}/finance?filter=overdue`} />}
             >
+              <HandCoins />
               Collect
             </Button>
           }
@@ -409,6 +410,7 @@ export default async function FinancePage({
           body="Pick someone who owes you and record a payment."
           action={
             <Button size="sm" nativeButton={false} render={<Link href={`/${orgSlug}/finance`} />}>
+              <HandCoins />
               Collect
             </Button>
           }
@@ -477,6 +479,7 @@ export default async function FinancePage({
         body="Payment not applied. Assign it against open charges on Collect."
         action={
           <Button size="sm" nativeButton={false} render={<Link href={`/${orgSlug}/finance`} />}>
+            <HandCoins />
             Collect
           </Button>
         }
@@ -487,6 +490,7 @@ export default async function FinancePage({
         body="Open charges still need a payment."
         action={
           <Button size="sm" nativeButton={false} render={<Link href={`/${orgSlug}/finance`} />}>
+            <HandCoins />
             Collect
           </Button>
         }
@@ -567,6 +571,7 @@ export default async function FinancePage({
               nativeButton={false}
               render={<Link href={`/${orgSlug}/invoices`} />}
             >
+              <Receipt />
               Invoices
             </Button>
             {ctx.canWrite ? (

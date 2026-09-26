@@ -67,6 +67,8 @@ export type FollowCandidate = {
   title: string;
   stage: string;
   href: string;
+  why?: string;
+  overdue?: boolean;
 };
 
 function daysPastDue(dueOn: string | null, asOf: string): number {
@@ -172,16 +174,16 @@ export function buildOpsQueue(input: {
     });
   }
 
-  for (const row of input.follows ?? []) {
+  for (const [index, row] of (input.follows ?? []).entries()) {
     items.push({
       id: `follow-${row.id}`,
       verb: "follow",
       title: row.title,
       subtitle: row.stage,
-      why: `Lead · ${row.stage}`,
+      why: row.why ?? `Lead · ${row.stage}`,
       href: row.href,
       cta: "Open",
-      rank: 650,
+      rank: (row.overdue ? 150 : 650) + index / 100,
     });
   }
 

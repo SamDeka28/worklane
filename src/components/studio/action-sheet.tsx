@@ -1,5 +1,6 @@
 "use client";
 
+import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,11 +40,14 @@ export function ActionSheet({
   width = "default",
   footer,
   headerAction,
+  tabs,
   narrow = false,
   children,
 }: {
   title: string;
   headerAction?: ReactNode;
+  /** Tab strip pinned under the header (see `SheetTabs`). */
+  tabs?: ReactNode;
   /** Temporarily shrinks a `wide` sheet (animated), e.g. for a single-column view. */
   narrow?: boolean;
   description?: string;
@@ -65,6 +69,8 @@ export function ActionSheet({
   children: ReactNode;
 }) {
   const label = triggerLabel ?? title;
+  const icon =
+    triggerIcon !== undefined ? triggerIcon : /^(new|add)\b/i.test(label) ? <Plus /> : null;
   const size = triggerIconOnly
     ? triggerSize.startsWith("icon")
       ? triggerSize
@@ -86,7 +92,7 @@ export function ActionSheet({
             />
           }
         >
-          {triggerIcon}
+          {icon}
           {triggerIconOnly ? null : label}
         </SheetTrigger>
       )}
@@ -113,7 +119,8 @@ export function ActionSheet({
       >
         <SheetHeader
           className={cn(
-            "shrink-0 flex-row items-center gap-4 border-b border-border/50 px-6 py-5",
+            "shrink-0 flex-row items-center gap-4 px-6 py-5",
+            tabs ? "pb-3" : "border-b border-border/50",
             headerAction ? "pr-20" : "pr-14",
           )}
         >
@@ -129,6 +136,7 @@ export function ActionSheet({
           </div>
           {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
         </SheetHeader>
+        {tabs ? <div className="shrink-0 border-b border-border/50 px-6">{tabs}</div> : null}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
           {children}
         </div>

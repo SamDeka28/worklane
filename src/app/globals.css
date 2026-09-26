@@ -1802,8 +1802,14 @@
       box-shadow: 6px 6px 14px var(--neu-dark), -6px -6px 14px var(--neu-light);
     }
 
-    [data-chart="bars"] .recharts-bar-rectangle path {
-      filter: drop-shadow(3px 3px 4px var(--neu-dark)) drop-shadow(-2px -2px 3px var(--neu-light));
+    /* Bar chart: each bar sits in a full-height groove pressed into the card */
+    [data-chart="bars"] .recharts-bar-background-rectangle {
+      fill: var(--neu-base);
+      filter: var(--bar-groove);
+    }
+
+    [data-chart="bars"] .recharts-cartesian-grid line {
+      stroke-opacity: 0.4;
     }
 
     [data-chart="dot"] {

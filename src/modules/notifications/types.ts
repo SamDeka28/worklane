@@ -5,6 +5,7 @@ export const NOTIFICATION_CATEGORIES = [
   "projects",
   "leads",
   "clients",
+  "emails",
   "finance",
   "partners",
   "team",
@@ -50,6 +51,11 @@ export const NOTIFICATION_CATEGORY_META: Record<
   finance: {
     label: "Payments & invoices",
     description: "Payments received, and invoices created, issued, sent, or voided",
+    emailByDefault: false,
+  },
+  emails: {
+    label: "Tracked emails",
+    description: "The first time someone opens an email you tracked",
     emailByDefault: false,
   },
   partners: {

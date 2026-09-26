@@ -1,11 +1,18 @@
 "use client";
 
-import { ArrowRight, Building2, CalendarDays, Signpost } from "lucide-react";
+import { ArrowRight, Building2, CalendarClock, CalendarDays, Hourglass, Signpost } from "lucide-react";
 import { AvatarMark } from "@/components/studio/avatar-mark";
 import { TagRow, projectToneClass } from "@/components/studio/project-chip";
 import { cn } from "@/lib/utils";
 import { formatDay } from "@/modules/finance/presentation";
-import type { LeadRecord } from "@/modules/crm/types";
+import { dueLabel } from "@/modules/crm/presentation";
+import {
+  daysSince,
+  followState,
+  isStale,
+  type CrmMember,
+  type LeadRecord,
+} from "@/modules/crm/types";
 import { relativeTime } from "@/modules/notifications/components/notification-item";
 import { formatMoney } from "@/shared/money";
 
@@ -48,6 +55,8 @@ export function LeadBoardCard({
   draggable = false,
   onOpen,
   className,
+  owner,
+  staleDays = 0,
 }: {
   lead: LeadRecord;
   state?: LeadCardState;
@@ -56,13 +65,16 @@ export function LeadBoardCard({
   draggable?: boolean;
   onOpen?: () => void;
   className?: string;
+  owner?: CrmMember | null;
+  staleDays?: number;
 }) {
   const overdue = state === "open" && isPast(lead.closeOn);
+  const follow = state === "open" ? followState(lead) : "none";
+  const stale = state === "open" && isStale(lead, staleDays);
   const visibleTags = lead.tags.slice(0, 2);
   const extraTagCount = Math.max(0, lead.tags.length - visibleTags.length);
   const showValue = showMoney && lead.estimatedValueMinor != null;
   const company = lead.company && !same(lead.company, lead.name) ? lead.company : null;
-  const contact = lead.contactName?.trim() || null;
   const reach = lead.email || lead.phone || lead.whatsapp || null;
   const convertible = state === "won" && !lead.clientId;
 
@@ -112,6 +124,39 @@ export function LeadBoardCard({
         </p>
       ) : null}
 
+      {state === "open" && (lead.nextAction || stale) ? (
+        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+          {lead.nextAction ? (
+            <span
+              title={`Next step: ${lead.nextAction}`}
+              className={cn(
+                "inline-flex max-w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium",
+                follow === "overdue"
+                  ? "bg-status-overdue text-status-overdue-fg"
+                  : follow === "today"
+                    ? "bg-amber-500/15 text-amber-800 dark:text-amber-200"
+                    : "bg-muted text-muted-foreground",
+              )}
+            >
+              <CalendarClock className="size-3 shrink-0" aria-hidden />
+              <span className="truncate">
+                {lead.nextActionOn ? `${dueLabel(lead.nextActionOn)} · ` : ""}
+                {lead.nextAction}
+              </span>
+            </span>
+          ) : null}
+          {stale ? (
+            <span
+              title="No calls, emails, or stage moves logged recently"
+              className="inline-flex items-center gap-1 rounded-md bg-orange-500/12 px-1.5 py-0.5 text-[11px] font-semibold text-orange-700 dark:text-orange-300"
+            >
+              <Hourglass className="size-3" aria-hidden />
+              {daysSince(lead.lastTouchedAt)}d quiet
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="mt-3 flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2.5">
           {convertible ? (
@@ -145,14 +190,22 @@ export function LeadBoardCard({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <span
-            title={`Last updated ${new Date(lead.updatedAt).toLocaleString()}`}
+            title={`Last touched ${new Date(lead.lastTouchedAt).toLocaleString()}`}
             className="text-[11px] text-muted-foreground/80 tabular-nums"
+            suppressHydrationWarning
           >
-            {relativeTime(lead.updatedAt)}
+            {relativeTime(lead.lastTouchedAt)}
           </span>
-          {contact ? (
-            <span title={contact}>
-              <AvatarMark name={contact} size="sm" />
+          {owner ? (
+            <span title={`Owner: ${owner.name}`}>
+              <AvatarMark name={owner.name} src={owner.avatarUrl} size="sm" />
+            </span>
+          ) : state === "open" ? (
+            <span
+              title="Unassigned"
+              className="inline-flex size-7 items-center justify-center rounded-full border border-dashed border-border text-[10px] font-semibold text-muted-foreground"
+            >
+              ?
             </span>
           ) : null}
         </div>

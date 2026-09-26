@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  ArrowRight,
   Columns3,
   FolderKanban,
   SearchX,
@@ -340,6 +341,7 @@ export default async function ProjectsPage({
                                   render={<Link href={card.nextHref} />}
                                 >
                                   {card.next.cta}
+                                  <ArrowRight data-icon="inline-end" />
                                 </Button>
                               </div>
                             ) : (

@@ -135,10 +135,6 @@ export function documentViewPath(token: string) {
   return `/portal/d/${token}`;
 }
 
-export function documentPixelPath(token: string) {
-  return `/portal/t/${token}`;
-}
-
 type ChainRow = {
   id: string;
   document_version_id: string | null;
@@ -282,8 +278,12 @@ export async function loadSharedDocument(
   };
 }
 
-/** Counts a view against a specific send (the revision the client is actually looking at). */
-export async function trackDocumentSendById(sendId: string, kind: "open" | "view") {
+/**
+ * Counts a link view against a specific send (the revision the client is actually looking
+ * at). The first view notifies the sender and studio owners. Email opens are counted by
+ * the `mail-open` edge function instead. Never throws: tracking must not break the page.
+ */
+export async function trackDocumentSendById(sendId: string, kind: "view") {
   const admin = createAdminSupabaseClient();
   if (!admin) return;
   const { data } = await admin.from("document_sends").select("token_hash").eq("id", sendId).maybeSingle();
@@ -302,16 +302,7 @@ type TrackRow = {
   first_time: boolean;
 };
 
-/**
- * Counts an email open (pixel) or a link view. The first of each kind notifies the
- * sender and studio owners. Never throws: tracking must not break the client's page.
- */
-export async function trackDocumentSend(token: string, kind: "open" | "view"): Promise<void> {
-  if (!token || token.length > 128) return;
-  await trackHash(hashShareToken(token), kind);
-}
-
-async function trackHash(tokenHash: string, kind: "open" | "view"): Promise<void> {
+async function trackHash(tokenHash: string, kind: "view"): Promise<void> {
   try {
     const admin = createAdminSupabaseClient();
     if (!admin) return;
@@ -328,17 +319,13 @@ async function trackHash(tokenHash: string, kind: "open" | "view"): Promise<void
       .eq("id", row.organization_id)
       .maybeSingle();
     const who = row.recipient_name || row.recipient_email;
-    const verb = kind === "open" ? "opened the email for" : "viewed";
     await notify({
       recipients: [row.sent_by],
       organizationId: row.organization_id,
       orgName: (org?.name as string | undefined) ?? null,
       category: "clients",
-      title: `${who} ${verb} ${row.title}`,
-      body:
-        kind === "open"
-          ? `${row.recipient_email} opened the email you sent.`
-          : `${row.recipient_email} opened the document link.`,
+      title: `${who} viewed ${row.title}`,
+      body: `${row.recipient_email} opened the document link.`,
       href: org?.slug ? `/${org.slug}/documents/${row.document_id}` : null,
       entity: { type: "document", id: row.document_id },
       actionLabel: "Open document",

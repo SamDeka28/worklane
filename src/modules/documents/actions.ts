@@ -11,11 +11,7 @@ import { buildBasicDocumentTemplate, getDocumentTemplate } from "@/modules/docum
 import { asDocumentKind, DOCUMENT_KIND_LABEL, type DocumentKind } from "@/modules/documents/types";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { notifyMentions } from "@/modules/mentions/notify";
-import {
-  documentPixelPath,
-  documentSendToken,
-  documentViewPath,
-} from "@/modules/documents/sends";
+import { documentSendToken, documentViewPath } from "@/modules/documents/sends";
 import {
   buildSignedDocumentFiles,
   signedContentFor,
@@ -31,6 +27,7 @@ import {
   isEmailConfigured,
   sendEmail,
 } from "@/shared/email";
+import { mailPixelUrl } from "@/shared/email/pixel";
 
 function asKind(value: string): DocumentKind {
   return asDocumentKind(value);
@@ -41,9 +38,24 @@ export async function createDocumentAction(orgSlug: string, formData: FormData) 
   const title = String(formData.get("title") ?? "").trim();
   const template = getDocumentTemplate(String(formData.get("template_id") ?? ""));
   const kind = template?.kind ?? asKind(String(formData.get("kind") ?? "proposal"));
-  const clientId = String(formData.get("client_id") ?? "").trim() || null;
+  let clientId = String(formData.get("client_id") ?? "").trim() || null;
   const projectId = String(formData.get("project_id") ?? "").trim() || null;
+  const leadRaw = String(formData.get("lead_id") ?? "").trim() || null;
   if (!title) return { error: "Title is required" };
+
+  let leadId: string | null = null;
+  if (leadRaw) {
+    const { data: lead } = await ctx.supabase
+      .from("leads")
+      .select("id, client_id")
+      .eq("organization_id", ctx.org.id)
+      .eq("id", leadRaw)
+      .maybeSingle();
+    if (lead) {
+      leadId = String(lead.id);
+      clientId = clientId ?? ((lead.client_id as string | null) ?? null);
+    }
+  }
 
   let clientMention: { id: string; label: string; type: "client" } | null = null;
   let projectMention: { id: string; label: string; type: "project" } | null = null;
@@ -115,11 +127,13 @@ export async function createDocumentAction(orgSlug: string, formData: FormData) 
       status: "draft",
       client_id: clientId ?? clientMention?.id ?? null,
       project_id: projectId,
+      lead_id: leadId,
       created_by: ctx.userId,
     })
     .select("id")
     .single();
   if (error || !document) return { error: error?.message ?? "Could not create document" };
+  if (leadId) revalidatePath(`/${orgSlug}/crm`);
 
   const { error: versionError } = await ctx.supabase.from("document_versions").insert({
     organization_id: ctx.org.id,
@@ -1299,7 +1313,7 @@ export async function sendDocumentEmailAction(
     title: document.title as string,
     message,
     viewUrl: `${appUrl}${documentViewPath(token)}`,
-    pixelUrl: trackOpens ? `${appUrl}${documentPixelPath(token)}` : null,
+    pixelUrl: trackOpens ? mailPixelUrl(token) : null,
   };
   const result = await sendEmail({
     to,
@@ -1606,7 +1620,7 @@ export async function publishDocumentRevisionAction(
         title: `${title} (v${version.version_number})`,
         message,
         viewUrl: `${appUrl}${documentViewPath(token)}`,
-        pixelUrl: row.info.track ? `${appUrl}${documentPixelPath(token)}` : null,
+        pixelUrl: row.info.track ? mailPixelUrl(token) : null,
       };
       const result = await sendEmail({
         to: row.email,

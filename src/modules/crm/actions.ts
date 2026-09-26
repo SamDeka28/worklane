@@ -70,6 +70,39 @@ async function defaultStageSlug(
   return data?.slug ? String(data.slug) : "new";
 }
 
+async function lostStageSlugs(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+): Promise<Set<string>> {
+  const { data } = await ctx.supabase
+    .from("lead_stages")
+    .select("slug")
+    .eq("organization_id", ctx.org.id)
+    .eq("system_key", "lost");
+  const slugs = new Set((data ?? []).map((row) => String(row.slug)));
+  if (slugs.size === 0) slugs.add("lost");
+  return slugs;
+}
+
+async function activeMemberId(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  raw: string,
+): Promise<string | null> {
+  const id = raw.trim();
+  if (!id) return null;
+  const { data } = await ctx.supabase
+    .from("organization_members")
+    .select("user_id")
+    .eq("organization_id", ctx.org.id)
+    .eq("user_id", id)
+    .eq("status", "active")
+    .maybeSingle();
+  return data ? String(data.user_id) : null;
+}
+
+function clean(formData: FormData, key: string, max = 500) {
+  return String(formData.get(key) ?? "").trim().slice(0, max) || null;
+}
+
 async function resolveStageSlug(
   ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
   raw: string,
@@ -105,6 +138,24 @@ export async function createLeadAction(orgSlug: string, formData: FormData) {
   const stage = await resolveStageSlug(ctx, String(formData.get("stage") ?? ""));
   const notesDoc = parseNotesDoc(formData);
   const notesPlain = String(formData.get("notes") ?? "").trim() || null;
+  const lost = (await lostStageSlugs(ctx)).has(stage);
+  const lostReason = clean(formData, "lost_reason", 120);
+  if (lost && !lostReason) return { error: "Pick why this lead was lost" };
+
+  const ownerRaw = String(formData.get("owner_user_id") ?? "");
+  const owner = ownerRaw === "none" ? null : ((await activeMemberId(ctx, ownerRaw)) ?? ctx.userId);
+
+  let clientId: string | null = null;
+  const clientRaw = clean(formData, "client_id", 64);
+  if (clientRaw) {
+    const { data: client } = await ctx.supabase
+      .from("clients")
+      .select("id")
+      .eq("organization_id", ctx.org.id)
+      .eq("id", clientRaw)
+      .maybeSingle();
+    clientId = client ? String(client.id) : null;
+  }
 
   const { data, error } = await ctx.supabase
     .from("leads")
@@ -120,11 +171,16 @@ export async function createLeadAction(orgSlug: string, formData: FormData) {
       estimated_value_minor: estimatedValueMinor,
       currency,
       close_on: String(formData.get("close_on") ?? "").trim() || null,
-      owner_user_id: ctx.userId,
+      owner_user_id: owner,
       tags: parseTags(String(formData.get("tags") ?? "")),
       notes: notesPlain,
       notes_doc: notesDoc,
       stage,
+      client_id: clientId,
+      next_action: clean(formData, "next_action", 200),
+      next_action_on: clean(formData, "next_action_on", 10),
+      lost_reason: lost ? lostReason : null,
+      lost_note: lost ? clean(formData, "lost_note", 1000) : null,
     })
     .select("id")
     .single();
@@ -152,8 +208,25 @@ export async function createLeadAction(orgSlug: string, formData: FormData) {
     entity: { type: "lead", id: data.id as string },
     actionLabel: "Open lead",
   });
+  if (owner && owner !== ctx.userId) {
+    const actor = await userLabel(ctx.userId);
+    await notify({
+      recipients: [owner],
+      organizationId: ctx.org.id,
+      orgName: ctx.org.name,
+      category: "leads",
+      title: `${actor} gave you the lead ${name}`,
+      body: "You own this lead now. Set the next step so it doesn’t go cold.",
+      href: `/${orgSlug}/crm?lead=${data.id}`,
+      actorId: ctx.userId,
+      entity: { type: "lead", id: data.id as string },
+      actionLabel: "Open lead",
+      ownerCopy: false,
+    });
+  }
   revalidatePath(`/${orgSlug}/crm`);
   revalidatePath(`/${orgSlug}`);
+  if (clientId) revalidatePath(`/${orgSlug}/clients/${clientId}`);
   return { id: data.id as string };
 }
 
@@ -184,6 +257,9 @@ export async function updateLeadAction(
 
   const stage = await resolveStageSlug(ctx, String(formData.get("stage") ?? ""));
   const notesDoc = parseNotesDoc(formData);
+  const lost = (await lostStageSlugs(ctx)).has(stage);
+  const lostReason = clean(formData, "lost_reason", 120);
+  if (lost && !lostReason) return { error: "Pick why this lead was lost" };
   const { data: before } = await ctx.supabase
     .from("leads")
     .select("notes_doc")
@@ -208,6 +284,9 @@ export async function updateLeadAction(
       notes: String(formData.get("notes") ?? "").trim() || null,
       notes_doc: notesDoc,
       stage,
+      ...(lost
+        ? { lost_reason: lostReason, lost_note: clean(formData, "lost_note", 1000) }
+        : {}),
     })
     .eq("id", leadId)
     .eq("organization_id", ctx.org.id);
@@ -232,6 +311,7 @@ export async function moveLeadStageAction(
   leadId: string,
   stage: string,
   orderedIds?: string[],
+  outcome?: { lostReason?: string; lostNote?: string },
 ) {
   const ctx = await requireWritableOrg(orgSlug);
   if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
@@ -246,12 +326,23 @@ export async function moveLeadStageAction(
     .maybeSingle();
   if (!lead) return { error: "Lead not found" };
 
+  const toLost = lead.stage !== resolved && (await lostStageSlugs(ctx)).has(resolved);
+  const lostReason = outcome?.lostReason?.trim().slice(0, 120) || null;
+  if (toLost && !lostReason) return { error: "Pick why this lead was lost" };
+  const lostFields = toLost
+    ? { lost_reason: lostReason, lost_note: outcome?.lostNote?.trim().slice(0, 1000) || null }
+    : {};
+
   const ids = orderedIds && orderedIds.length > 0 ? orderedIds : [leadId];
   const results = await Promise.all(
     ids.map((id, index) =>
       ctx.supabase
         .from("leads")
-        .update(orderedIds?.length ? { position: index, stage: resolved } : { stage: resolved })
+        .update({
+          ...(orderedIds?.length ? { position: index } : {}),
+          stage: resolved,
+          ...(id === leadId ? lostFields : {}),
+        })
         .eq("id", id)
         .eq("organization_id", ctx.org.id),
     ),
@@ -449,9 +540,7 @@ export async function convertLeadToClientAction(
     .maybeSingle();
 
   if (leadError || !lead) return { error: leadError?.message ?? "Lead not found" };
-  if (lead.client_id) {
-    return { error: "Lead already converted", clientId: lead.client_id as string };
-  }
+  const presetClientId = (lead.client_id as string | null) ?? null;
 
   const createProject =
     formData == null
@@ -464,34 +553,78 @@ export async function convertLeadToClientAction(
     (lead.name as string).trim() ||
     "New client";
   const currency = asCurrency(String(lead.currency), ctx.org.defaultCurrency);
+  const existingId =
+    presetClientId ?? String(formData?.get("existing_client_id") ?? "").trim();
 
-  const { data: client, error: clientError } = await ctx.supabase
-    .from("clients")
-    .insert({
-      organization_id: ctx.org.id,
-      kind: lead.company ? "company" : "person",
-      name: clientName,
-      notes: lead.notes,
-      currency,
-      created_by: ctx.userId,
-    })
-    .select("id")
-    .single();
+  let client: { id: string };
+  if (presetClientId) {
+    client = { id: presetClientId };
+    if (!createProject) {
+      return { error: "Lead already converted", clientId: presetClientId };
+    }
+  } else if (existingId) {
+    const { data: existing } = await ctx.supabase
+      .from("clients")
+      .select("id")
+      .eq("organization_id", ctx.org.id)
+      .eq("id", existingId)
+      .maybeSingle();
+    if (!existing) return { error: "That client no longer exists" };
+    client = { id: String(existing.id) };
 
-  if (clientError || !client) {
-    return { error: clientError?.message ?? "Could not create client" };
-  }
+    const email = (lead.email as string | null)?.trim().toLowerCase();
+    let known = !email;
+    if (email) {
+      const { data: match } = await ctx.supabase
+        .from("contacts")
+        .select("id")
+        .eq("organization_id", ctx.org.id)
+        .eq("client_id", client.id)
+        .ilike("email", email)
+        .limit(1);
+      known = (match ?? []).length > 0;
+    }
+    if (!known || (!email && (lead.contact_name || lead.phone))) {
+      await ctx.supabase.from("contacts").insert({
+        organization_id: ctx.org.id,
+        client_id: client.id,
+        name: lead.contact_name,
+        email: lead.email,
+        phone: lead.phone,
+        whatsapp: lead.whatsapp,
+        is_primary: false,
+      });
+    }
+  } else {
+    const { data: created, error: clientError } = await ctx.supabase
+      .from("clients")
+      .insert({
+        organization_id: ctx.org.id,
+        kind: lead.company ? "company" : "person",
+        name: clientName,
+        notes: lead.notes,
+        currency,
+        created_by: ctx.userId,
+      })
+      .select("id")
+      .single();
 
-  if (lead.contact_name || lead.email || lead.phone || lead.whatsapp) {
-    await ctx.supabase.from("contacts").insert({
-      organization_id: ctx.org.id,
-      client_id: client.id,
-      name: lead.contact_name,
-      email: lead.email,
-      phone: lead.phone,
-      whatsapp: lead.whatsapp,
-      is_primary: true,
-    });
+    if (clientError || !created) {
+      return { error: clientError?.message ?? "Could not create client" };
+    }
+    client = { id: String(created.id) };
+
+    if (lead.contact_name || lead.email || lead.phone || lead.whatsapp) {
+      await ctx.supabase.from("contacts").insert({
+        organization_id: ctx.org.id,
+        client_id: client.id,
+        name: lead.contact_name,
+        email: lead.email,
+        phone: lead.phone,
+        whatsapp: lead.whatsapp,
+        is_primary: true,
+      });
+    }
   }
 
   let projectId: string | null = null;
@@ -545,6 +678,21 @@ export async function convertLeadToClientAction(
     .eq("organization_id", ctx.org.id);
 
   if (updateError) return { error: updateError.message };
+
+  await ctx.supabase
+    .from("documents")
+    .update({ client_id: client.id })
+    .eq("organization_id", ctx.org.id)
+    .eq("lead_id", leadId)
+    .is("client_id", null);
+  if (projectId) {
+    await ctx.supabase
+      .from("documents")
+      .update({ project_id: projectId })
+      .eq("organization_id", ctx.org.id)
+      .eq("lead_id", leadId)
+      .is("project_id", null);
+  }
 
   await recordActivity(ctx, "converted", leadId, {
     client_id: client.id,

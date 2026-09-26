@@ -211,4 +211,164 @@ export const SELL: DocArticle[] = [
       },
     ],
   },
+  {
+    slug: "email-tracking",
+    title: "Send and track emails",
+    summary:
+      "Send tracked emails from Worklane, or paste an invisible pixel into emails you write in Gmail, Outlook, or Apple Mail, and see when they're opened.",
+    category: "sell",
+    kind: "how-to",
+    related: ["leads", "notifications"],
+    blocks: [
+      {
+        type: "p",
+        text: "**Emails** (under Sell in the sidebar) tracks when your emails are opened. Every tracked email carries an invisible 1×1 image hosted by Worklane. When the recipient's mail app loads it, the open is recorded against your studio and against you. You can send an email from Worklane with **Compose**, or use **Track an email** to get a pixel for an email you send from your own mail app.",
+      },
+      {
+        type: "table",
+        head: ["", "Compose", "Track an email (pixel)"],
+        rows: [
+          ["Sent from", "Your studio's address, with replies going to your own email", "Your own Gmail, Outlook, or Apple Mail"],
+          ["Setup", "None. Tracking is built in", "Paste the pixel into each email"],
+          ["In your Sent folder", "No. The email is kept on the Emails page", "Yes"],
+          ["Your own opens", "Never counted", "Filtered out; remove any stragglers with **This was me**"],
+        ],
+      },
+      { type: "h2", text: "Send an email from Worklane" },
+      {
+        type: "steps",
+        items: [
+          { title: "Open Emails and click Compose", body: "Needs email sending set up on the workspace and edit access to the studio." },
+          {
+            title: "Pick the recipient",
+            body: "Type an address or pick one of your leads or client contacts from the suggestions. Click **Add CC** for up to 5 more addresses.",
+          },
+          { title: "Write the subject and message", body: "Links you type become clickable." },
+          {
+            title: "Click Send (or press ⌘ Enter)",
+            body: "The email opens on the Emails page so you can watch for the first open. If the recipient is a lead, the email is also logged on the lead's timeline.",
+          },
+        ],
+      },
+      {
+        type: "callout",
+        tone: "note",
+        text: "Emails from Compose come from the studio's sending address with your name on them, and replies go to your own email. You can send up to 40 every 10 minutes.",
+      },
+      {
+        type: "callout",
+        tone: "note",
+        title: "Why you copy it instead of downloading it",
+        text: "A saved image file can't report anything. Tracking only works when the recipient's mail app fetches the image from Worklane, so each email gets its own hosted pixel that you paste into the body.",
+      },
+      { type: "h2", text: "Track an email from your own mail app" },
+      {
+        type: "steps",
+        items: [
+          { title: "Open Emails and click Track an email", body: "" },
+          {
+            title: "Add details (optional)",
+            body: "A **Subject** so you recognise the email later, and the **Recipient**. If the recipient matches a lead's email, the opens are linked to that lead.",
+          },
+          {
+            title: "Click Create and copy pixel",
+            body: "The pixel is now on your clipboard, and the dialog shows the paste steps for your mail app.",
+          },
+        ],
+      },
+      { type: "h2", text: "Paste it into your email" },
+      {
+        type: "p",
+        text: "Write your email as usual, then paste the pixel anywhere in the body. Just above your signature works well. Nothing visible appears, because the image is invisible.",
+      },
+      { type: "h3", text: "Gmail" },
+      {
+        type: "list",
+        items: [
+          "Click in the message body and press **⌘V** (**Ctrl+V** on Windows).",
+          "Don't turn on **Plain text mode** (⋮ menu in the compose window). It strips images, including the pixel.",
+        ],
+      },
+      { type: "h3", text: "Outlook on the web and the new Outlook" },
+      {
+        type: "list",
+        items: [
+          "Click in the body and press **⌘V** or **Ctrl+V**.",
+          "The message must be HTML. If it's plain text, use the compose window's **⋯** menu → **Switch to HTML**.",
+        ],
+      },
+      { type: "h3", text: "Outlook classic" },
+      {
+        type: "steps",
+        items: [
+          { title: "Try pasting first", body: "Click in the body and press **Ctrl+V**. This usually works." },
+          { title: "If nothing is inserted, click Copy link only", body: "In Worklane, on the pixel dialog or the email's panel." },
+          {
+            title: "Insert → Pictures → This Device",
+            body: "Paste the link into the **File name** box.",
+          },
+          {
+            title: "Choose Link to File",
+            body: "Open the arrow next to **Insert** and pick **Link to File**. A plain **Insert** embeds a copy, which can't report opens.",
+          },
+        ],
+      },
+      { type: "h3", text: "Apple Mail" },
+      {
+        type: "list",
+        items: [
+          "Click in the body and press **⌘V**.",
+          "The message must be Rich Text (the default). If it isn't, choose **Format → Make Rich Text**.",
+        ],
+      },
+      { type: "h3", text: "Phone mail apps" },
+      {
+        type: "p",
+        text: "Most phone apps can't paste images from the clipboard. Write the email on a computer and paste the pixel there, or save it as a draft and send it from your phone later.",
+      },
+      { type: "h2", text: "See who opened it" },
+      {
+        type: "list",
+        items: [
+          "Each email shows **Opened** or **Not opened yet**. Use the **Opened** and **Not opened** filters to find emails worth a follow-up.",
+          "The stats row shows **Tracked**, **Open rate**, **Opened this week**, and **Not opened**.",
+          "Click an email to see its open count, first and last open, and which mail app opened it each time. Here you can also edit the subject and recipient, copy the pixel again, or delete it.",
+          "You're notified the first time an email is opened, under **Tracked emails**. Email alerts for this category are off by default; turn them on in [notification settings](/docs/notifications).",
+        ],
+      },
+      {
+        type: "table",
+        head: ["Who", "Sees"],
+        rows: [
+          ["Members", "Only the emails they tracked."],
+          ["Owners and admins", "Their own emails under **Mine**, and the whole studio's under **Everyone**, with who sent each one."],
+        ],
+      },
+      { type: "h2", text: "Tips" },
+      {
+        type: "list",
+        items: [
+          "Use a new pixel for every email. Reusing one mixes the opens of different emails together.",
+          "Opens in the 2 minutes after you copy a pixel aren't counted, so pasting it into your draft doesn't register as an open. Opens from the network you use Worklane on are ignored too.",
+          "If you open the email yourself later (for example from your Sent folder), click **This was me** next to that open on the email's panel. It's removed, and opens from the same place won't count again.",
+          "Replies and forwards can carry the pixel along in the quoted text, so later opens of the thread may add extra opens.",
+          "Lost the pixel? Open the email on the Emails page and click **Copy pixel again**.",
+        ],
+      },
+      { type: "h2", text: "How accurate is it?" },
+      {
+        type: "list",
+        items: [
+          "**Apple Mail privacy protection** loads images automatically, so an email can show as opened even if nobody read it.",
+          "**Recipients who block images** (common in corporate Outlook) never trigger the pixel, so a real read can show as not opened.",
+          "**Gmail** loads images through its own servers. Viewing the email in your own Sent folder can count as an open; remove it with **This was me**.",
+        ],
+      },
+      {
+        type: "callout",
+        tone: "tip",
+        text: "Treat an open as a strong hint that the email was seen, not proof that it was read.",
+      },
+    ],
+  },
 ];

@@ -50,6 +50,7 @@ export const RESERVED_ORG_SLUGS = new Set([
   "portal",
   "invite",
   "docs",
+  "t",
 ]);
 
 export const DEMO_ORGANIZATION: Organization = {

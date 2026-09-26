@@ -6,7 +6,9 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { openLead, setCrmUrl } from "@/modules/crm/components/crm-url";
 import { LeadDetailSheet } from "@/modules/crm/components/lead-forms";
-import type { LeadRecord, LeadStageRecord } from "@/modules/crm/types";
+import type { LeadEmailSender } from "@/modules/crm/queries";
+import type { CrmSettings } from "@/modules/crm/settings";
+import type { CrmMember, LeadRecord, LeadStageRecord } from "@/modules/crm/types";
 
 export function CrmLeadSheet({
   orgSlug,
@@ -16,6 +18,10 @@ export function CrmLeadSheet({
   canWrite,
   canDelete = false,
   showMoney = true,
+  settings,
+  members,
+  currentUserId,
+  sender,
 }: {
   orgSlug: string;
   leads: LeadRecord[];
@@ -25,6 +31,10 @@ export function CrmLeadSheet({
   canWrite: boolean;
   canDelete?: boolean;
   showMoney?: boolean;
+  settings: CrmSettings;
+  members: CrmMember[];
+  currentUserId: string;
+  sender: LeadEmailSender;
 }) {
   const leadId = useSearchParams().get("lead");
   const selected = leadId
@@ -48,6 +58,10 @@ export function CrmLeadSheet({
       canWrite={canWrite}
       canDelete={canDelete}
       showMoney={showMoney}
+      settings={settings}
+      members={members}
+      currentUserId={currentUserId}
+      sender={sender}
     />
   );
 }

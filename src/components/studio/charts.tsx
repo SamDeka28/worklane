@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useId, useMemo, type CSSProperties } from "react";
 import {
   Bar,
   BarChart,
@@ -35,12 +35,13 @@ export function MoneyRing({
   const total = slices.reduce((sum, slice) => sum + Math.max(0, slice.value), 0);
   const safe = total > 0 ? slices : [{ label: "Empty", value: 1, color: "var(--muted)" }];
   const sum = safe.reduce((acc, slice) => acc + Math.max(0, slice.value), 0);
-  let cursor = 0;
   const stops = safe
-    .map((slice) => {
-      const start = (cursor / sum) * 360;
-      cursor += Math.max(0, slice.value);
-      const end = (cursor / sum) * 360;
+    .map((slice, index) => {
+      const before = safe
+        .slice(0, index)
+        .reduce((acc, item) => acc + Math.max(0, item.value), 0);
+      const start = (before / sum) * 360;
+      const end = ((before + Math.max(0, slice.value)) / sum) * 360;
       return `${slice.color} ${start}deg ${end}deg`;
     })
     .join(", ");
@@ -154,6 +155,7 @@ export function ProjectMoneyCurves({
   className?: string;
 }) {
   const router = useRouter();
+  const grooveId = `bar-groove-${useId().replace(/:/g, "")}`;
 
   const data = useMemo<ChartDatum[]>(
     () =>
@@ -185,7 +187,32 @@ export function ProjectMoneyCurves({
         ))}
       </div>
 
-      <div data-chart="bars" className="h-56 w-full">
+      <div
+        data-chart="bars"
+        className="relative h-56 w-full"
+        style={{ "--bar-groove": `url(#${grooveId})` } as CSSProperties}
+      >
+        <svg className="pointer-events-none absolute size-0" aria-hidden>
+          <defs>
+            <filter id={grooveId} x="-20%" y="-20%" width="140%" height="140%">
+              <feOffset in="SourceAlpha" dx="2.5" dy="2.5" />
+              <feGaussianBlur stdDeviation="2" result="dark-blur" />
+              <feComposite in="SourceAlpha" in2="dark-blur" operator="out" result="dark-edge" />
+              <feFlood style={{ floodColor: "var(--neu-dark)" }} />
+              <feComposite in2="dark-edge" operator="in" result="dark" />
+              <feOffset in="SourceAlpha" dx="-2.5" dy="-2.5" />
+              <feGaussianBlur stdDeviation="2" result="light-blur" />
+              <feComposite in="SourceAlpha" in2="light-blur" operator="out" result="light-edge" />
+              <feFlood style={{ floodColor: "var(--neu-light)" }} />
+              <feComposite in2="light-edge" operator="in" result="light" />
+              <feMerge>
+                <feMergeNode in="SourceGraphic" />
+                <feMergeNode in="dark" />
+                <feMergeNode in="light" />
+              </feMerge>
+            </filter>
+          </defs>
+        </svg>
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
@@ -230,6 +257,7 @@ export function ProjectMoneyCurves({
                 name={s.label}
                 fill={s.color}
                 radius={[6, 6, 2, 2]}
+                background={{ fill: "transparent", radius: 8 }}
                 maxBarSize={28}
                 cursor="pointer"
                 onClick={(entry) => {

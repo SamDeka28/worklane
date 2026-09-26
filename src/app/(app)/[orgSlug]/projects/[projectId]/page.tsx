@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
-import { CalendarClock, Coins, Flag, Handshake } from "lucide-react";
+import { ArrowRight, CalendarClock, Coins, Flag, Handshake } from "lucide-react";
 import {
   EntityChrome,
   FilterChip,
@@ -480,6 +480,7 @@ export default async function ProjectDetailPage({
   ) : (
     <Button size="default" nativeButton={false} render={<Link href={nextHref} />}>
       {next.cta}
+      <ArrowRight data-icon="inline-end" />
     </Button>
   );
 
@@ -653,6 +654,7 @@ export default async function ProjectDetailPage({
                   ctx.canWrite && next.cta !== "Add milestone" ? (
                     <Button size="sm" nativeButton={false} render={<Link href={nextHref} />}>
                       {next.cta}
+                      <ArrowRight data-icon="inline-end" />
                     </Button>
                   ) : null
                 }

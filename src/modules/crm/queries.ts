@@ -1,13 +1,19 @@
 import { cache } from "react";
 import type { FollowCandidate } from "@/modules/ops/queue";
-import { requireOrg } from "@/modules/identity/org";
+import { listOrgMembers, requireOrg, type OrgContext } from "@/modules/identity/org";
+import { canAccessModule, resolveMemberPermissions } from "@/modules/identity/permissions";
+import { parseCrmSettings, type CrmSettings } from "@/modules/crm/settings";
 import {
-  openPipelineStages,
+  isStale,
+  todayIso,
+  type CrmMember,
+  type LeadOrigin,
   type LeadRecord,
   type LeadStage,
   type LeadStageRecord,
   type LeadStageSystemKey,
 } from "@/modules/crm/types";
+import { isEmailConfigured } from "@/shared/email";
 import type { IsoCurrency } from "@/shared/money";
 
 type LeadRow = {
@@ -31,6 +37,13 @@ type LeadRow = {
   position?: number | null;
   client_id: string | null;
   deal_share_bps: Record<string, unknown> | null;
+  next_action?: string | null;
+  next_action_on?: string | null;
+  last_touched_at?: string | null;
+  closed_at?: string | null;
+  lost_reason?: string | null;
+  lost_note?: string | null;
+  origin?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -42,13 +55,18 @@ type LeadStageRow = {
   slug: string;
   position: number;
   system_key: string | null;
+  probability_bps?: number | null;
 };
 
 function asCurrency(value: string): IsoCurrency {
   return value === "INR" ? "INR" : "USD";
 }
 
-function mapLead(row: LeadRow): LeadRecord {
+function asOrigin(value: string | null | undefined): LeadOrigin {
+  return value === "intake" || value === "import" ? value : "manual";
+}
+
+export function mapLead(row: LeadRow): LeadRecord {
   return {
     id: row.id,
     organizationId: row.organization_id,
@@ -71,6 +89,13 @@ function mapLead(row: LeadRow): LeadRecord {
     position: row.position ?? 0,
     clientId: row.client_id,
     dealShareBps: row.deal_share_bps,
+    nextAction: row.next_action ?? null,
+    nextActionOn: row.next_action_on ?? null,
+    lastTouchedAt: row.last_touched_at ?? row.updated_at,
+    closedAt: row.closed_at ?? null,
+    lostReason: row.lost_reason ?? null,
+    lostNote: row.lost_note ?? null,
+    origin: asOrigin(row.origin),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -88,11 +113,12 @@ function mapStage(row: LeadStageRow): LeadStageRecord {
     slug: row.slug,
     position: row.position,
     systemKey,
+    probabilityBps: row.probability_bps ?? null,
   };
 }
 
-const LEAD_SELECT =
-  "id, organization_id, name, company, contact_name, email, phone, whatsapp, source, estimated_value_minor, currency, close_on, owner_user_id, tags, notes, notes_doc, stage, position, client_id, deal_share_bps, created_at, updated_at";
+export const LEAD_SELECT =
+  "id, organization_id, name, company, contact_name, email, phone, whatsapp, source, estimated_value_minor, currency, close_on, owner_user_id, tags, notes, notes_doc, stage, position, client_id, deal_share_bps, next_action, next_action_on, last_touched_at, closed_at, lost_reason, lost_note, origin, created_at, updated_at";
 
 export const listLeadStages = cache(async (orgSlug: string): Promise<LeadStageRecord[]> => {
   const ctx = await requireOrg(orgSlug);
@@ -100,7 +126,7 @@ export const listLeadStages = cache(async (orgSlug: string): Promise<LeadStageRe
 
   const { data, error } = await ctx.supabase
     .from("lead_stages")
-    .select("id, organization_id, name, slug, position, system_key")
+    .select("id, organization_id, name, slug, position, system_key, probability_bps")
     .eq("organization_id", ctx.org.id)
     .order("position", { ascending: true });
 
@@ -110,6 +136,40 @@ export const listLeadStages = cache(async (orgSlug: string): Promise<LeadStageRe
   }
 
   return (data ?? []).map((row) => mapStage(row as LeadStageRow));
+});
+
+export const getCrmSettings = cache(async (orgSlug: string): Promise<CrmSettings> => {
+  const ctx = await requireOrg(orgSlug);
+  const { data } = await ctx.supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", ctx.org.id)
+    .maybeSingle();
+  return parseCrmSettings(data?.settings);
+});
+
+/** Active teammates who can see the CRM, for owner pickers and avatars. */
+export const listCrmMembers = cache(async (orgSlug: string): Promise<CrmMember[]> => {
+  const ctx = await requireOrg(orgSlug);
+  const members = await listOrgMembers(orgSlug);
+  return members
+    .filter((member) => member.status === "active")
+    .filter((member) =>
+      canAccessModule(
+        resolveMemberPermissions({
+          role: member.role,
+          stored: member.permissions,
+          orgModules: ctx.org.modules,
+        }),
+        "crm",
+      ),
+    )
+    .map((member) => ({
+      userId: member.userId,
+      name: member.displayName?.trim() || member.email?.split("@")[0] || "Teammate",
+      avatarUrl: member.avatarUrl,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 });
 
 const listLeadsCached = cache(
@@ -127,7 +187,7 @@ const listLeadsCached = cache(
       builder = builder.eq("stage", stage);
     }
     if (q.trim()) {
-      const pattern = `%${q.trim()}%`;
+      const pattern = `%${q.trim().replace(/[,()]/g, " ")}%`;
       builder = builder.or(
         `name.ilike.${pattern},company.ilike.${pattern},contact_name.ilike.${pattern},email.ilike.${pattern}`,
       );
@@ -135,22 +195,6 @@ const listLeadsCached = cache(
 
     const { data, error } = await builder;
     if (error) {
-      if (error.message.includes("position") || error.code === "42703") {
-        const fallback = await ctx.supabase
-          .from("leads")
-          .select(
-            "id, organization_id, name, company, contact_name, email, phone, whatsapp, source, estimated_value_minor, currency, close_on, owner_user_id, tags, notes, notes_doc, stage, client_id, deal_share_bps, created_at, updated_at",
-          )
-          .eq("organization_id", ctx.org.id)
-          .order("updated_at", { ascending: false });
-        if (fallback.error) {
-          if (fallback.error.message.includes("leads") || fallback.error.code === "42P01") {
-            return [];
-          }
-          throw new Error(fallback.error.message);
-        }
-        return (fallback.data ?? []).map((row) => mapLead(row as LeadRow));
-      }
       if (error.message.includes("leads") || error.code === "42P01") return [];
       throw new Error(error.message);
     }
@@ -194,38 +238,149 @@ export async function getLead(
   return data ? mapLead(data as LeadRow) : null;
 }
 
-/** Leads that deserve a Today nudge (open mid-funnel stages). */
+/** Deals attached to a client (upsells and the lead it was converted from). */
+export async function listClientLeads(orgSlug: string, clientId: string): Promise<LeadRecord[]> {
+  const ctx = await requireOrg(orgSlug);
+  if (!ctx.org.modules.crm || !canAccessModule(ctx.permissions, "crm")) return [];
+  const { data } = await ctx.supabase
+    .from("leads")
+    .select(LEAD_SELECT)
+    .eq("organization_id", ctx.org.id)
+    .eq("client_id", clientId)
+    .order("updated_at", { ascending: false });
+  return (data ?? []).map((row) => mapLead(row as LeadRow));
+}
+
+function followReason(lead: LeadRecord, today: string, staleDays: number) {
+  if (lead.nextActionOn && lead.nextActionOn < today) {
+    return { rank: 0, why: lead.nextAction ? `Overdue: ${lead.nextAction}` : "Follow-up overdue" };
+  }
+  if (lead.nextActionOn === today) {
+    return { rank: 1, why: lead.nextAction ? `Today: ${lead.nextAction}` : "Follow up today" };
+  }
+  if (!lead.nextActionOn && isStale(lead, staleDays)) {
+    return { rank: 2, why: "No touch in a while" };
+  }
+  if (!lead.nextActionOn) return { rank: 3, why: "No next step set" };
+  return null;
+}
+
+/** Open leads that need a touch today: overdue or due follow-ups, then stale or unplanned ones. */
 export async function listFollowUpLeads(orgSlug: string): Promise<FollowCandidate[]> {
   const ctx = await requireOrg(orgSlug);
   if (!ctx.org.modules.crm) return [];
 
-  const stages = await listLeadStages(orgSlug);
-  const openSlugs = openPipelineStages(stages).map((stage) => stage.slug);
-  const followSlugs =
-    openSlugs.length > 0
-      ? openSlugs.slice(Math.max(0, openSlugs.length - 3))
-      : ["qualified", "proposal", "negotiation"];
+  const [stages, settings, leads] = await Promise.all([
+    listLeadStages(orgSlug),
+    getCrmSettings(orgSlug),
+    listLeads(orgSlug),
+  ]);
+  const closed = new Set(stages.filter((stage) => stage.systemKey).map((stage) => stage.slug));
+  const today = todayIso();
+  const mine = leads.filter(
+    (lead) =>
+      !closed.has(lead.stage) &&
+      (lead.ownerUserId == null || lead.ownerUserId === ctx.userId),
+  );
 
-  const { data, error } = await ctx.supabase
-    .from("leads")
-    .select("id, name, company, stage, close_on, updated_at")
+  return mine
+    .map((lead) => ({ lead, reason: followReason(lead, today, settings.staleDays) }))
+    .filter((row): row is { lead: LeadRecord; reason: { rank: number; why: string } } =>
+      Boolean(row.reason),
+    )
+    .sort(
+      (a, b) =>
+        a.reason.rank - b.reason.rank ||
+        (a.lead.nextActionOn ?? "").localeCompare(b.lead.nextActionOn ?? "") ||
+        a.lead.lastTouchedAt.localeCompare(b.lead.lastTouchedAt),
+    )
+    .slice(0, 12)
+    .map(({ lead, reason }) => ({
+      id: lead.id,
+      title: lead.company && lead.company !== lead.name ? `${lead.name} · ${lead.company}` : lead.name,
+      stage: stages.find((stage) => stage.slug === lead.stage)?.name ?? lead.stage,
+      why: reason.why,
+      overdue: reason.rank === 0,
+      href: `/${orgSlug}/crm?lead=${lead.id}`,
+    }));
+}
+
+export type LeadStageMove = { leadId: string; to: string; at: string };
+
+/** Stage entries over the last year, for funnel and velocity reports. */
+export async function listLeadStageMoves(orgSlug: string): Promise<LeadStageMove[]> {
+  const ctx = await requireOrg(orgSlug);
+  if (!ctx.org.modules.crm) return [];
+  const since = new Date(Date.now() - 400 * 86_400_000).toISOString();
+  const { data } = await ctx.supabase
+    .from("record_events")
+    .select("entity_id, changes, created_at")
     .eq("organization_id", ctx.org.id)
-    .in("stage", followSlugs)
-    .order("close_on", { ascending: true, nullsFirst: false })
-    .order("updated_at", { ascending: false })
-    .limit(12);
+    .eq("entity_type", "lead")
+    .gte("created_at", since)
+    .order("created_at", { ascending: true })
+    .limit(5000);
+  return (data ?? [])
+    .map((row) => {
+      const stage = (row.changes as { stage?: { to?: unknown } } | null)?.stage;
+      const to = stage?.to == null ? null : String(stage.to);
+      return to ? { leadId: String(row.entity_id), to, at: String(row.created_at) } : null;
+    })
+    .filter((row): row is LeadStageMove => row != null);
+}
 
-  if (error) {
-    if (error.message.includes("leads") || error.code === "42P01") return [];
-    throw new Error(error.message);
-  }
+export type LeadEmailSender = {
+  configured: boolean;
+  name: string;
+  email: string | null;
+  orgName: string;
+};
 
-  return (data ?? []).map((row) => ({
-    id: row.id as string,
-    title: row.company
-      ? `${row.name as string} · ${row.company as string}`
-      : (row.name as string),
-    stage: String(row.stage).replaceAll("_", " "),
-    href: `/${orgSlug}/crm?lead=${row.id}`,
-  }));
+export function leadEmailSender(ctx: OrgContext): LeadEmailSender {
+  return {
+    configured: isEmailConfigured(),
+    name: ctx.user.displayName?.trim() || ctx.user.email?.split("@")[0] || "",
+    email: ctx.user.email ?? null,
+    orgName: ctx.org.name,
+  };
+}
+
+export type LeadEmailHistory = {
+  proposalSent: boolean;
+  /** Emails already sent to this lead from Worklane, newest first. */
+  previous: { id: string; subject: string; sentAt: string; opened: boolean }[];
+};
+
+export async function getLeadEmailHistory(
+  orgSlug: string,
+  leadId: string,
+): Promise<LeadEmailHistory> {
+  const ctx = await requireOrg(orgSlug);
+  const [emails, proposals] = await Promise.all([
+    ctx.supabase
+      .from("lead_emails")
+      .select("id, subject, sent_at, open_count")
+      .eq("organization_id", ctx.org.id)
+      .eq("lead_id", leadId)
+      .order("sent_at", { ascending: false })
+      .limit(10),
+    ctx.org.modules.documents
+      ? ctx.supabase
+          .from("documents")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", ctx.org.id)
+          .eq("lead_id", leadId)
+          .eq("kind", "proposal")
+          .eq("status", "sent")
+      : Promise.resolve({ count: 0 }),
+  ]);
+  return {
+    proposalSent: (proposals.count ?? 0) > 0,
+    previous: (emails.data ?? []).map((row) => ({
+      id: String(row.id),
+      subject: String(row.subject),
+      sentAt: String(row.sent_at),
+      opened: Number(row.open_count ?? 0) > 0,
+    })),
+  };
 }

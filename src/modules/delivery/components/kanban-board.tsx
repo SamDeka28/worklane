@@ -971,6 +971,7 @@ function SortableCard({
         commentCount={task.commentCount}
         selected={selected}
         onOpen={onOpen}
+        shareId={task.id}
         dragHandle={disabled ? null : <TaskDragHandle />}
       />
     </li>

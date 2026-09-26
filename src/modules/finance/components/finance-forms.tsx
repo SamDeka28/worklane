@@ -1,5 +1,6 @@
 "use client";
 
+import { HandCoins } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -234,6 +235,7 @@ export function RecordPaymentDialog({
       title="Collect"
       description="Pick a billed milestone or charge. Leftover still fills older unpaid items."
       triggerLabel={triggerLabel}
+      triggerIcon={<HandCoins />}
       triggerVariant={triggerVariant}
       triggerDisabled={clients.length === 0}
       hideTrigger={hideTrigger}

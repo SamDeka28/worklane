@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -61,6 +61,7 @@ export function CreateClientDialog({
       title="New client"
       description="One record. Contacts attach here."
       triggerLabel="New client"
+      triggerIcon={<UserPlus />}
       hideTrigger={hideTrigger}
       open={open}
       onOpenChange={(next) => {

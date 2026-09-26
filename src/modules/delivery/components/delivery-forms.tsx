@@ -1,6 +1,6 @@
 "use client";
 
-import { MoreHorizontal } from "lucide-react";
+import { FolderPlus, MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -115,6 +115,7 @@ export function CreateProjectDialog({
       title="New project"
       description="Hangs off one client. Attach proposals, SOWs, or PDFs if you have them."
       triggerLabel="New project"
+      triggerIcon={<FolderPlus />}
       triggerDisabled={clients.length === 0}
       hideTrigger={hideTrigger}
       open={open}

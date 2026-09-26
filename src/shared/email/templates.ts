@@ -319,6 +319,32 @@ export function documentEmailText(input: DocumentEmailInput) {
   ].join("\n");
 }
 
+export type PersonalEmailInput = {
+  body: string;
+  pixelUrl?: string | null;
+};
+
+/**
+ * A plain one-to-one email (CRM outreach): no branding or buttons, so it reads like
+ * something typed in a mail app. Bare links become clickable.
+ */
+export function personalEmailHtml(input: PersonalEmailInput) {
+  const blocks = input.body
+    .trim()
+    .split(/\n{2,}/)
+    .map((block) => {
+      const html = escapeHtml(block)
+        .replace(/https?:\/\/[^\s<]+[^\s<.,;:!?)"'\]]/g, (url) => `<a href="${url}" style="color:#1a56db">${url}</a>`)
+        .replaceAll("\n", "<br>");
+      return `<p style="margin:0 0 14px">${html}</p>`;
+    })
+    .join("");
+  const pixel = input.pixelUrl
+    ? `<img src="${escapeHtml(input.pixelUrl)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0">`
+    : "";
+  return `<!doctype html><html><body style="margin:0;padding:0"><div style="font-family:${FONT};font-size:14px;line-height:22px;color:#1f2328">${blocks}${pixel}</div></body></html>`;
+}
+
 export type DocumentUpdateEmailInput = {
   orgName: string;
   heading: string;
