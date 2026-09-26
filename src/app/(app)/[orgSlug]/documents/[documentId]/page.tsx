@@ -65,7 +65,7 @@ export default async function DocumentDetailPage({
   const currency = project?.currency ?? ctx.org.defaultCurrency;
 
   return (
-    <WorkSurface>
+    <WorkSurface variant="panel">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-2 pt-2 sm:px-4">
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <DocumentEditor

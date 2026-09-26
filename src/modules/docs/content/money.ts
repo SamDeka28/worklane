@@ -244,7 +244,7 @@ export const MONEY: DocArticle[] = [
         type: "table",
         head: ["Section", "What you set"],
         rows: [
-          ["Billed to", "The client's billing identity: **Company or name**, **Attention**, **Tax ID**, **Email**, **Phone**, **Billing address**, and any extra fields."],
+          ["Billed to", "The client's billing identity: **Company or name**, **Contact person or team**, **Tax ID**, **Email**, **Phone**, **Billing address**, and any extra fields."],
           ["Items", "Line items with quantity, rate, discount, and tax. The summary shows the item count and total."],
           ["Dates & reference", "**Due on** (or due on receipt) and **Reference / PO**."],
           ["Payment details & notes", "**Payment details** (bank account, UPI ID, or a payment link, printed next to the totals), **Notes to client**, and **Terms & conditions**."],

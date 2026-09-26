@@ -13,7 +13,7 @@ export function IndexBody({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pb-4 pt-3 sm:gap-4 sm:px-5 sm:pb-5 sm:pt-4 md:overflow-hidden",
+        "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pb-4 pt-3 sm:gap-4 sm:px-6 sm:pb-5 sm:pt-4 md:overflow-hidden",
         className,
       )}
     >
@@ -62,11 +62,14 @@ export function DenseListPanel({
   children,
   footer,
   className,
+  columnsClassName,
 }: {
   columns?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  /** Match the rows' gap so header labels line up with their cells. */
+  columnsClassName?: string;
 }) {
   return (
     <div
@@ -78,7 +81,12 @@ export function DenseListPanel({
       <div className="min-h-0 min-w-0 flex-1 overflow-x-auto md:overflow-y-hidden">
         <div className="flex h-full min-h-0 w-full flex-col">
           {columns ? (
-            <div className="hidden shrink-0 items-center gap-3 border-b border-border/50 bg-card/70 px-4 py-3.5 text-[11px] font-bold tracking-wide text-muted-foreground uppercase sm:flex sm:px-5 sm:py-4">
+            <div
+              className={cn(
+                "hidden shrink-0 items-center gap-3 border-b border-border/50 bg-card/70 px-4 py-3.5 text-[11px] font-bold tracking-wide text-muted-foreground uppercase sm:flex sm:px-5 sm:py-4",
+                columnsClassName,
+              )}
+            >
               {columns}
             </div>
           ) : null}

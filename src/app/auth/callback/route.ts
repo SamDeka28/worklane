@@ -19,14 +19,26 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const next = safeNextPath(url.searchParams.get("next"), url.origin);
+  const linkEmail = url.searchParams.get("email")?.trim().toLowerCase() || null;
 
   if (code) {
     const supabase = await createServerSupabaseClient();
     if (supabase) {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) {
+        const confirmed = error.code === "pkce_code_verifier_not_found";
+        const {
+          data: { user: current },
+        } = await supabase.auth.getUser();
+        if (confirmed && current && linkEmail && current.email?.toLowerCase() === linkEmail) {
+          return NextResponse.redirect(new URL(next, url.origin));
+        }
+
         const login = new URL("/login", url.origin);
-        login.searchParams.set("error", error.message);
+        if (confirmed) login.searchParams.set("confirmed", "1");
+        else login.searchParams.set("error", error.message);
+        if (linkEmail) login.searchParams.set("email", linkEmail);
+        if (current) login.searchParams.set("switch", "1");
         if (next.startsWith("/invite/")) {
           login.searchParams.set("invite", next.slice("/invite/".length).split("?")[0] ?? "");
         }

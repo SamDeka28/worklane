@@ -209,7 +209,7 @@ export function TaskModal({
           showActivity ? "sm:max-w-2xl" : "sm:max-w-5xl lg:max-w-6xl",
         )}
       >
-        <DialogHeader className="shrink-0 flex-row items-center gap-4 border-b border-border/40 px-6 py-5 pr-14 sm:px-8">
+        <DialogHeader className="shrink-0 flex-row items-center gap-4 border-b border-border/40 px-6 py-5 pr-20 sm:px-8 sm:pr-20">
           <div className="min-w-0 flex-1 space-y-1">
             <DialogTitle className="truncate font-heading text-xl tracking-tight sm:text-2xl">
               {title}

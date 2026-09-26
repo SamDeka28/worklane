@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { AvatarMark, SoftCard, StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import { MoneyDonutCard, MoneyMetaCards } from "@/components/studio/money-donut";
 import { EmptyState } from "@/components/studio/empty-state";
+import { SearchX, Users } from "lucide-react";
 import {
   DenseCell,
   DenseListPanel,
@@ -95,7 +96,7 @@ export default async function ClientsPage({
       />
 
       {rows.length === 0 ? (
-        <EmptyState
+        <EmptyState icon={q ? SearchX : Users}
           fill
           title={q ? "No names match" : JOURNEY.clients.emptyTitle}
           body={q ? undefined : JOURNEY.clients.emptyBody}
@@ -143,7 +144,7 @@ export default async function ClientsPage({
             </SummaryStrip>
 
             {visible.length === 0 ? (
-              <EmptyState fill title="No clients match these filters" />
+              <EmptyState icon={SearchX} fill title="No clients match these filters" />
             ) : view === "list" ? (
               <DenseListPanel
                 columns={

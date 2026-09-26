@@ -560,7 +560,7 @@ export function CredentialsVault({
       </div>
 
       {credentials.length === 0 ? (
-        <EmptyState
+        <EmptyState icon={KeyRound}
           title="No credentials yet"
           body="Keep logins, API keys, and server access for this project in one place instead of spreadsheets and chats. Everything is encrypted, and you choose who can see each one."
           action={newButton}

@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { LayoutGrid, List } from "lucide-react";
+import {
+  LayoutGrid,
+  List,
+  SearchX,
+  Target,
+} from "lucide-react";
 import { notFound } from "next/navigation";
 import { StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import { EmptyState } from "@/components/studio/empty-state";
@@ -66,7 +71,7 @@ export default async function CrmPage({
         purpose={JOURNEY.leads.purpose}
         actions={
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 rounded-full bg-muted p-1">
+            <div data-slot="segmented" className="flex items-center gap-1 rounded-full bg-muted p-1">
               <Link
                 href={`/${orgSlug}/crm?view=board`}
                 className={cn(
@@ -75,6 +80,7 @@ export default async function CrmPage({
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground",
                 )}
+                aria-current={view === "board" ? "page" : undefined}
                 aria-label="Board view"
               >
                 <LayoutGrid className="size-3.5" />
@@ -87,6 +93,7 @@ export default async function CrmPage({
                     ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground",
                 )}
+                aria-current={view === "list" ? "page" : undefined}
                 aria-label="List view"
               >
                 <List className="size-3.5" />
@@ -114,7 +121,7 @@ export default async function CrmPage({
       {view === "board" ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {leads.length === 0 ? (
-            <EmptyState
+            <EmptyState icon={Target}
               fill
               title={JOURNEY.leads.emptyTitle}
               body={JOURNEY.leads.emptyBody}
@@ -158,7 +165,7 @@ export default async function CrmPage({
             <input type="hidden" name="view" value="list" />
           </form>
           {leads.length === 0 ? (
-            <EmptyState
+            <EmptyState icon={q ? SearchX : Target}
               fill
               title={q ? "No leads match" : JOURNEY.leads.emptyTitle}
               body={q ? undefined : JOURNEY.leads.emptyBody}

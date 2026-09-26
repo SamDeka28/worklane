@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { Columns3 } from "lucide-react";
+import {
+  Columns3,
+  FolderKanban,
+  SearchX,
+  Users,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
 import { AvatarMark, SoftCard, StudioToolbar, WorkSurface } from "@/components/studio/chrome";
@@ -150,7 +155,7 @@ export default async function ProjectsPage({
       />
 
       {board.length === 0 ? (
-        <EmptyState
+        <EmptyState icon={clients.length === 0 ? Users : FolderKanban}
           fill
           title={
             clients.length === 0
@@ -193,7 +198,7 @@ export default async function ProjectsPage({
           {view === "board" ? (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {cards.length === 0 ? (
-                <EmptyState fill title="No projects match these filters" />
+                <EmptyState icon={SearchX} fill title="No projects match these filters" />
               ) : (
                 <ProjectStatusBoard
                   orgSlug={orgSlug}
@@ -240,7 +245,7 @@ export default async function ProjectsPage({
                 />
               </SummaryStrip>
               {cards.length === 0 ? (
-                <EmptyState fill title="No projects match these filters" />
+                <EmptyState icon={SearchX} fill title="No projects match these filters" />
               ) : view === "list" ? (
                 <ProjectListPanel
                   orgSlug={orgSlug}
@@ -317,13 +322,17 @@ export default async function ProjectsPage({
                             ) : null}
                             {ctx.canWrite ? (
                               <div className="mt-auto flex flex-wrap items-center gap-2 self-start">
-                                <Link
-                                  href={`/${orgSlug}/projects/${card.project.id}?tab=work&panel=board`}
-                                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary/12 px-2.5 text-[13px] font-semibold text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/18 hover:ring-primary/35"
+                                <Button
+                                  size="sm"
+                                  variant="tonal"
+                                  nativeButton={false}
+                                  render={
+                                    <Link href={`/${orgSlug}/projects/${card.project.id}?tab=work&panel=board`} />
+                                  }
                                 >
-                                  <Columns3 className="size-3.5 opacity-90" aria-hidden />
+                                  <Columns3 className="opacity-90" aria-hidden />
                                   Board
-                                </Link>
+                                </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -334,13 +343,18 @@ export default async function ProjectsPage({
                                 </Button>
                               </div>
                             ) : (
-                              <Link
-                                href={`/${orgSlug}/projects/${card.project.id}?tab=work&panel=board`}
-                                className="mt-auto inline-flex h-8 items-center gap-1.5 self-start rounded-lg bg-primary/12 px-2.5 text-[13px] font-semibold text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/18 hover:ring-primary/35"
+                              <Button
+                                size="sm"
+                                variant="tonal"
+                                className="mt-auto self-start"
+                                nativeButton={false}
+                                render={
+                                  <Link href={`/${orgSlug}/projects/${card.project.id}?tab=work&panel=board`} />
+                                }
                               >
-                                <Columns3 className="size-3.5 opacity-90" aria-hidden />
+                                <Columns3 className="opacity-90" aria-hidden />
                                 Board
-                              </Link>
+                              </Button>
                             )}
                           </div>
                           {seeMoney ? (

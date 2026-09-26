@@ -1,5 +1,13 @@
 import Link from "next/link";
-import { CheckCircle2, Circle, Eye, Link2, Mail, MessageSquare } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  Eye,
+  FileText,
+  Link2,
+  Mail,
+  MessageSquare,
+} from "lucide-react";
 import {
   FilterChip,
   FilterChips,
@@ -135,7 +143,7 @@ export default async function DocumentsPage({
           </SummaryStrip>
         ) : null}
         {filtered.length === 0 ? (
-          <EmptyState
+          <EmptyState icon={FileText}
             fill
             title={JOURNEY.documents.emptyTitle}
             body={JOURNEY.documents.emptyBody}
@@ -144,12 +152,13 @@ export default async function DocumentsPage({
           />
         ) : (
           <DenseListPanel
+            columnsClassName="sm:gap-6"
             columns={
               <>
                 <span className="min-w-0 flex-1">Document</span>
-                <span className="hidden w-52 lg:block">Client activity</span>
-                <span className="hidden w-28 md:block">Review</span>
-                <span className="hidden w-36 md:block">Signatures</span>
+                <span className="hidden w-44 lg:block">Client activity</span>
+                <span className="hidden w-24 md:block">Review</span>
+                <span className="hidden w-32 md:block">Signatures</span>
                 <span className="hidden w-24 text-right sm:block">Status</span>
                 <span className="hidden w-24 text-right xl:block">Updated</span>
               </>
@@ -165,7 +174,7 @@ export default async function DocumentsPage({
                 .filter(Boolean)
                 .join(" · ");
               return (
-                <DenseRow key={doc.id}>
+                <DenseRow key={doc.id} className="sm:gap-6">
                   <DenseCell className="min-w-0 flex-1">
                     <Link href={`${base}/${doc.id}`} className="block min-w-0">
                       <p className="truncate text-sm font-medium">{doc.title}</p>
@@ -188,22 +197,20 @@ export default async function DocumentsPage({
                       </p>
                     </Link>
                   </DenseCell>
-                  <DenseCell width="hidden w-52 lg:block" className="text-xs">
+                  <DenseCell width="hidden w-44 lg:block" className="text-xs">
                     <ClientActivity info={info} now={now} />
                   </DenseCell>
-                  <DenseCell width="hidden w-28 md:block" className="text-xs">
+                  <DenseCell width="hidden w-24 md:block" className="text-xs">
                     {info?.openFeedback ? (
                       <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-700 dark:text-amber-300">
                         <MessageSquare className="size-3" />
                         {info.openFeedback} open
                       </span>
-                    ) : info?.lastSend ? (
-                      <span className="text-muted-foreground">No open items</span>
                     ) : (
                       <span className="text-muted-foreground/60">—</span>
                     )}
                   </DenseCell>
-                  <DenseCell width="hidden w-36 md:block" className="text-xs">
+                  <DenseCell width="hidden w-32 md:block" className="text-xs">
                     <SignatureState info={info} status={doc.status} />
                   </DenseCell>
                   <DenseCell align="right" width="hidden w-24 sm:block">
@@ -267,25 +274,21 @@ function ClientActivity({ info, now }: { info: DocumentOverview | undefined; now
   const activity = activityLabel(info, now);
   const who = send.recipientName || send.recipientEmail;
   const others = (info?.recipientCount ?? 1) - 1;
-  const DeliveryIcon = send.delivery === "link" ? Link2 : Mail;
+  const ActivityIcon = activity.tone === "good" ? Eye : send.delivery === "link" ? Link2 : Mail;
   return (
-    <div className="min-w-0">
-      <p className="flex min-w-0 items-center gap-1.5 text-foreground/90">
-        <DeliveryIcon className="size-3 shrink-0 text-muted-foreground" />
-        <span className="truncate" title={send.recipientEmail}>
-          {who}
-          {others > 0 ? ` +${others}` : ""}
-        </span>
-        <span className="shrink-0 text-muted-foreground">· {ago(send.sentAt, now)}</span>
-      </p>
+    <div className="min-w-0" title={`Sent to ${send.recipientEmail} · ${ago(send.sentAt, now)}`}>
       <p
         className={cn(
-          "mt-0.5 flex items-center gap-1",
-          activity.tone === "good" ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+          "flex items-center gap-1.5 font-medium",
+          activity.tone === "good" ? "text-emerald-600 dark:text-emerald-400" : "text-foreground/80",
         )}
       >
-        <Eye className="size-3 shrink-0" />
-        {activity.text}
+        <ActivityIcon className="size-3 shrink-0" />
+        <span className="truncate">{activity.text}</span>
+      </p>
+      <p className="mt-1 truncate text-muted-foreground">
+        {who}
+        {others > 0 ? ` +${others}` : ""}
       </p>
     </div>
   );
@@ -303,30 +306,22 @@ function SignatureState({
   if (!client && !studio) {
     return (
       <span className="text-muted-foreground/60">
-        {status === "accepted" ? "Accepted, no signatures" : status === "sent" ? "Awaiting client" : "—"}
+        {status === "accepted" ? "No signatures" : status === "sent" ? "Awaiting client" : "—"}
       </span>
     );
   }
-  const label = client && studio ? "Fully signed" : client ? "Countersign needed" : "Awaiting client";
+  if (client && !studio) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 font-medium text-amber-700 dark:text-amber-300">
+        Countersign needed
+      </span>
+    );
+  }
   return (
-    <div className="min-w-0">
-      <p className="flex items-center gap-2.5">
-        <SignDot done={client} label="Client" />
-        <SignDot done={studio} label="You" />
-      </p>
-      <p
-        className={cn(
-          "mt-0.5",
-          client && studio
-            ? "text-emerald-600 dark:text-emerald-400"
-            : client
-              ? "font-medium text-amber-700 dark:text-amber-300"
-              : "text-muted-foreground",
-        )}
-      >
-        {label}
-      </p>
-    </div>
+    <p className="flex items-center gap-3">
+      <SignDot done={client} label="Client" />
+      <SignDot done={studio} label="You" />
+    </p>
   );
 }
 

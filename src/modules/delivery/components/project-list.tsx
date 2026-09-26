@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { Columns3 } from "lucide-react";
 import { AvatarMark } from "@/components/studio/chrome";
 import {
@@ -263,13 +264,16 @@ function ProjectListRow({
       ) : null}
 
       <DenseCell width="w-20 shrink-0 sm:w-[5.75rem]" align="right" className="pt-0.5">
-        <Link
-          href={boardHref}
-          className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary/12 px-2 text-[13px] font-semibold text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/18 hover:ring-primary/35 sm:px-2.5"
+        <Button
+          size="xs"
+          variant="tonal"
+          className="h-8 text-[13px] font-semibold"
+          nativeButton={false}
+          render={<Link href={boardHref} />}
         >
           <Columns3 className="size-3.5 opacity-90" aria-hidden />
           <span className="hidden sm:inline">Board</span>
-        </Link>
+        </Button>
       </DenseCell>
     </DenseRow>
   );

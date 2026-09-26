@@ -13,7 +13,7 @@ export default async function ProfilePage({
     "You";
 
   return (
-    <WorkSurface>
+    <WorkSurface variant="panel">
       <StudioToolbar
         title="Profile"
         subtitle="Your name, photo and contact details across the studio"

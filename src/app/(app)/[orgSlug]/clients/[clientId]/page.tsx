@@ -135,7 +135,7 @@ export default async function ClientProfilePage({
     dueMinor > BigInt(0) ? "due" : collectedMinor > BigInt(0) ? "paid" : "planning";
 
   return (
-    <WorkSurface>
+    <WorkSurface variant="panel">
       <EntityChrome
         title={client.name}
         meta={
@@ -204,6 +204,7 @@ export default async function ClientProfilePage({
               <div className="border-b border-border/50 sm:border-r xl:border-b-0">
                 <Stat
                   variant="tile"
+                  className="bg-transparent"
                   label="Due"
                   value={moneyLabel(dueMinor, client.currency)}
                   tone={dueMinor > BigInt(0) ? "rose" : "emerald"}
@@ -213,6 +214,7 @@ export default async function ClientProfilePage({
               <div className="border-b border-border/50 xl:border-r xl:border-b-0">
                 <Stat
                   variant="tile"
+                  className="bg-transparent"
                   label="Collected"
                   value={moneyLabel(collectedMinor, client.currency)}
                   tone="emerald"
@@ -230,6 +232,7 @@ export default async function ClientProfilePage({
           >
             <Stat
               variant="tile"
+              className="bg-transparent"
               label="Projects"
               value={String(projects.length)}
               tone="violet"
@@ -239,6 +242,7 @@ export default async function ClientProfilePage({
           <div>
             <Stat
               variant="tile"
+              className="bg-transparent"
               label="Contacts"
               value={String(contacts.length)}
               tone="sky"

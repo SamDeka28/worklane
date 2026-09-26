@@ -15,7 +15,7 @@ export function EmptyModulePage({
   actionHref,
 }: EmptyModulePageProps) {
   return (
-    <WorkSurface>
+    <WorkSurface variant="panel">
       <StudioToolbar title={eyebrow} />
       <div className="flex max-w-lg flex-col gap-2 px-6 py-10">
         <h1 className="text-lg font-semibold tracking-tight">{title}</h1>

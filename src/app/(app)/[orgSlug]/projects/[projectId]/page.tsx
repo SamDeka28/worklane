@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
+import { CalendarClock, Coins, Flag, Handshake } from "lucide-react";
 import {
   EntityChrome,
   FilterChip,
@@ -483,7 +484,7 @@ export default async function ProjectDetailPage({
   );
 
   return (
-    <WorkSurface>
+    <WorkSurface variant="panel">
       <EntityChrome
         title={
           <span className="flex flex-wrap items-center gap-2">
@@ -710,7 +711,7 @@ export default async function ProjectDetailPage({
                   }
                 >
                   {overviewMilestones.length === 0 ? (
-                    <EmptyState
+                    <EmptyState icon={Flag}
                       title="No milestones yet"
                       body="Add the first billable slice from the header or Milestones tab."
                     />
@@ -801,7 +802,7 @@ export default async function ProjectDetailPage({
             }
           >
             {milestones.length === 0 ? (
-              <EmptyState
+              <EmptyState icon={Flag}
                 title="No milestones yet"
                 body="Name a billable slice: amount optional until you’re ready to charge."
               />
@@ -874,7 +875,7 @@ export default async function ProjectDetailPage({
                 />
               </div>
             ) : logs.length === 0 ? (
-              <EmptyState
+              <EmptyState icon={CalendarClock}
                 title="Log the first day"
                 body="Date, hours, rate or a fixed amount: one row replaces the spreadsheet."
               />
@@ -913,7 +914,7 @@ export default async function ProjectDetailPage({
         {tab === "charges" ? (
           <HubSection id="charges" title="Charges">
             {finance.charges.length === 0 ? (
-              <EmptyState
+              <EmptyState icon={Coins}
                 title="No charges yet"
                 body={
                   project.billingMode === "milestones"
@@ -1111,7 +1112,7 @@ export default async function ProjectDetailPage({
 
             <HubSection title="Partners">
               {splitPartnerRows.length === 0 ? (
-                <EmptyState
+                <EmptyState icon={Handshake}
                   title={needsPartners ? "No partners yet" : "No split yet"}
                   body={
                     needsPartners

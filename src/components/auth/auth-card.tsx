@@ -1,12 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createBrowserSupabaseClient } from "@/shared/db/supabase/browser";
+import { PasswordInput } from "@/components/auth/password-input";
+import { ResetPasswordCard } from "@/components/auth/reset-password-card";
+import { VerifyCodeCard } from "@/components/auth/verify-code-card";
+
+const PASSWORD_MISMATCH = "Passwords don't match.";
 
 type AuthCardProps = {
   title: string;
@@ -14,6 +20,8 @@ type AuthCardProps = {
   mode: "login" | "signup";
   inviteToken?: string;
   defaultEmail?: string;
+  confirmed?: boolean;
+  initialError?: string;
 };
 
 export function AuthCard({
@@ -22,10 +30,21 @@ export function AuthCard({
   mode,
   inviteToken,
   defaultEmail,
+  confirmed,
+  initialError,
 }: AuthCardProps) {
   const router = useRouter();
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(initialError ?? null);
+  const confirmedShown = useRef(false);
+
+  useEffect(() => {
+    if (!confirmed || confirmedShown.current) return;
+    confirmedShown.current = true;
+    toast.success("Email confirmed", { description: "Sign in to continue." });
+  }, [confirmed]);
   const [pending, setPending] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState<string | null>(null);
+  const [resetEmail, setResetEmail] = useState<string | null>(null);
   const isInvite = Boolean(inviteToken);
 
   function inviteCallbackUrl(origin: string) {
@@ -69,6 +88,11 @@ export function AuthCard({
     const password = String(data.get("password") ?? "");
     const orgName = String(data.get("org_name") ?? "").trim();
 
+    if (mode === "signup" && password !== String(data.get("confirm_password") ?? "")) {
+      setMessage(PASSWORD_MISMATCH);
+      return;
+    }
+
     setPending(true);
     setMessage(null);
 
@@ -87,9 +111,11 @@ export function AuthCard({
             email,
             password,
             options: {
-              emailRedirectTo: isInvite
-                ? inviteCallbackUrl(origin)
-                : `${origin}/auth/callback?next=${encodeURIComponent("/onboarding")}`,
+              emailRedirectTo: `${
+                isInvite
+                  ? inviteCallbackUrl(origin)
+                  : `${origin}/auth/callback?next=${encodeURIComponent("/onboarding")}`
+              }&email=${encodeURIComponent(email)}`,
               data: isInvite
                 ? {
                     skip_org: true,
@@ -101,6 +127,19 @@ export function AuthCard({
           });
 
     if (result.error) {
+      if (mode === "login" && result.error.code === "email_not_confirmed") {
+        const resent = await supabase.auth.resend({ type: "signup", email });
+        setPending(false);
+        if (resent.error) {
+          setMessage(resent.error.message);
+          return;
+        }
+        toast.success("Confirm your email first", {
+          description: `We sent a new code to ${email}.`,
+        });
+        setVerifyEmail(email);
+        return;
+      }
       setMessage(result.error.message);
       setPending(false);
       return;
@@ -116,12 +155,18 @@ export function AuthCard({
       return;
     }
 
-    setMessage(
-      isInvite
-        ? "Check your email to confirm, then open the invite link again."
-        : "Check your email to confirm this account, then sign in.",
-    );
+    toast.success("Check your email", {
+      description: `We sent a confirmation code to ${email}.`,
+    });
+    form.reset();
     setPending(false);
+    setVerifyEmail(email);
+  }
+
+  function onFormChange(event: React.FormEvent<HTMLFormElement>) {
+    if (message !== PASSWORD_MISMATCH) return;
+    const data = new FormData(event.currentTarget);
+    if (data.get("password") === data.get("confirm_password")) setMessage(null);
   }
 
   const otherHref = isInvite
@@ -131,6 +176,22 @@ export function AuthCard({
     : mode === "login"
       ? "/signup"
       : "/login";
+
+  if (resetEmail !== null) {
+    return (
+      <ResetPasswordCard defaultEmail={resetEmail} onBack={() => setResetEmail(null)} />
+    );
+  }
+
+  if (verifyEmail) {
+    return (
+      <VerifyCodeCard
+        email={verifyEmail}
+        inviteToken={inviteToken}
+        onBack={() => setVerifyEmail(null)}
+      />
+    );
+  }
 
   return (
     <div className="w-full">
@@ -161,7 +222,7 @@ export function AuthCard({
         )}
       </p>
 
-      <form className="mt-8 flex flex-col gap-4" onSubmit={onSubmit}>
+      <form className="mt-8 flex flex-col gap-4" onSubmit={onSubmit} onChange={onFormChange}>
         {mode === "signup" && !isInvite ? (
           <Field label="Studio name" htmlFor="org_name">
             <Input
@@ -201,10 +262,9 @@ export function AuthCard({
           />
         </Field>
         <Field label="Password" htmlFor="password">
-          <Input
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             required
             minLength={8}
@@ -212,7 +272,33 @@ export function AuthCard({
             className="h-11"
             suppressHydrationWarning
           />
+          {mode === "login" ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                const email = event.currentTarget.form?.elements.namedItem("email");
+                setResetEmail(email instanceof HTMLInputElement ? email.value.trim() : "");
+              }}
+              className="self-end text-[12px] font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Forgot password?
+            </button>
+          ) : null}
         </Field>
+        {mode === "signup" ? (
+          <Field label="Confirm password" htmlFor="confirm_password">
+            <PasswordInput
+              id="confirm_password"
+              name="confirm_password"
+              autoComplete="new-password"
+              required
+              minLength={8}
+              placeholder="Re-enter your password"
+              className="h-11"
+              suppressHydrationWarning
+            />
+          </Field>
+        ) : null}
         {message ? <p className="text-sm text-destructive">{message}</p> : null}
         <Button type="submit" disabled={pending} className="mt-1 h-11 font-semibold">
           {pending

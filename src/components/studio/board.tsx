@@ -59,7 +59,7 @@ export function BoardCanvas({
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 flex-1 items-start gap-2.5 overflow-x-auto overflow-y-auto px-3 pb-3 sm:gap-3 sm:px-4 sm:pb-4",
+        "flex h-full min-h-0 flex-1 items-start gap-2.5 overflow-x-auto overflow-y-auto px-4 pt-3 pb-3 sm:gap-3 sm:px-6 sm:pt-4 sm:pb-4",
         className,
       )}
     >
@@ -122,7 +122,7 @@ export function BoardColumn({
           ) : null}
         </header>
       )}
-      <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto px-2.5 pb-2.5">
+      <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto px-2.5 pt-2 pb-2.5">
         {children}
       </div>
       {footer ? <div className="shrink-0 p-2.5">{footer}</div> : null}

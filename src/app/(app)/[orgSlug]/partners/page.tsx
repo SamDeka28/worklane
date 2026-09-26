@@ -7,6 +7,7 @@ import {
   WorkSurface,
 } from "@/components/studio/chrome";
 import { EmptyState } from "@/components/studio/empty-state";
+import { Banknote, Handshake } from "lucide-react";
 import {
   IndexBody,
   SummaryStat,
@@ -219,7 +220,7 @@ export default async function PartnersPage({
 
         {view === "balances" ? (
           partners.length === 0 ? (
-            <EmptyState
+            <EmptyState icon={Handshake}
               fill
               title={JOURNEY.partners.emptyTitle}
               body={JOURNEY.partners.emptyBody}
@@ -254,7 +255,7 @@ export default async function PartnersPage({
               </Button>
             </form>
             {register.length === 0 ? (
-              <EmptyState
+              <EmptyState icon={Handshake}
                 fill
                 title={JOURNEY.partners.emptyRegisterTitle}
                 body={JOURNEY.partners.emptyRegisterBody}
@@ -309,7 +310,7 @@ export default async function PartnersPage({
 
         {view === "history" ? (
           settlements.length === 0 ? (
-            <EmptyState
+            <EmptyState icon={Banknote}
               fill
               title="No settlements yet"
               body="When you pay a partner, the payout lands here."

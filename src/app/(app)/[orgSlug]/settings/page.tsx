@@ -51,7 +51,7 @@ export default async function SettingsPage({
   ]);
 
   return (
-    <WorkSurface>
+    <WorkSurface variant="panel">
       <StudioToolbar
         purpose="Studio settings"
         subtitle={ctx.org.slug}

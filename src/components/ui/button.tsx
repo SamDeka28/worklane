@@ -14,6 +14,9 @@ const buttonVariants = cva(
         /** Secondary CTA — outlined */
         outline:
           "border-border/70 bg-card text-foreground shadow-none hover:border-border hover:bg-muted/70 aria-expanded:border-border aria-expanded:bg-muted/70 dark:border-white/12 dark:bg-transparent dark:hover:bg-muted/50",
+        /** Tinted in the theme color — for secondary actions that should still read as primary-ish */
+        tonal:
+          "bg-primary/12 text-primary ring-1 ring-primary/20 hover:bg-primary/18 hover:ring-primary/35 aria-expanded:bg-primary/18",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-muted aria-expanded:bg-muted",
         ghost:

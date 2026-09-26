@@ -1722,15 +1722,18 @@ export async function moveTaskAction(
   );
   const ids = orderedIds.includes(taskId) ? orderedIds : [...orderedIds, taskId];
 
-  for (const [index, id] of ids.entries()) {
-    const { error } = await ctx.supabase
-      .from("tasks")
-      .update({ column_id: columnId, status, position: index })
-      .eq("id", id)
-      .eq("organization_id", ctx.org.id)
-      .eq("project_id", task.project_id);
-    if (error) return { error: error.message };
-  }
+  const results = await Promise.all(
+    ids.map((id, index) =>
+      ctx.supabase
+        .from("tasks")
+        .update({ column_id: columnId, status, position: index })
+        .eq("id", id)
+        .eq("organization_id", ctx.org.id)
+        .eq("project_id", task.project_id),
+    ),
+  );
+  const failed = results.find((result) => result.error);
+  if (failed?.error) return { error: failed.error.message };
 
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
   revalidatePath(`/${orgSlug}/board`);
@@ -1876,15 +1879,18 @@ export async function reorderColumnsAction(
     return { error: "Column order is out of date: refresh and try again" };
   }
 
-  for (const [index, id] of orderedIds.entries()) {
-    const { error } = await ctx.supabase
-      .from("project_columns")
-      .update({ position: index })
-      .eq("id", id)
-      .eq("organization_id", ctx.org.id)
-      .eq("project_id", projectId);
-    if (error) return { error: error.message };
-  }
+  const results = await Promise.all(
+    orderedIds.map((id, index) =>
+      ctx.supabase
+        .from("project_columns")
+        .update({ position: index })
+        .eq("id", id)
+        .eq("organization_id", ctx.org.id)
+        .eq("project_id", projectId),
+    ),
+  );
+  const failed = results.find((result) => result.error);
+  if (failed?.error) return { error: failed.error.message };
 
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
   revalidatePath(`/${orgSlug}/board`);

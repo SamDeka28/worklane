@@ -32,7 +32,12 @@ export default async function OrgLayout({
   const orgs = memberships.map((row) => row.org);
 
   return (
-    <div className="lane-app flex h-dvh max-h-dvh gap-2 overflow-hidden overscroll-none p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pr-[max(0.5rem,env(safe-area-inset-right))] pb-[max(0.5rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] sm:gap-3.5 sm:p-3.5">
+    <div
+      data-appearance-root
+      data-surface={ctx.surfaceStyle}
+      data-shape={ctx.componentStyle}
+      data-style={ctx.interfaceStyle}
+      className="lane-app flex h-dvh max-h-dvh gap-2 overflow-hidden overscroll-none p-2 pt-[max(0.5rem,env(safe-area-inset-top))] pr-[max(0.5rem,env(safe-area-inset-right))] pb-[max(0.5rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] sm:gap-3.5 sm:p-3.5">
       <AppSidebar
         org={ctx.org}
         orgs={orgs}
@@ -63,7 +68,12 @@ export default async function OrgLayout({
         </main>
       </div>
       <CommandPalette org={ctx.org} permissions={ctx.permissions} />
-      <ThemeSync saved={ctx.theme} />
+      <ThemeSync
+        saved={ctx.theme}
+        surface={ctx.surfaceStyle}
+        component={ctx.componentStyle}
+        interfaceStyle={ctx.interfaceStyle}
+      />
       <Suspense fallback={null}>
         <JoinedStudioModal
           orgName={ctx.org.name}

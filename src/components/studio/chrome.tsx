@@ -38,14 +38,23 @@ export function SoftCard({
 export function WorkSurface({
   children,
   className,
+  variant = "open",
 }: {
   children: ReactNode;
   className?: string;
+  /**
+   * `open` pages have their own cards, so the user's surface style decides the backdrop;
+   * `panel` pages always keep one because their content has no surfaces of its own.
+   */
+  variant?: "open" | "panel";
 }) {
   return (
-    <SoftCard className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", className)}>
+    <div
+      data-variant={variant}
+      className={cn("lane-work flex min-h-0 flex-1 flex-col overflow-hidden", className)}
+    >
       {children}
-    </SoftCard>
+    </div>
   );
 }
 
@@ -149,7 +158,7 @@ export function Stat({
         </p>
       ) : null}
       {width ? (
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-muted sm:mt-3">
+        <div data-slot="meter" className="mt-2 h-1 overflow-hidden rounded-full bg-muted sm:mt-3">
           <div className={cn("h-full rounded-full", STAT_BAR[tone])} style={{ width }} />
         </div>
       ) : null}
@@ -203,6 +212,7 @@ export function StudioToolbar({
 }) {
   return (
     <div
+      data-toolbar
       className={cn(
         "flex shrink-0 flex-col gap-3 border-b border-border/40 px-4 py-3 sm:flex-row sm:items-center sm:gap-4 sm:px-6 sm:py-3.5",
         className,
@@ -305,7 +315,7 @@ export function FilterChips({
   className?: string;
 }) {
   return (
-    <div className={cn("flex shrink-0 flex-wrap gap-2 px-4 py-2.5 sm:px-6 sm:py-3", className)}>
+    <div data-toolbar className={cn("flex shrink-0 flex-wrap gap-2 px-4 py-2.5 sm:px-6 sm:py-3", className)}>
       {children}
     </div>
   );

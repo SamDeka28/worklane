@@ -111,7 +111,12 @@ export function ActionSheet({
             "data-[side=bottom]:inset-x-2 data-[side=bottom]:bottom-2 data-[side=bottom]:h-[min(92vh,56rem)] data-[side=bottom]:max-h-[min(92vh,56rem)] data-[side=bottom]:rounded-[2rem] data-[side=bottom]:border-0",
         )}
       >
-        <SheetHeader className="shrink-0 flex-row items-center gap-4 border-b border-border/50 px-6 py-5 pr-14">
+        <SheetHeader
+          className={cn(
+            "shrink-0 flex-row items-center gap-4 border-b border-border/50 px-6 py-5",
+            headerAction ? "pr-20" : "pr-14",
+          )}
+        >
           <div className="min-w-0 flex-1 space-y-1.5">
             <SheetTitle className="truncate font-heading text-2xl font-semibold tracking-tight">
               {title}

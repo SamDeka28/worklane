@@ -5,14 +5,14 @@
 
 import { EMAIL_LOGO_CID } from "./logo";
 
-const BRAND = "#5B4BDB";
-const INK = "#111827";
+export const BRAND = "#5B4BDB";
+export const INK = "#111827";
 const BODY = "#374151";
-const MUTED = "#6B7280";
+export const MUTED = "#6B7280";
 const FAINT = "#9CA3AF";
-const LINE = "#E5E7EB";
+export const LINE = "#E5E7EB";
 const CANVAS = "#F4F4F6";
-const PANEL = "#F9FAFB";
+export const PANEL = "#F9FAFB";
 const FONT =
   "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
 
@@ -25,7 +25,7 @@ export function escapeHtml(value: string) {
     .replaceAll("'", "&#39;");
 }
 
-function paragraphs(text: string) {
+export function paragraphs(text: string) {
   return text
     .trim()
     .split(/\n{2,}/)
@@ -36,7 +36,7 @@ function paragraphs(text: string) {
     .join("");
 }
 
-function button(href: string, label: string) {
+export function button(href: string, label: string) {
   return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 4px">
   <tr>
     <td align="center" bgcolor="${BRAND}" style="border-radius:8px">
@@ -58,16 +58,18 @@ function detailRows(rows: { label: string; value: string; strong?: boolean }[]) 
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px;border:1px solid ${LINE};border-radius:10px;background:${PANEL};border-collapse:separate">${body}</table>`;
 }
 
-function fallbackLink(href: string) {
+export function fallbackLink(href: string) {
   return `<p style="margin:24px 0 0;font-size:12px;line-height:18px;color:${FAINT}">If the button doesn't work, copy and paste this link into your browser:<br><a href="${escapeHtml(href)}" style="color:${MUTED};word-break:break-all">${escapeHtml(href)}</a></p>`;
 }
 
-function layout(input: {
+export function layout(input: {
   preheader: string;
   eyebrow?: string;
   title: string;
   content: string;
   footer: string;
+  /** Defaults to the inline CID attachment sent with app emails. */
+  logoSrc?: string;
 }) {
   return `<!doctype html>
 <html lang="en">
@@ -88,7 +90,7 @@ function layout(input: {
           <td style="padding:0 4px 20px">
             <table role="presentation" cellpadding="0" cellspacing="0" border="0">
               <tr>
-                <td width="28" height="28" style="font-size:0;line-height:0"><img src="cid:${EMAIL_LOGO_CID}" width="28" height="28" alt="Worklane" style="display:block;width:28px;height:28px;border:0;border-radius:7px"></td>
+                <td width="28" height="28" style="font-size:0;line-height:0"><img src="${input.logoSrc ?? `cid:${EMAIL_LOGO_CID}`}" width="28" height="28" alt="Worklane" style="display:block;width:28px;height:28px;border:0;border-radius:7px"></td>
                 <td style="padding-left:10px;font-size:15px;font-weight:700;letter-spacing:-0.01em;color:${INK}">Worklane</td>
               </tr>
             </table>

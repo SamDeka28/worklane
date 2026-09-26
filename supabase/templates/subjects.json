@@ -1,0 +1,26 @@
+{
+  "confirmation.html": {
+    "template": "Confirm signup",
+    "subject": "Your Worklane confirmation code"
+  },
+  "magic_link.html": {
+    "template": "Magic link",
+    "subject": "Your Worklane sign-in code"
+  },
+  "recovery.html": {
+    "template": "Reset password",
+    "subject": "Your Worklane password reset code"
+  },
+  "email_change.html": {
+    "template": "Change email address",
+    "subject": "Confirm your new Worklane email"
+  },
+  "invite.html": {
+    "template": "Invite user",
+    "subject": "You've been invited to Worklane"
+  },
+  "reauthentication.html": {
+    "template": "Reauthentication",
+    "subject": "Your Worklane verification code"
+  }
+}

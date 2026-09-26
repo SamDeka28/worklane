@@ -92,11 +92,11 @@ export const GETTING_STARTED: DocArticle[] = [
           },
           {
             title: "Confirm your email if asked",
-            body: "Some deployments require confirmation. If you see “Check your email to confirm this account”, click the link in that email, then sign in.",
+            body: "Some deployments require confirmation. After you create your account, enter the confirmation code from your email to continue. Use **Resend code** if it doesn't arrive.",
           },
           {
             title: "Take the welcome tour",
-            body: "Your studio opens with a three-step tour — **Welcome**, **How Worklane moves**, and **Your access**. You can **Skip** it at any time.",
+            body: "Your studio opens with a three-step tour — **Welcome**, **How Worklane moves**, and **What you can open**, which lists the modules your role can use. You can **Skip tour** at any time.",
           },
         ],
       },

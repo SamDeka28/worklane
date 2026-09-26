@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Mail, Send } from "lucide-react";
+import {
+  Mail,
+  ReceiptText,
+  SearchX,
+  Send,
+} from "lucide-react";
 import {
   FilterChip,
   FilterChips,
@@ -194,7 +199,7 @@ export default async function InvoicesPage({
           </SummaryStrip>
         ) : null}
         {rows.length === 0 ? (
-          <EmptyState
+          <EmptyState icon={ReceiptText}
             fill
             title="No invoices yet"
             body="Create a draft, add lines, then issue to the ledger."
@@ -202,7 +207,7 @@ export default async function InvoicesPage({
             actionLabel={ctx.canWrite ? "New invoice" : undefined}
           />
         ) : filtered.length === 0 ? (
-          <EmptyState fill title="Nothing here" body="No invoices match this filter." />
+          <EmptyState icon={SearchX} fill title="Nothing here" body="No invoices match this filter." />
         ) : (
           <DenseListPanel
             columns={

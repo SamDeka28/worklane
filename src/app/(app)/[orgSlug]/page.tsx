@@ -15,6 +15,7 @@ import {
 import { MoneyDonut, MONEY_COLORS } from "@/components/studio/money-donut";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
+import { Target, Users } from "lucide-react";
 import { listClients, listOrgActivity } from "@/modules/clients/queries";
 import { listLeads, listLeadStages } from "@/modules/crm/queries";
 import {
@@ -251,11 +252,11 @@ export default async function DashboardPage({
     : dash.activities.filter((row) => !moneyActivityVerbs.has(row.verb));
 
   return (
-    <WorkSurface>
+    <WorkSurface variant="panel">
       <StudioToolbar purpose={JOURNEY.home.purpose} />
-      <PageShell className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-5 pt-1 sm:gap-5 sm:px-5 sm:pb-6">
+      <PageShell className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-5 pt-1 sm:gap-5 sm:px-6 sm:pb-6">
       {emptyStudio ? (
-        <EmptyState
+        <EmptyState icon={seeCrm ? Target : Users}
           fill
           title={
             seeCrm ? JOURNEY.leads.emptyTitle : JOURNEY.clients.emptyTitle

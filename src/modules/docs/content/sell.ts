@@ -202,7 +202,7 @@ export const SELL: DocArticle[] = [
         type: "callout",
         tone: "tip",
         title: "Billing details",
-        text: "Each client has a **Billing details** card on their page with the legal name, attention line, tax ID, billing email, phone, address, and extra fields like PAN or vendor code. Click **Add** or **Edit** to fill it in. Every new invoice for that client starts with these details in **Billed to**. You can also save them from an invoice by ticking **Save as {client}'s billing details**. Issued invoices keep the details they were issued with. See [Invoices](/docs/invoices).",
+        text: "Each client has a **Billing details** card on their page with the legal name, contact person or team, tax ID, billing email, phone, address, and extra fields like PAN or vendor code. Click **Add** or **Edit** to fill it in. Every new invoice for that client starts with these details in **Billed to**. You can also save them from an invoice by ticking **Save as {client}'s billing details**. Issued invoices keep the details they were issued with. See [Invoices](/docs/invoices).",
       },
       { type: "h2", text: "Archive or delete" },
       {

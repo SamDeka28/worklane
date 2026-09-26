@@ -12,7 +12,7 @@ import {
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Plus } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   BoardCanvas,
@@ -84,9 +84,8 @@ export function LeadBoard({
   canWrite: boolean;
   showMoney?: boolean;
 }) {
-  const router = useRouter();
   const activeLeadId = useSearchParams().get("lead");
-  const [pending, start] = useTransition();
+  const [, start] = useTransition();
   const [items, setItems] = useState(() => groupLeads(leads, stages));
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overStage, setOverStage] = useState<string | null>(null);
@@ -187,9 +186,7 @@ export function LeadBoard({
       if (result.error) {
         toast.error(result.error);
         setItems(groupLeads(leads, stages));
-        return;
       }
-      router.refresh();
     });
   }
 
@@ -207,7 +204,7 @@ export function LeadBoard({
       onDragEnd={onDragEnd}
       onDragCancel={resetDrag}
     >
-      <BoardCanvas className="h-full min-h-0 px-3 pb-3 pt-3 sm:px-4">
+      <BoardCanvas className="h-full min-h-0 px-4 pb-3 pt-3 sm:px-6">
         {stages.map((stage, stageIndex) => (
           <LeadColumn
             key={stage.id}
@@ -217,7 +214,7 @@ export function LeadBoard({
             leads={items.get(stage.slug) ?? []}
             showMoney={showMoney}
             canWrite={canWrite}
-            disabled={!canWrite || pending}
+            disabled={!canWrite}
             selectedLeadId={activeLeadId}
             activeLeadId={activeId}
             dropActive={Boolean(activeId) && overStage === stage.slug}

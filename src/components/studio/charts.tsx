@@ -48,11 +48,15 @@ export function MoneyRing({
   return (
     <div className={cn("flex flex-col items-center gap-4 sm:flex-row sm:items-center", className)}>
       <div
+        data-chart="ring"
         className="relative size-40 shrink-0 rounded-full shadow-inner transition-transform duration-500 hover:scale-[1.02]"
         style={{ background: `conic-gradient(${stops})` }}
         aria-hidden
       >
-        <div className="absolute inset-5 flex flex-col items-center justify-center rounded-full bg-card text-center shadow-soft">
+        <div
+          data-chart="ring-center"
+          className="absolute inset-5 flex flex-col items-center justify-center rounded-full bg-card text-center shadow-soft"
+        >
           {centerValue ? (
             <p className="text-sm font-semibold tabular-nums tracking-tight">{centerValue}</p>
           ) : null}
@@ -181,7 +185,7 @@ export function ProjectMoneyCurves({
         ))}
       </div>
 
-      <div className="h-56 w-full">
+      <div data-chart="bars" className="h-56 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
@@ -306,6 +310,7 @@ export function DotStackChart({
                 return (
                   <span
                     key={index}
+                    data-chart="dot"
                     className={cn(
                       "size-2.5 rounded-full transition-all duration-300 sm:size-3",
                       on
@@ -347,7 +352,7 @@ export function PillTrack({
   }[tone];
 
   return (
-    <div className={cn("flex gap-1", className)} aria-hidden>
+    <div data-chart="track" className={cn("flex gap-1", className)} aria-hidden>
       {Array.from({ length: slots }, (_, i) => (
         <span
           key={i}
@@ -386,6 +391,7 @@ export function SoftStatCard({
       fill={fill}
       badge={badge}
       variant="tile"
+      className="sm:rounded-2xl sm:ring-1"
     />
   );
 }

@@ -500,7 +500,7 @@ export function EditClientBillingSheet({
           <Input id="client_bill_name" name="bill_to_name" defaultValue={initial.name} />
         </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Attention" htmlFor="client_bill_contact">
+          <Field label="Contact person or team" htmlFor="client_bill_contact">
             <Input
               id="client_bill_contact"
               name="bill_to_contact"

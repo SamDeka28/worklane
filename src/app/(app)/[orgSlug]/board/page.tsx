@@ -1,4 +1,5 @@
 import { EmptyState } from "@/components/studio/empty-state";
+import { Columns3 } from "lucide-react";
 import { StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import { KanbanBoard } from "@/modules/delivery/components/kanban-board";
 import {
@@ -54,7 +55,7 @@ export default async function BoardPage({ params }: PageProps<"/[orgSlug]/board"
         className="hidden sm:flex"
       />
       {activeProjects.length === 0 ? (
-        <EmptyState
+        <EmptyState icon={Columns3}
           fill
           title="No active projects"
           body="Start a project first, then tasks from every board land here."

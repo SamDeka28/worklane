@@ -4,13 +4,14 @@
 
 @custom-variant dark (&:is(
   [data-theme="dark"] *,
-  [data-theme="dark-modern"] *,
-  [data-theme="github-dark"] *,
-  [data-theme="one-dark"] *,
-  [data-theme="dracula"] *,
-  [data-theme="nord"] *,
-  [data-theme="monokai"] *,
-  [data-theme="solarized-dark"] *
+  [data-theme="midnight"] *,
+  [data-theme="aurora"] *,
+  [data-theme="volt"] *,
+  [data-theme="sunset"] *,
+  [data-theme="deep-sea"] *,
+  [data-theme="evergreen"] *,
+  [data-theme="orchid"] *,
+  [data-theme="mono"] *
 ):where(:not(.lane-paper, .lane-paper *)));
 
 @theme inline {
@@ -74,13 +75,73 @@
   --color-status-hold-fg: var(--status-hold-fg);
   --color-status-cancelled: var(--status-cancelled);
   --color-status-cancelled-fg: var(--status-cancelled-fg);
-  --radius-sm: 0.3125rem;
-  --radius-md: 0.4375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.625rem;
-  --radius-2xl: 0.75rem;
-  --radius-3xl: 0.875rem;
-  --radius-4xl: 1rem;
+  --radius-sm: var(--shape-sm);
+  --radius-md: var(--shape-md);
+  --radius-lg: var(--shape-lg);
+  --radius-xl: var(--shape-xl);
+  --radius-2xl: var(--shape-2xl);
+  --radius-3xl: var(--shape-3xl);
+  --radius-4xl: var(--shape-4xl);
+}
+
+/*
+ * Component style (data-shape) and page surface (data-surface) are per-account settings.
+ * Both resolve through inherited custom properties so a nested preview can override the page.
+ */
+:root,
+[data-shape="balanced"] {
+  --shape-sm: 0.3125rem;
+  --shape-md: 0.4375rem;
+  --shape-lg: 0.5rem;
+  --shape-xl: 0.625rem;
+  --shape-2xl: 0.75rem;
+  --shape-3xl: 0.875rem;
+  --shape-4xl: 1rem;
+  --shape-control: var(--shape-xl);
+}
+
+[data-shape="fluid"] {
+  --shape-sm: 0.5rem;
+  --shape-md: 0.75rem;
+  --shape-lg: 0.875rem;
+  --shape-xl: 1rem;
+  --shape-2xl: 1.25rem;
+  --shape-3xl: 1.5rem;
+  --shape-4xl: 1.75rem;
+  --shape-control: 9999px;
+}
+
+[data-shape="crisp"] {
+  --shape-sm: 0.1875rem;
+  --shape-md: 0.25rem;
+  --shape-lg: 0.3125rem;
+  --shape-xl: 0.375rem;
+  --shape-2xl: 0.5rem;
+  --shape-3xl: 0.5625rem;
+  --shape-4xl: 0.625rem;
+  --shape-control: var(--shape-md);
+}
+
+[data-shape="soft"] {
+  --shape-sm: 0.4375rem;
+  --shape-md: 0.625rem;
+  --shape-lg: 0.75rem;
+  --shape-xl: 0.875rem;
+  --shape-2xl: 1rem;
+  --shape-3xl: 1.25rem;
+  --shape-4xl: 1.5rem;
+  --shape-control: 9999px;
+}
+
+[data-shape="sharp"] {
+  --shape-sm: 0;
+  --shape-md: 0;
+  --shape-lg: 0;
+  --shape-xl: 0;
+  --shape-2xl: 0;
+  --shape-3xl: 0;
+  --shape-4xl: 0;
+  --shape-control: 0;
 }
 
 :root,
@@ -231,20 +292,25 @@
 
 /*
  * Gallery themes: each block below sets a core palette; the shared blocks derive
- * the remaining tokens (sidebar, charts, statuses, shadows) from it.
+ * the remaining tokens (surfaces, sidebar, charts, statuses, shadows) from it.
  */
 :is(
-  [data-theme="dark-modern"],
-  [data-theme="github-dark"],
-  [data-theme="github-light"],
-  [data-theme="one-dark"],
-  [data-theme="dracula"],
-  [data-theme="nord"],
-  [data-theme="monokai"],
-  [data-theme="solarized-dark"],
-  [data-theme="solarized-light"]
+  [data-theme="midnight"],
+  [data-theme="aurora"],
+  [data-theme="volt"],
+  [data-theme="sunset"],
+  [data-theme="deep-sea"],
+  [data-theme="evergreen"],
+  [data-theme="orchid"],
+  [data-theme="mono"],
+  [data-theme="cloud"],
+  [data-theme="mint"],
+  [data-theme="blush"],
+  [data-theme="sunrise"],
+  [data-theme="paper"]
 ) {
   --card-foreground: var(--foreground);
+  --muted: var(--inset);
   --popover-foreground: var(--foreground);
   --secondary-foreground: var(--foreground);
   --ring: var(--primary);
@@ -270,15 +336,19 @@
 }
 
 :is(
-  [data-theme="dark-modern"],
-  [data-theme="github-dark"],
-  [data-theme="one-dark"],
-  [data-theme="dracula"],
-  [data-theme="nord"],
-  [data-theme="monokai"],
-  [data-theme="solarized-dark"]
+  [data-theme="midnight"],
+  [data-theme="aurora"],
+  [data-theme="volt"],
+  [data-theme="sunset"],
+  [data-theme="deep-sea"],
+  [data-theme="evergreen"],
+  [data-theme="orchid"],
+  [data-theme="mono"]
 ) {
   color-scheme: dark;
+  --secondary: color-mix(in oklch, var(--foreground) 8%, var(--card));
+  --accent: color-mix(in oklch, var(--primary) 16%, var(--card));
+  --accent-foreground: color-mix(in oklch, var(--primary) 40%, var(--foreground));
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 13%);
   --hairline: color-mix(in oklch, white 9%, transparent);
@@ -306,15 +376,24 @@
   --status-cancelled-fg: var(--muted-foreground);
 }
 
-:is([data-theme="github-light"], [data-theme="solarized-light"]) {
+:is(
+  [data-theme="cloud"],
+  [data-theme="mint"],
+  [data-theme="blush"],
+  [data-theme="sunrise"],
+  [data-theme="paper"]
+) {
   color-scheme: light;
+  --secondary: color-mix(in oklch, var(--foreground) 5%, var(--card));
+  --accent: color-mix(in oklch, var(--primary) 10%, var(--card));
+  --accent-foreground: color-mix(in oklch, var(--primary) 80%, var(--foreground));
   --hairline: color-mix(in oklch, var(--foreground) 9%, transparent);
   --shadow-soft:
-    0 1px 2px oklch(0.2 0.02 260 / 0.06),
-    0 8px 24px oklch(0.2 0.02 260 / 0.08);
+    0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent),
+    0 8px 24px color-mix(in oklch, var(--foreground) 8%, transparent);
   --shadow-lift:
-    0 2px 6px oklch(0.2 0.02 260 / 0.08),
-    0 14px 36px oklch(0.2 0.02 260 / 0.13);
+    0 2px 6px color-mix(in oklch, var(--foreground) 8%, transparent),
+    0 14px 36px color-mix(in oklch, var(--foreground) 13%, transparent);
   --status-due: color-mix(in oklch, var(--lane-blue) 13%, var(--card));
   --status-due-fg: color-mix(in oklch, var(--lane-blue) 80%, var(--foreground));
   --status-overdue: color-mix(in oklch, var(--destructive) 13%, var(--card));
@@ -333,224 +412,288 @@
   --status-cancelled-fg: var(--muted-foreground);
 }
 
-[data-theme="dark-modern"] {
-  --background: #181818;
-  --canvas: #181818;
-  --shell: #1f1f1f;
-  --card: #232323;
-  --popover: #262626;
-  --inset: #2b2b2b;
-  --foreground: #e6e6e6;
-  --muted: #2a2a2a;
-  --muted-foreground: #9d9d9d;
-  --secondary: #2d2d2d;
-  --accent: #2c3a4a;
-  --accent-foreground: #cfe3ff;
-  --primary: #0078d4;
+
+[data-theme="midnight"] {
+  --background: #0b0c10;
+  --canvas: #0b0c10;
+  --shell: #111218;
+  --card: #16171e;
+  --popover: #1a1b23;
+  --inset: #1c1d26;
+  --foreground: #ecedf3;
+  --muted-foreground: #8e90a2;
+  --primary: #7c86ff;
   --primary-foreground: #ffffff;
-  --destructive: #f85149;
-  --lane-blue: #4fc1ff;
-  --lane-cyan: #4ec9b0;
-  --lane-violet: #6b8cff;
-  --lane-magenta: #c586c0;
-  --success: #3fb950;
-  --warning: #cca700;
+  --gradient-to: #38bdf8;
+  --destructive: #f87171;
+  --lane-blue: #6ea8ff;
+  --lane-cyan: #5ad1e6;
+  --lane-violet: #9b8cff;
+  --lane-magenta: #38bdf8;
+  --success: #4ade80;
+  --warning: #fbbf24;
 }
 
-[data-theme="github-dark"] {
-  --background: #0d1117;
-  --canvas: #0d1117;
-  --shell: #151b23;
-  --card: #161b22;
-  --popover: #1c2128;
-  --inset: #21262d;
-  --foreground: #e6edf3;
-  --muted: #21262d;
-  --muted-foreground: #8d96a0;
-  --secondary: #21262d;
-  --accent: #1c2d41;
-  --accent-foreground: #a5d6ff;
-  --primary: #2f81f7;
-  --primary-foreground: #ffffff;
-  --destructive: #f85149;
-  --lane-blue: #58a6ff;
-  --lane-cyan: #39c5cf;
-  --lane-violet: #bc8cff;
-  --lane-magenta: #db61a2;
-  --success: #3fb950;
-  --warning: #d29922;
+[data-theme="aurora"] {
+  --background: #070d12;
+  --canvas: #070d12;
+  --shell: #0c141b;
+  --card: #101a22;
+  --popover: #142029;
+  --inset: #16232d;
+  --foreground: #e6f4f1;
+  --muted-foreground: #86a3a0;
+  --primary: #2ee6b8;
+  --primary-foreground: #032219;
+  --gradient-to: #8b7cff;
+  --destructive: #fb7185;
+  --lane-blue: #60a5fa;
+  --lane-cyan: #22d3ee;
+  --lane-violet: #a78bfa;
+  --lane-magenta: #8b7cff;
+  --success: #4ade80;
+  --warning: #fbbf24;
 }
 
-[data-theme="github-light"] {
-  --background: #f6f8fa;
-  --canvas: #f6f8fa;
-  --shell: #ffffff;
+[data-theme="volt"] {
+  --background: #0a0a0b;
+  --canvas: #0a0a0b;
+  --shell: #111113;
+  --card: #161618;
+  --popover: #1b1b1e;
+  --inset: #1f1f23;
+  --foreground: #f2f2f0;
+  --muted-foreground: #8d8d93;
+  --primary: #d4ff3a;
+  --primary-foreground: #151a00;
+  --gradient-to: #3ae0a4;
+  --destructive: #ff6b6b;
+  --lane-blue: #7aa7ff;
+  --lane-cyan: #5ee7df;
+  --lane-violet: #b69cff;
+  --lane-magenta: #3ae0a4;
+  --success: #4ade80;
+  --warning: #fbbf24;
+}
+
+[data-theme="sunset"] {
+  --background: #120d0f;
+  --canvas: #120d0f;
+  --shell: #191214;
+  --card: #1f1619;
+  --popover: #251a1e;
+  --inset: #291d22;
+  --foreground: #f7ecee;
+  --muted-foreground: #b09aa0;
+  --primary: #ff7358;
+  --primary-foreground: #2a0c05;
+  --gradient-to: #ff4f9a;
+  --destructive: #ff6b6b;
+  --lane-blue: #7aa7ff;
+  --lane-cyan: #5fd4c4;
+  --lane-violet: #c58cff;
+  --lane-magenta: #ff4f9a;
+  --success: #6ee7a0;
+  --warning: #fbbf24;
+}
+
+[data-theme="deep-sea"] {
+  --background: #07101b;
+  --canvas: #07101b;
+  --shell: #0b1724;
+  --card: #0f1c2c;
+  --popover: #132236;
+  --inset: #152538;
+  --foreground: #e2edf8;
+  --muted-foreground: #8aa0b8;
+  --primary: #38bdf8;
+  --primary-foreground: #03202f;
+  --gradient-to: #818cf8;
+  --destructive: #fb7185;
+  --lane-blue: #60a5fa;
+  --lane-cyan: #22d3ee;
+  --lane-violet: #818cf8;
+  --lane-magenta: #818cf8;
+  --success: #34d399;
+  --warning: #fbbf24;
+}
+
+[data-theme="evergreen"] {
+  --background: #0a110f;
+  --canvas: #0a110f;
+  --shell: #0f1815;
+  --card: #131e1a;
+  --popover: #17241f;
+  --inset: #1a2823;
+  --foreground: #e4f1ea;
+  --muted-foreground: #8ca79a;
+  --primary: #34d399;
+  --primary-foreground: #04241a;
+  --gradient-to: #a3e635;
+  --destructive: #f87171;
+  --lane-blue: #60a5fa;
+  --lane-cyan: #2dd4bf;
+  --lane-violet: #a78bfa;
+  --lane-magenta: #a3e635;
+  --success: #4ade80;
+  --warning: #facc15;
+}
+
+[data-theme="orchid"] {
+  --background: #120c14;
+  --canvas: #120c14;
+  --shell: #19111b;
+  --card: #1e1521;
+  --popover: #231a27;
+  --inset: #281d2b;
+  --foreground: #f6eaf4;
+  --muted-foreground: #b09bab;
+  --primary: #f472b6;
+  --primary-foreground: #2a0a1c;
+  --gradient-to: #a78bfa;
+  --destructive: #fb7185;
+  --lane-blue: #8ab4ff;
+  --lane-cyan: #67e8f9;
+  --lane-violet: #c084fc;
+  --lane-magenta: #a78bfa;
+  --success: #4ade80;
+  --warning: #fcd34d;
+}
+
+[data-theme="mono"] {
+  --background: #0a0a0a;
+  --canvas: #0a0a0a;
+  --shell: #111111;
+  --card: #161616;
+  --popover: #1a1a1a;
+  --inset: #1f1f1f;
+  --foreground: #ededed;
+  --muted-foreground: #8f8f8f;
+  --primary: #f5f5f5;
+  --primary-foreground: #0a0a0a;
+  --gradient-to: #8f8f8f;
+  --destructive: #f87171;
+  --lane-blue: #a3a3a3;
+  --lane-cyan: #d4d4d4;
+  --lane-violet: #bdbdbd;
+  --lane-magenta: #8f8f8f;
+  --success: #4ade80;
+  --warning: #facc15;
+}
+
+[data-theme="cloud"] {
+  --background: #eef1f6;
+  --canvas: #eef1f6;
+  --shell: #f8f9fc;
   --card: #ffffff;
   --popover: #ffffff;
-  --inset: #eff2f5;
-  --foreground: #1f2328;
-  --muted: #eff2f5;
-  --muted-foreground: #59636e;
-  --secondary: #eaeef2;
-  --accent: #ddf4ff;
-  --accent-foreground: #0969da;
-  --primary: #0969da;
+  --inset: #e9edf4;
+  --foreground: #111827;
+  --muted-foreground: #5b6475;
+  --primary: #3b5bff;
   --primary-foreground: #ffffff;
-  --destructive: #cf222e;
-  --border: #d1d9e0;
-  --input: #d1d9e0;
-  --lane-blue: #0969da;
-  --lane-cyan: #1b7c83;
-  --lane-violet: #8250df;
-  --lane-magenta: #bf3989;
-  --success: #1a7f37;
-  --warning: #9a6700;
+  --gradient-to: #22b8f0;
+  --destructive: #dc2626;
+  --border: #dde2ec;
+  --input: #d3d9e5;
+  --lane-blue: #2563eb;
+  --lane-cyan: #0891b2;
+  --lane-violet: #7c3aed;
+  --lane-magenta: #22b8f0;
+  --success: #15803d;
+  --warning: #a16207;
 }
 
-[data-theme="one-dark"] {
-  --background: #21252b;
-  --canvas: #21252b;
-  --shell: #282c34;
-  --card: #2c313a;
-  --popover: #2c313a;
-  --inset: #333842;
-  --foreground: #dcdfe4;
-  --muted: #333842;
-  --muted-foreground: #9da5b4;
-  --secondary: #3a3f4b;
-  --accent: #323c4d;
-  --accent-foreground: #d7e3ff;
-  --primary: #61afef;
-  --primary-foreground: #1b1f27;
-  --destructive: #e06c75;
-  --lane-blue: #61afef;
-  --lane-cyan: #56b6c2;
-  --lane-violet: #c678dd;
-  --lane-magenta: #d55fde;
-  --success: #98c379;
-  --warning: #e5c07b;
+[data-theme="mint"] {
+  --background: #ebf4f1;
+  --canvas: #ebf4f1;
+  --shell: #f6fbf9;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --inset: #e3efeb;
+  --foreground: #0f2620;
+  --muted-foreground: #52706a;
+  --primary: #0d9488;
+  --primary-foreground: #ffffff;
+  --gradient-to: #22c55e;
+  --destructive: #dc2626;
+  --border: #d4e5df;
+  --input: #c9ddd6;
+  --lane-blue: #2563eb;
+  --lane-cyan: #0891b2;
+  --lane-violet: #7c3aed;
+  --lane-magenta: #22c55e;
+  --success: #15803d;
+  --warning: #a16207;
 }
 
-[data-theme="dracula"] {
-  --background: #21222c;
-  --canvas: #21222c;
-  --shell: #282a36;
-  --card: #2d2f3f;
-  --popover: #343746;
-  --inset: #383a4a;
-  --foreground: #f8f8f2;
-  --muted: #343746;
-  --muted-foreground: #a0a8cd;
-  --secondary: #44475a;
-  --accent: #44475a;
-  --accent-foreground: #f8f8f2;
-  --primary: #bd93f9;
-  --primary-foreground: #21222c;
-  --destructive: #ff5555;
-  --lane-blue: #8aa9ff;
-  --lane-cyan: #8be9fd;
-  --lane-violet: #bd93f9;
-  --lane-magenta: #ff79c6;
-  --success: #50fa7b;
-  --warning: #f1fa8c;
+[data-theme="blush"] {
+  --background: #f8eff2;
+  --canvas: #f8eff2;
+  --shell: #fdf7f9;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --inset: #f4e6eb;
+  --foreground: #2a1520;
+  --muted-foreground: #7d6070;
+  --primary: #e5487d;
+  --primary-foreground: #ffffff;
+  --gradient-to: #a855f7;
+  --destructive: #dc2626;
+  --border: #eedde4;
+  --input: #e6d1da;
+  --lane-blue: #2563eb;
+  --lane-cyan: #0891b2;
+  --lane-violet: #7c3aed;
+  --lane-magenta: #a855f7;
+  --success: #15803d;
+  --warning: #a16207;
 }
 
-[data-theme="nord"] {
-  --background: #2b303b;
-  --canvas: #2b303b;
-  --shell: #2e3440;
-  --card: #3b4252;
-  --popover: #3b4252;
-  --inset: #434c5e;
-  --foreground: #eceff4;
-  --muted: #3b4252;
-  --muted-foreground: #9aa5b8;
-  --secondary: #434c5e;
-  --accent: #434c5e;
-  --accent-foreground: #eceff4;
-  --primary: #88c0d0;
-  --primary-foreground: #2e3440;
-  --destructive: #bf616a;
-  --lane-blue: #81a1c1;
-  --lane-cyan: #88c0d0;
-  --lane-violet: #b48ead;
-  --lane-magenta: #c895bf;
-  --success: #a3be8c;
-  --warning: #ebcb8b;
+[data-theme="sunrise"] {
+  --background: #f7efe8;
+  --canvas: #f7efe8;
+  --shell: #fdf8f4;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --inset: #f2e7de;
+  --foreground: #2a1b14;
+  --muted-foreground: #7a6558;
+  --primary: #e0552d;
+  --primary-foreground: #ffffff;
+  --gradient-to: #db2777;
+  --destructive: #c81e1e;
+  --border: #eaddd2;
+  --input: #e2d3c6;
+  --lane-blue: #3a6fd8;
+  --lane-cyan: #0e8f86;
+  --lane-violet: #8b5cf6;
+  --lane-magenta: #db2777;
+  --success: #15803d;
+  --warning: #b45309;
 }
 
-[data-theme="monokai"] {
-  --background: #1e1f1c;
-  --canvas: #1e1f1c;
-  --shell: #272822;
-  --card: #2d2e27;
-  --popover: #34352f;
-  --inset: #3e3d32;
-  --foreground: #f8f8f2;
-  --muted: #34352f;
-  --muted-foreground: #a59f85;
-  --secondary: #3e3d32;
-  --accent: #49483e;
-  --accent-foreground: #f8f8f2;
-  --primary: #a6e22e;
-  --primary-foreground: #1e1f1c;
-  --destructive: #f92672;
-  --lane-blue: #66d9ef;
-  --lane-cyan: #a1efe4;
-  --lane-violet: #ae81ff;
-  --lane-magenta: #f92672;
-  --success: #a6e22e;
-  --warning: #e6db74;
-}
-
-[data-theme="solarized-dark"] {
-  --background: #002b36;
-  --canvas: #002b36;
-  --shell: #01313d;
-  --card: #073642;
-  --popover: #0a3d4a;
-  --inset: #0d4250;
-  --foreground: #eee8d5;
-  --muted: #0a3d4a;
-  --muted-foreground: #93a1a1;
-  --secondary: #0d4250;
-  --accent: #0d4250;
-  --accent-foreground: #eee8d5;
-  --primary: #268bd2;
-  --primary-foreground: #fdf6e3;
-  --destructive: #dc322f;
-  --lane-blue: #268bd2;
-  --lane-cyan: #2aa198;
-  --lane-violet: #6c71c4;
-  --lane-magenta: #d33682;
-  --success: #859900;
-  --warning: #b58900;
-}
-
-[data-theme="solarized-light"] {
-  --background: #f5efdc;
-  --canvas: #f5efdc;
-  --shell: #fdf6e3;
-  --card: #fdf6e3;
-  --popover: #fdf6e3;
-  --inset: #eee8d5;
-  --foreground: #073642;
-  --muted: #eee8d5;
-  --muted-foreground: #657b83;
-  --secondary: #eee8d5;
-  --accent: #e6dfc8;
-  --accent-foreground: #073642;
-  --primary: #268bd2;
-  --primary-foreground: #fdf6e3;
-  --destructive: #dc322f;
-  --border: #ddd6c1;
-  --input: #d6cfb8;
-  --lane-blue: #268bd2;
-  --lane-cyan: #2aa198;
-  --lane-violet: #6c71c4;
-  --lane-magenta: #d33682;
-  --success: #859900;
-  --warning: #b58900;
+[data-theme="paper"] {
+  --background: #f3f1ec;
+  --canvas: #f3f1ec;
+  --shell: #faf9f6;
+  --card: #ffffff;
+  --popover: #ffffff;
+  --inset: #eeebe5;
+  --foreground: #1c1a17;
+  --muted-foreground: #6b655d;
+  --primary: #1c1a17;
+  --primary-foreground: #faf9f6;
+  --gradient-to: #78716c;
+  --destructive: #d92d20;
+  --border: #e3dfd7;
+  --input: #dcd7ce;
+  --lane-blue: #3b6fd4;
+  --lane-cyan: #0f8a8a;
+  --lane-violet: #6d4fd1;
+  --lane-magenta: #78716c;
+  --success: #15803d;
+  --warning: #a16207;
 }
 
 @layer base {
@@ -613,9 +756,12 @@
    * .lane-auth   → auth/marketing page wash
    */
   .lane-ring {
-    box-shadow:
-      var(--shadow-soft),
-      0 0 0 1px var(--hairline);
+    box-shadow: var(--card-edge, var(--shadow-soft), 0 0 0 1px var(--hairline));
+    backdrop-filter: var(--card-blur, none);
+  }
+
+  .lane-ring.bg-card {
+    background-color: var(--card-fill, var(--card));
   }
 
   .lane-shell {
@@ -627,25 +773,24 @@
   }
 
   .lane-panel {
-    border-radius: var(--radius-2xl);
-    background-color: var(--card);
-    box-shadow:
-      var(--shadow-soft),
-      0 0 0 1px var(--hairline);
+    border-radius: var(--shape-2xl);
+    background-color: var(--card-fill, var(--card));
+    box-shadow: var(--card-edge, var(--shadow-soft), 0 0 0 1px var(--hairline));
+    backdrop-filter: var(--card-blur, none);
   }
 
   .lane-inset {
-    border-radius: var(--radius-xl);
+    border-radius: var(--shape-xl);
     background-color: var(--inset);
     box-shadow: 0 0 0 1px var(--hairline);
   }
 
   .lane-gradient {
     background-image: linear-gradient(
-      115deg,
-      var(--lane-blue) 0%,
-      color-mix(in oklch, var(--lane-blue) 45%, var(--lane-violet)) 48%,
-      var(--lane-violet) 100%
+      135deg,
+      color-mix(in oklch, var(--primary) 78%, white) 0%,
+      var(--primary) 48%,
+      var(--gradient-to, color-mix(in oklch, var(--primary) 62%, var(--lane-magenta))) 100%
     );
   }
 
@@ -654,7 +799,7 @@
     background-image:
       radial-gradient(
         900px 420px at 96% -10%,
-        color-mix(in oklch, var(--lane-violet) 22%, transparent),
+        color-mix(in oklch, var(--primary) 20%, transparent),
         transparent 58%
       ),
       radial-gradient(
@@ -664,25 +809,30 @@
       );
   }
 
+  .lane-app[data-style="glass"] {
+    background-image:
+      radial-gradient(640px 420px at 8% 8%, color-mix(in oklch, var(--primary) 46%, transparent), transparent 62%),
+      radial-gradient(720px 520px at 92% 24%, color-mix(in oklch, var(--gradient-to, var(--lane-magenta)) 40%, transparent), transparent 62%),
+      radial-gradient(620px 480px at 50% 108%, color-mix(in oklch, var(--lane-cyan) 32%, transparent), transparent 62%);
+  }
+
   .surface-card {
-    border-radius: var(--radius-2xl);
-    background-color: var(--card);
-    box-shadow:
-      var(--shadow-soft),
-      0 0 0 1px var(--hairline);
+    border-radius: var(--shape-2xl);
+    background-color: var(--card-fill, var(--card));
+    box-shadow: var(--card-edge, var(--shadow-soft), 0 0 0 1px var(--hairline));
+    backdrop-filter: var(--card-blur, none);
   }
 
   .surface-lane {
-    border-radius: var(--radius-2xl);
+    border-radius: var(--shape-2xl);
     background-color: var(--surface-lane);
   }
 
   .lane-surface {
-    border-radius: var(--radius-2xl);
-    background-color: var(--card);
-    box-shadow:
-      var(--shadow-soft),
-      0 0 0 1px var(--hairline);
+    border-radius: var(--shape-2xl);
+    background-color: var(--card-fill, var(--card));
+    box-shadow: var(--card-edge, var(--shadow-soft), 0 0 0 1px var(--hairline));
+    backdrop-filter: var(--card-blur, none);
     transition:
       transform 200ms ease-out,
       box-shadow 200ms ease-out;
@@ -690,7 +840,7 @@
 
   .lane-surface-hover:hover {
     transform: translateY(-1px);
-    box-shadow: var(--shadow-lift);
+    box-shadow: var(--card-edge, 0 0 0 transparent), var(--shadow-lift);
   }
 
   .status-due {
@@ -1161,13 +1311,14 @@
 
 :is(
     [data-theme="dark"],
-    [data-theme="dark-modern"],
-    [data-theme="github-dark"],
-    [data-theme="one-dark"],
-    [data-theme="dracula"],
-    [data-theme="nord"],
-    [data-theme="monokai"],
-    [data-theme="solarized-dark"]
+    [data-theme="midnight"],
+    [data-theme="aurora"],
+    [data-theme="volt"],
+    [data-theme="sunset"],
+    [data-theme="deep-sea"],
+    [data-theme="evergreen"],
+    [data-theme="orchid"],
+    [data-theme="mono"]
   )
   .doc-canvas {
   --doc-canvas: #1c1c21;
@@ -1245,4 +1396,494 @@
   box-shadow:
     0 0 0 6px rgb(16 185 129 / 0.1),
     -10px 0 0 0 rgb(16 185 129);
+}
+
+/*
+ * Interface style tokens. Cards, wells and controls read these inherited values, so a nested
+ * preview can use a different style than the page. data-theme / data-style / data-surface always
+ * sit on the same element, which lets each token resolve against that element's theme.
+ */
+:root,
+[data-theme],
+[data-style] {
+  --card-fill: var(--card);
+  --card-edge: var(--shadow-soft), 0 0 0 1px var(--hairline);
+  --card-blur: none;
+  --work-alpha: 100%;
+  --popup-fill: var(--popover);
+  --popup-edge: var(--shadow-lift), 0 0 0 1px var(--hairline);
+  --popup-blur: none;
+}
+
+/* Page surface */
+:root,
+[data-surface="tinted"] {
+  --work-bg: color-mix(in oklch, color-mix(in oklch, var(--primary) 7%, var(--shell)) var(--work-alpha), transparent);
+  --work-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 16%, var(--hairline));
+  --work-divider: color-mix(in oklch, var(--primary) 14%, transparent);
+  --work-panel-bg: var(--work-bg);
+  --work-panel-shadow: var(--work-shadow);
+}
+
+[data-surface="gradient"] {
+  --work-bg: linear-gradient(
+    160deg,
+    color-mix(in oklch, color-mix(in oklch, var(--primary) 13%, var(--shell)) var(--work-alpha), transparent),
+    color-mix(in oklch, color-mix(in oklch, var(--gradient-to, var(--lane-magenta)) 9%, var(--shell)) var(--work-alpha), transparent)
+  );
+  --work-shadow: 0 0 0 1px color-mix(in oklch, var(--primary) 16%, var(--hairline));
+  --work-divider: color-mix(in oklch, var(--primary) 14%, transparent);
+  --work-panel-bg: var(--work-bg);
+  --work-panel-shadow: var(--work-shadow);
+}
+
+[data-surface="solid"] {
+  --work-bg: color-mix(in oklch, var(--card) var(--work-alpha), transparent);
+  --work-shadow: var(--card-edge);
+  --work-divider: color-mix(in oklch, var(--border) 60%, transparent);
+  --work-panel-bg: var(--work-bg);
+  --work-panel-shadow: var(--work-shadow);
+}
+
+[data-surface="outline"] {
+  --work-bg: transparent;
+  --work-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 14%, transparent);
+  --work-divider: var(--hairline);
+  --work-panel-bg: transparent;
+  --work-panel-shadow: var(--work-shadow);
+}
+
+[data-surface="open"] {
+  --work-bg: transparent;
+  --work-shadow: none;
+  --work-divider: transparent;
+  --work-panel-bg: var(--card-fill);
+  --work-panel-shadow: var(--card-edge);
+}
+
+.lane-work {
+  border-radius: var(--shape-2xl);
+  background: var(--work-bg);
+  box-shadow: var(--work-shadow);
+  backdrop-filter: var(--card-blur);
+}
+
+.lane-work[data-variant="panel"] {
+  background: var(--work-panel-bg);
+  box-shadow: var(--work-panel-shadow);
+}
+
+.lane-work:not([data-variant="panel"]) [data-toolbar] {
+  border-bottom-color: var(--work-divider);
+}
+
+/* Component style: controls follow --shape-control; crisp and sharp flatten elevation */
+:is(
+    [data-shape="fluid"],
+    [data-shape="soft"],
+    [data-shape="crisp"],
+    [data-shape="sharp"],
+    [data-style="clay"][data-shape="balanced"]
+  )
+  :is([data-slot="button"], .group\/button, [data-slot="input"], [data-slot="select-trigger"]) {
+  border-radius: var(--shape-control);
+}
+
+:is([data-shape="crisp"], [data-shape="sharp"]) {
+  --shadow-soft:
+    0 1px 1px color-mix(in oklch, black 8%, transparent),
+    0 2px 6px color-mix(in oklch, black 6%, transparent);
+  --shadow-lift:
+    0 2px 4px color-mix(in oklch, black 10%, transparent),
+    0 8px 20px color-mix(in oklch, black 10%, transparent);
+}
+
+/*
+ * Interface styles. Token blocks come after the surface blocks so a style can take over the page
+ * surface. Element rules live in @scope so a clean preview nested in a styled page stays clean,
+ * and stay at single-class specificity inside the utilities layer so hover/focus/drop-target
+ * variants still win.
+ */
+[data-style="glass"] {
+  --card-fill: color-mix(in srgb, color-mix(in srgb, var(--card) 84%, white) 42%, transparent);
+  --card-edge:
+    inset 0 1px 0 color-mix(in oklch, white 22%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 10%, transparent),
+    0 12px 32px color-mix(in oklch, black 14%, transparent);
+  --card-blur: blur(22px) saturate(1.7);
+  --work-alpha: 28%;
+  --well-fill: color-mix(in srgb, color-mix(in srgb, var(--inset) 92%, white) 35%, transparent);
+  --well-edge: inset 0 0 0 1px color-mix(in oklch, var(--foreground) 9%, transparent);
+  --control-fill: color-mix(in srgb, color-mix(in srgb, var(--card) 80%, white) 50%, transparent);
+  --control-edge:
+    inset 0 1px 0 color-mix(in oklch, white 20%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 12%, transparent);
+  --primary-edge:
+    inset 0 1px 0 color-mix(in oklch, white 30%, transparent),
+    0 6px 18px -6px color-mix(in oklch, var(--primary) 60%, transparent);
+  --popup-fill: color-mix(in srgb, color-mix(in srgb, var(--popover) 82%, white) 66%, transparent);
+  --popup-edge:
+    inset 0 1px 0 color-mix(in oklch, white 26%, transparent),
+    0 0 0 1px color-mix(in oklch, var(--foreground) 12%, transparent),
+    0 24px 60px color-mix(in oklch, black 22%, transparent);
+  --popup-blur: blur(28px) saturate(1.8);
+}
+
+[data-style="neumorphic"] {
+  --press-shift: 0 0;
+  --press-edge: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 5px var(--neu-light);
+  /* Brightness-relative: light themes stay light with soft grey shadows, dark themes lift a touch */
+  --neu-base: oklch(from var(--background) calc(l + 0.07 - l * 0.085) c h);
+  /* Dark bases push the shadow to near-black and lift the highlight more, so depth survives */
+  --neu-dark: oklch(
+    from var(--neu-base) max(0, calc(l - 0.12 - (1 - l) * 0.2)) calc(c + 0.01) h / calc(0.75 + (1 - l) * 0.25)
+  );
+  --neu-light: oklch(
+    from var(--neu-base) min(1, calc(l + 0.07 + l * 0.1 + (1 - l) * 0.1)) c h / calc(0.9 - (1 - l) * 0.15)
+  );
+  --canvas: var(--neu-base);
+  --shell: var(--neu-base);
+  --card: var(--neu-base);
+  --inset: var(--neu-base);
+  --sidebar: var(--neu-base);
+  --popover: var(--neu-base);
+  --popup-fill: var(--neu-base);
+  --popup-edge: 14px 14px 36px var(--neu-dark), -10px -10px 28px var(--neu-light);
+  --card-fill: var(--neu-base);
+  --card-edge: 6px 6px 16px var(--neu-dark), -6px -6px 16px var(--neu-light);
+  --well-fill: var(--neu-base);
+  --well-edge: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 5px var(--neu-light);
+  --control-fill: var(--neu-base);
+  --control-edge: 4px 4px 10px var(--neu-dark), -4px -4px 10px var(--neu-light);
+  --primary-edge: 4px 4px 10px var(--neu-dark), -4px -4px 10px var(--neu-light);
+  --work-bg: var(--neu-base);
+  --work-shadow: none;
+  --work-divider: color-mix(in oklch, var(--foreground) 8%, transparent);
+  --work-panel-bg: var(--neu-base);
+  --work-panel-shadow: none;
+}
+
+[data-style="clay"] {
+  --press-shift: 0 1px;
+  --press-edge:
+    0 4px 10px -6px color-mix(in oklch, var(--primary) 45%, transparent),
+    inset 0 3px 8px color-mix(in oklch, black 16%, transparent);
+  --card-fill: color-mix(in oklch, var(--primary) 5%, var(--card));
+  --card-edge:
+    0 18px 36px -14px color-mix(in oklch, var(--primary) 50%, transparent),
+    inset 0 -8px 16px color-mix(in oklch, var(--primary) 14%, transparent),
+    inset 0 6px 12px color-mix(in oklch, white 45%, transparent);
+  --well-fill: var(--inset);
+  --well-edge:
+    inset 0 3px 7px color-mix(in oklch, black 14%, transparent),
+    inset 0 -2px 4px color-mix(in oklch, white 18%, transparent);
+  --control-fill: var(--card);
+  --control-edge:
+    0 8px 16px -8px color-mix(in oklch, var(--primary) 45%, transparent),
+    inset 0 -3px 6px color-mix(in oklch, black 10%, transparent),
+    inset 0 2px 4px color-mix(in oklch, white 30%, transparent);
+  --primary-edge:
+    0 10px 20px -8px color-mix(in oklch, var(--primary) 70%, transparent),
+    inset 0 -4px 8px color-mix(in oklch, black 18%, transparent),
+    inset 0 3px 6px color-mix(in oklch, white 35%, transparent);
+  --popup-fill: color-mix(in oklch, var(--primary) 4%, var(--popover));
+  --popup-edge:
+    0 28px 56px -18px color-mix(in oklch, var(--primary) 55%, transparent),
+    inset 0 -10px 20px color-mix(in oklch, var(--primary) 12%, transparent),
+    inset 0 8px 16px color-mix(in oklch, white 45%, transparent);
+}
+
+[data-style="clay"][data-shape="balanced"] {
+  --shape-sm: 0.5rem;
+  --shape-md: 0.75rem;
+  --shape-lg: 0.875rem;
+  --shape-xl: 1.125rem;
+  --shape-2xl: 1.375rem;
+  --shape-3xl: 1.625rem;
+  --shape-4xl: 1.875rem;
+  --shape-control: 9999px;
+}
+
+[data-style="brutalist"] {
+  --press-shift: 2px 2px;
+  --press-edge: 0 0 0 2px var(--foreground), 1px 1px 0 1px var(--foreground);
+  --card-fill: var(--card);
+  --card-edge: 0 0 0 2px var(--foreground), 5px 5px 0 1px var(--foreground);
+  --well-fill: var(--inset);
+  --well-edge: 0 0 0 2px var(--foreground);
+  --control-fill: var(--card);
+  --control-edge: 0 0 0 2px var(--foreground), 3px 3px 0 1px var(--foreground);
+  --primary-edge: 0 0 0 2px var(--foreground), 3px 3px 0 1px var(--foreground);
+  --work-shadow: 0 0 0 2px var(--foreground);
+  --work-divider: var(--foreground);
+  --work-panel-shadow: 0 0 0 2px var(--foreground);
+  --popup-edge: 0 0 0 2px var(--foreground), 7px 7px 0 1px var(--foreground);
+}
+
+@layer utilities {
+  @scope ([data-style]:not([data-style="clean"])) to ([data-style="clean"]) {
+    /* Raised surfaces: cards, tiles, board cards, list panels */
+    :is(.bg-card, [data-slot="card"]):where(
+        :not([data-slot="button"], .group\/button, [data-slot="input-group-control"], span, .rounded-full)
+      ) {
+      background-color: var(--card-fill);
+      box-shadow: var(--card-edge);
+      backdrop-filter: var(--card-blur);
+    }
+
+    /* Recessed surfaces: board columns, wells, fields, segmented controls */
+    :is(
+        .lane-inset,
+        .bg-inset,
+        .bg-muted,
+        [data-slot="input"],
+        [data-slot="textarea"],
+        [data-slot="input-group"],
+        [data-slot="native-select"],
+        [role="tablist"],
+        input.bg-card,
+        .bg-card:has(> input:not([type="hidden"], [type="checkbox"], [type="radio"]))
+      ):where(:not([data-slot="button"], .group\/button, span, .rounded-full, [data-slot="input-group"] *)) {
+      background-color: var(--well-fill);
+      box-shadow: var(--well-edge);
+      backdrop-filter: var(--card-blur);
+    }
+
+    /* Floating layers: drawers, modals, menus, popovers */
+    :is(
+      [data-slot="sheet-content"],
+      [data-slot="dialog-content"],
+      [data-slot="dropdown-menu-content"],
+      [data-slot="popover-content"],
+      .bg-popover.fixed,
+      .bg-popover.shadow-lift
+    ):where(:not(.bg-white, [class*="bg-[#"])) {
+      background-color: var(--popup-fill);
+      box-shadow: var(--popup-edge);
+      backdrop-filter: var(--popup-blur);
+    }
+
+    [data-slot="command"] {
+      background-color: transparent;
+    }
+
+    /* Buttons: filled primaries keep their color, outline/secondary take the control fill */
+    :where(.group\/button).bg-primary {
+      box-shadow: var(--primary-edge);
+    }
+
+    :where(.group\/button):is(.bg-card, .bg-secondary, .bg-destructive\/15, .dark\:bg-transparent) {
+      background-color: var(--control-fill);
+      box-shadow: var(--control-edge);
+      border-color: transparent;
+    }
+
+    :where(.group\/button):is(.bg-primary, .bg-primary\/12, .bg-card, .bg-secondary, .dark\:bg-transparent):active {
+      translate: var(--press-shift, 0 1px);
+      box-shadow: var(--press-edge, var(--control-edge));
+    }
+
+    /* View switchers are wells even though they're pill-shaped */
+    :where([data-slot="segmented"]) {
+      background-color: var(--well-fill);
+      box-shadow: var(--well-edge);
+    }
+
+    :where([data-slot="segmented"]) [aria-current="page"] {
+      background-color: var(--control-fill);
+      box-shadow: var(--control-edge);
+    }
+
+    /* Selected tab inside a segmented control keeps its own colors, it just gets lifted */
+    :where([role="tablist"]) :is([aria-selected="true"], [data-selected]) {
+      box-shadow: var(--control-edge);
+    }
+
+    :where(.group\/button).bg-primary\/12 {
+      box-shadow: var(--control-edge);
+    }
+  }
+
+  @scope ([data-style="neumorphic"]) to ([data-style]:not([data-style="neumorphic"])) {
+    :scope.lane-app {
+      background-image: none;
+    }
+
+    /* Convex primary: lit from the top-left like every other raised shape */
+    :where(.group\/button).bg-primary {
+      background-image: linear-gradient(
+        145deg,
+        color-mix(in oklch, var(--primary) 82%, white),
+        color-mix(in oklch, var(--primary) 90%, black)
+      );
+    }
+
+    :where(.group\/button).bg-primary:active {
+      background-image: linear-gradient(
+        145deg,
+        color-mix(in oklch, var(--primary) 90%, black),
+        color-mix(in oklch, var(--primary) 82%, white)
+      );
+    }
+
+    /* Tonal buttons become base-colored with accent text, the classic soft-UI chip */
+    :where(.group\/button).bg-primary\/12 {
+      background-color: var(--neu-base);
+    }
+
+    /* Floating layers blend into the page; the soft-border rule below keeps edges quiet */
+    :is([data-slot="sheet-content"], [data-slot="dialog-content"]) {
+      border-color: transparent;
+    }
+
+    /* Highlighted menu rows press in */
+    :is(
+      [data-slot="dropdown-menu-item"],
+      [data-slot="dropdown-menu-checkbox-item"],
+      [data-slot="dropdown-menu-radio-item"],
+      [data-slot="dropdown-menu-sub-trigger"],
+      [data-slot="command-item"]
+    ):is([data-highlighted], [data-selected="true"], [data-popup-open]) {
+      background-color: var(--neu-base);
+      box-shadow: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 5px var(--neu-light);
+    }
+
+    /* Charts: a raised torus donut with a deep pressed center, extruded bars and dots, recessed tracks */
+    [data-chart="ring"] {
+      box-shadow: 10px 10px 24px var(--neu-dark), -10px -10px 24px var(--neu-light);
+    }
+
+    [data-chart="ring"]::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      background: linear-gradient(
+        145deg,
+        rgb(255 255 255 / 0.4),
+        transparent 42%,
+        transparent 58%,
+        rgb(0 0 0 / 0.2)
+      );
+      box-shadow:
+        inset 3px 3px 6px rgb(255 255 255 / 0.45),
+        inset -4px -4px 8px rgb(0 0 0 / 0.18);
+    }
+
+    [data-chart="ring"] > [data-chart="ring-center"] {
+      inset: 1.375rem;
+    }
+
+    [data-chart="ring-center"] {
+      background-color: var(--neu-base);
+      box-shadow:
+        inset 5px 5px 12px var(--neu-dark),
+        inset -5px -5px 12px var(--neu-light);
+    }
+
+    /* SVG donut: a groove pressed into the card, flat arcs inside it, a raised hub on top */
+    [data-chart="donut-wrap"] {
+      background-color: var(--neu-base);
+      box-shadow: inset 6px 6px 14px var(--neu-dark), inset -6px -6px 14px var(--neu-light);
+    }
+
+    [data-chart="donut-track"] {
+      stroke: transparent;
+    }
+
+    [data-chart="donut"] circle {
+      stroke-width: var(--donut-thin);
+    }
+
+    [data-chart="donut-center"] {
+      inset: 21%;
+      background-color: var(--neu-base);
+      box-shadow: 6px 6px 14px var(--neu-dark), -6px -6px 14px var(--neu-light);
+    }
+
+    [data-chart="bars"] .recharts-bar-rectangle path {
+      filter: drop-shadow(3px 3px 4px var(--neu-dark)) drop-shadow(-2px -2px 3px var(--neu-light));
+    }
+
+    [data-chart="dot"] {
+      box-shadow: 2px 2px 4px var(--neu-dark), -2px -2px 4px var(--neu-light);
+    }
+
+    [data-chart="dot"].bg-muted,
+    [data-chart="track"] > .bg-muted {
+      background-color: var(--neu-base);
+      box-shadow: inset 1px 1px 3px var(--neu-dark), inset -1px -1px 3px var(--neu-light);
+    }
+
+    [data-chart="track"] > :not(.bg-muted) {
+      box-shadow: 1px 1px 3px var(--neu-dark), -1px -1px 3px var(--neu-light);
+    }
+
+    [data-slot="meter"] {
+      height: 0.5rem;
+      background-color: var(--neu-base);
+      box-shadow: inset 2px 2px 4px var(--neu-dark), inset -2px -2px 4px var(--neu-light);
+    }
+
+    /* Tinted callouts sit pressed into the card */
+    :is(.bg-status-due, .bg-status-paid, .bg-status-overdue, .bg-status-hold):where(.rounded-xl, .rounded-2xl) {
+      box-shadow: inset 2px 2px 5px var(--neu-dark), inset -2px -2px 5px var(--neu-light);
+    }
+
+    /* Shadows need breathing room: open up layout grids and page sections */
+    .grid:is(.gap-2, .gap-2\.5, .gap-3, .gap-4) {
+      gap: 1.25rem;
+    }
+
+    :is(.grid, .flex-col):is(.gap-4, .gap-5).overflow-y-auto {
+      gap: 1.5rem;
+    }
+
+    /* Forms in drawers, modals and side panels: room between fields, label and control, and chips */
+    :is([data-slot="sheet-content"], [data-slot="dialog-content"], aside) {
+      :is(.grid, .flex-col):is(.gap-3, .gap-4) {
+        gap: 1.5rem;
+      }
+
+      :is(.grid:not([class*="grid-cols"]), .flex-col):is(.gap-1, .gap-1\.5, .gap-2) {
+        gap: 0.625rem;
+      }
+
+      .grid[class*="grid-cols"]:is(.gap-1, .gap-1\.5, .gap-2) {
+        gap: 0.75rem;
+      }
+
+      [role="radiogroup"]:is(.gap-0\.5, .gap-1) {
+        gap: 0.375rem;
+      }
+
+      :where(.space-y-2, .space-y-2\.5, .space-y-3) > :not(:last-child) {
+        margin-block-end: 1rem;
+      }
+
+      :where(.space-y-4) > :not(:last-child) {
+        margin-block-end: 1.5rem;
+      }
+    }
+
+    :is(.border, .border-b, .border-t, .border-r, .border-l) {
+      border-color: color-mix(in oklch, var(--foreground) 7%, transparent);
+    }
+  }
+
+  @scope ([data-style="brutalist"]) to ([data-style]:not([data-style="brutalist"])) {
+    :scope.lane-app {
+      background-image: none;
+    }
+
+    .lane-gradient {
+      background-image: none;
+      background-color: var(--primary);
+    }
+
+    :is(.lane-panel, .lane-surface, .lane-ring, .lane-work) {
+      backdrop-filter: none;
+    }
+  }
 }

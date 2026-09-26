@@ -14,6 +14,28 @@ export async function signOutAction() {
   redirect("/login");
 }
 
+/** Sign this browser out and continue to sign-in as the account a link was meant for. */
+export async function switchAccountAction(formData: FormData) {
+  const supabase = await requireSupabase();
+  await supabase.auth.signOut({ scope: "local" });
+  const params = new URLSearchParams();
+  for (const key of ["email", "invite", "confirmed"] as const) {
+    const value = String(formData.get(key) ?? "").trim();
+    if (value) params.set(key, value);
+  }
+  const query = params.toString();
+  redirect(query ? `/login?${query}` : "/login");
+}
+
+/** Sync the signed-in user's profile from their auth metadata. */
+export async function syncMyProfileAction() {
+  const supabase = await requireSupabase();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) await syncProfileFromAuthUser(user);
+}
+
 /** Create a new organization owned by the current user. */
 export async function createOrganizationAction(formData: FormData) {
   const supabase = await requireSupabase();

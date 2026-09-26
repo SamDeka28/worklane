@@ -719,7 +719,7 @@ export function BillToForm({
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label="Attention" htmlFor="bill_to_contact">
+        <Field label="Contact person or team" htmlFor="bill_to_contact">
           <Input
             id="bill_to_contact"
             name="bill_to_contact"

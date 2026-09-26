@@ -15,6 +15,7 @@ import {
 import { DotStackChart } from "@/components/studio/charts";
 import { MoneyDonut, MONEY_COLORS } from "@/components/studio/money-donut";
 import { EmptyState } from "@/components/studio/empty-state";
+import { CalendarClock, HandCoins, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
 import { listClients } from "@/modules/clients/queries";
@@ -723,7 +724,7 @@ export default async function FinancePage({
 
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {owingGroups.length === 0 && !selectedId ? (
-                  <EmptyState
+                  <EmptyState icon={HandCoins}
                     fill
                     title={JOURNEY.finance.emptyCollectTitle}
                     body={
@@ -829,7 +830,7 @@ export default async function FinancePage({
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
               {postedPayments.length === 0 ? (
-                <EmptyState
+                <EmptyState icon={Receipt}
                   fill
                   title={JOURNEY.finance.emptyReceiptsTitle}
                   body={JOURNEY.finance.emptyReceiptsBody}
@@ -909,7 +910,7 @@ export default async function FinancePage({
             </div>
             <div className="min-h-0 flex-1 overflow-x-auto">
               {expectedBillings.length === 0 ? (
-                <EmptyState
+                <EmptyState icon={CalendarClock}
                   fill
                   title={JOURNEY.finance.emptyUpcomingTitle}
                   body={JOURNEY.finance.emptyUpcomingBody}

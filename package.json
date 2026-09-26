@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "email:auth": "jiti scripts/build-auth-emails.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

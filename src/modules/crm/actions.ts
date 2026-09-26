@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { slugifyStageName } from "@/modules/crm/types";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
@@ -243,29 +244,27 @@ export async function moveLeadStageAction(
     .eq("id", leadId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
+  if (!lead) return { error: "Lead not found" };
 
-  const { error } = await ctx.supabase
-    .from("leads")
-    .update({ stage: resolved })
-    .eq("id", leadId)
-    .eq("organization_id", ctx.org.id);
-
-  if (error) return { error: error.message };
-
-  if (orderedIds && orderedIds.length > 0) {
-    for (const [index, id] of orderedIds.entries()) {
-      const { error: posError } = await ctx.supabase
+  const ids = orderedIds && orderedIds.length > 0 ? orderedIds : [leadId];
+  const results = await Promise.all(
+    ids.map((id, index) =>
+      ctx.supabase
         .from("leads")
-        .update({ position: index, stage: resolved })
+        .update(orderedIds?.length ? { position: index, stage: resolved } : { stage: resolved })
         .eq("id", id)
-        .eq("organization_id", ctx.org.id);
-      if (posError) return { error: posError.message };
-    }
-  }
+        .eq("organization_id", ctx.org.id),
+    ),
+  );
+  const failed = results.find((result) => result.error);
+  if (failed?.error) return { error: failed.error.message };
 
-  await recordActivity(ctx, "stage_moved", leadId, { stage: resolved });
+  revalidatePath(`/${orgSlug}/crm`);
+  revalidatePath(`/${orgSlug}`);
 
-  if (lead && lead.stage !== resolved) {
+  after(async () => {
+    await recordActivity(ctx, "stage_moved", leadId, { stage: resolved });
+    if (lead.stage === resolved) return;
     const [{ data: stageRow }, actor] = await Promise.all([
       ctx.supabase
         .from("lead_stages")
@@ -291,10 +290,8 @@ export async function moveLeadStageAction(
         body: "Lead stage changed in the pipeline.",
       },
     });
-  }
+  });
 
-  revalidatePath(`/${orgSlug}/crm`);
-  revalidatePath(`/${orgSlug}`);
   return { ok: true as const };
 }
 

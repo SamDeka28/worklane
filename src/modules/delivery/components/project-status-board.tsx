@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -62,15 +62,15 @@ export function ProjectStatusBoard({
   showMoney?: boolean;
 }) {
   const router = useRouter();
-  const [pending, start] = useTransition();
-  const [items, setItems] = useState(() => group(rows));
+  const [, start] = useTransition();
+  const serverItems = useMemo(() => group(rows), [rows]);
+  const [items, setItems] = useOptimistic(
+    serverItems,
+    (_current, next: Map<ProjectStatus, BoardRow[]>) => next,
+  );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overStatus, setOverStatus] = useState<ProjectStatus | null>(null);
   const sensors = useBoardDndSensors();
-
-  useEffect(() => {
-    setItems(group(rows));
-  }, [rows]);
 
   const projectMap = useMemo(
     () => new Map(rows.map((row) => [row.project.id, row])),
@@ -112,16 +112,10 @@ export function ProjectStatusBoard({
       ...toList,
       { ...moving, project: { ...moving.project, status: to } },
     ]);
-    setItems(next);
-
     start(async () => {
+      setItems(next);
       const result = await setProjectStatusAction(orgSlug, projectId, to);
-      if (result.error) {
-        toast.error(result.error);
-        setItems(group(rows));
-        return;
-      }
-      router.refresh();
+      if (result.error) toast.error(result.error);
     });
   }
 
@@ -167,7 +161,7 @@ export function ProjectStatusBoard({
                     key={row.project.id}
                     row={row}
                     showMoney={showMoney}
-                    disabled={!canWrite || pending}
+                    disabled={!canWrite}
                     onOpen={() => router.push(`/${orgSlug}/projects/${row.project.id}`)}
                   />
                 ))}

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { AvatarMark, SoftCard, StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import { EmptyState } from "@/components/studio/empty-state";
+import { UserRound } from "lucide-react";
 import { StatusChip } from "@/components/studio/status-chip";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import { listOrgMembers, requireOrg } from "@/modules/identity/org";
@@ -56,7 +57,7 @@ export default async function TeamPage({
   return (
     <WorkSurface>
       <StudioToolbar purpose="Studio team: invite people and manage access" />
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5 md:px-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
         <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
           <span>
             {members.length} member{members.length === 1 ? "" : "s"}
@@ -72,7 +73,7 @@ export default async function TeamPage({
               People with studio access. Edit role and module permissions.
             </p>
             {members.length === 0 ? (
-              <EmptyState title="No members yet" body="Invite a teammate to get started." />
+              <EmptyState icon={UserRound} title="No members yet" body="Invite a teammate to get started." />
             ) : (
               <ul className="space-y-2">
                 {members.map((member) => {

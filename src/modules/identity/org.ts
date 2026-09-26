@@ -17,6 +17,14 @@ import {
   type OrgRole,
 } from "@/modules/identity/types";
 import { requireUser } from "@/shared/db/require-user";
+import {
+  resolveComponent,
+  resolveInterface,
+  resolveSurface,
+  type ComponentStyle,
+  type InterfaceStyle,
+  type SurfaceStyle,
+} from "@/shared/theme/styles";
 
 export const LAST_ORG_COOKIE = "worklane_last_org";
 
@@ -31,6 +39,9 @@ export type OrgContext = {
   supabase: SupabaseClient;
   /** Saved appearance theme id; null until the user picks one. */
   theme: string | null;
+  surfaceStyle: SurfaceStyle;
+  componentStyle: ComponentStyle;
+  interfaceStyle: InterfaceStyle;
   user: {
     email: string | null;
     displayName: string | null;
@@ -119,7 +130,9 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
       .maybeSingle(),
     supabase
       .from("profiles")
-      .select("email, display_name, avatar_url, theme, job_title, phone, location, address")
+      .select(
+        "email, display_name, avatar_url, theme, surface_style, component_style, interface_style, job_title, phone, location, address",
+      )
       .eq("id", user.id)
       .maybeSingle(),
   ]);
@@ -153,6 +166,9 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
     permissions,
     supabase,
     theme: (profile?.theme as string | null) ?? null,
+    surfaceStyle: resolveSurface(profile?.surface_style),
+    componentStyle: resolveComponent(profile?.component_style),
+    interfaceStyle: resolveInterface(profile?.interface_style),
     user: {
       email: (profile?.email as string | null) ?? user.email ?? null,
       displayName:

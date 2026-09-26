@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
 /** Hex kept for callers that still pass `color`; rendering prefers key → Tailwind. */
@@ -81,14 +82,10 @@ export function MoneyDonut({
   const circumference = 2 * Math.PI * radius;
   const gap = paint.length > 1 ? circumference * 0.02 : 0;
   const usable = Math.max(0, circumference - gap * paint.length);
-
-  let cursor = 0;
+  const lengths = paint.map((slice) => (slice.value / total) * usable);
   const arcs = paint.map((slice, index) => {
-    const length = (slice.value / total) * usable;
-    const tone = toneFor(slice.key, index);
-    const dashoffset = -cursor;
-    cursor += length + gap;
-    return { ...slice, length, dashoffset, tone };
+    const start = lengths.slice(0, index).reduce((sum, len) => sum + len + gap, 0);
+    return { ...slice, length: lengths[index], dashoffset: -start, tone: toneFor(slice.key, index) };
   });
 
   return (
@@ -100,7 +97,8 @@ export function MoneyDonut({
       )}
     >
       <div
-        className="relative shrink-0"
+        data-chart="donut-wrap"
+        className="relative shrink-0 rounded-full"
         style={{ width: dim, height: dim }}
         role="img"
         aria-label={
@@ -110,35 +108,43 @@ export function MoneyDonut({
         }
       >
         <svg
+          data-chart="donut"
           viewBox={`0 0 ${view} ${view}`}
-          className="size-full -rotate-90"
+          className="size-full"
+          style={{ "--donut-thin": `${stroke * 0.6}px` } as CSSProperties}
           aria-hidden
         >
-          <circle
-            cx={view / 2}
-            cy={view / 2}
-            r={radius}
-            fill="none"
-            className="stroke-muted/60"
-            strokeWidth={stroke}
-          />
-          {arcs.map((arc) => (
+          <g transform={`rotate(-90 ${view / 2} ${view / 2})`}>
             <circle
-              key={arc.key}
+              data-chart="donut-track"
               cx={view / 2}
               cy={view / 2}
               r={radius}
               fill="none"
-              className={cn(arc.tone.stroke, "transition-[stroke-dasharray] duration-500")}
+              className="stroke-muted/60"
               strokeWidth={stroke}
-              strokeLinecap="round"
-              strokeDasharray={`${arc.length} ${circumference}`}
-              strokeDashoffset={arc.dashoffset}
             />
-          ))}
+            {arcs.map((arc) => (
+              <circle
+                key={arc.key}
+                cx={view / 2}
+                cy={view / 2}
+                r={radius}
+                fill="none"
+                className={cn(arc.tone.stroke, "transition-[stroke-dasharray] duration-500")}
+                strokeWidth={stroke}
+                strokeLinecap="round"
+                strokeDasharray={`${arc.length} ${circumference}`}
+                strokeDashoffset={arc.dashoffset}
+              />
+            ))}
+          </g>
         </svg>
         {(centerValue || centerLabel) && (
-          <div className="pointer-events-none absolute inset-[28%] flex flex-col items-center justify-center rounded-full bg-card text-center shadow-soft ring-1 ring-border/40">
+          <div
+            data-chart="donut-center"
+            className="pointer-events-none absolute inset-[25%] flex px-2 flex-col items-center justify-center rounded-full bg-card text-center shadow-soft ring-1 ring-border/40"
+          >
             {centerValue ? (
               <p
                 className={cn(

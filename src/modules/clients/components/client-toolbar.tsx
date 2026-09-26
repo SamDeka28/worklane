@@ -116,7 +116,7 @@ export function ClientToolbar({
   );
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/40 px-3 py-2.5 sm:px-5">
+    <div data-toolbar className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/40 px-4 py-2.5 sm:px-6">
       <MobileFilters
         title="Filter clients"
         description="Search and narrow by balance or kind."
@@ -152,13 +152,14 @@ export function ClientToolbar({
       </DesktopFilters>
 
       <div className="ml-auto flex items-center gap-2">
-        <div className="flex items-center gap-1 rounded-full bg-muted p-1">
+        <div data-slot="segmented" className="flex items-center gap-1 rounded-full bg-muted p-1">
           <Link
             href={href({ view: "cards", page: 1 })}
             className={cn(
               "inline-flex size-8 items-center justify-center rounded-full",
               view === "cards" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
             )}
+            aria-current={view === "cards" ? "page" : undefined}
             aria-label="Card view"
           >
             <LayoutGrid className="size-3.5" />
@@ -169,6 +170,7 @@ export function ClientToolbar({
               "inline-flex size-8 items-center justify-center rounded-full",
               view === "list" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground",
             )}
+            aria-current={view === "list" ? "page" : undefined}
             aria-label="List view"
           >
             <List className="size-3.5" />

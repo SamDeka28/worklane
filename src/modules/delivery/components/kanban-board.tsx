@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -160,7 +160,6 @@ export function KanbanBoard({
   projects?: TaskModalProject[];
   className?: string;
 }) {
-  const router = useRouter();
   const orgMode = scope === "org";
   const [filterProject, setFilterProject] = useState("");
   const [filterClient, setFilterClient] = useState("");
@@ -178,8 +177,10 @@ export function KanbanBoard({
   const manageLists = Boolean(resolvedProjectId) && !useStatusLanes;
 
   const [, start] = useTransition();
-  const [orderedColumns, setOrderedColumns] = useState(columns);
-  const [items, setItems] = useState(() => groupTasks(columns, tasks, useStatusLanes));
+  const [orderedColumns, setOrderedColumns] = useOptimistic(
+    columns,
+    (_current, next: BoardColumn[]) => next,
+  );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -240,10 +241,14 @@ export function KanbanBoard({
     });
   }
 
-  useEffect(() => {
-    setOrderedColumns(columns);
-    setItems(groupTasks(columns, filteredTasks, useStatusLanes));
-  }, [columns, filteredTasks, useStatusLanes]);
+  const serverItems = useMemo(
+    () => groupTasks(columns, filteredTasks, useStatusLanes),
+    [columns, filteredTasks, useStatusLanes],
+  );
+  const [items, setItems] = useOptimistic(
+    serverItems,
+    (_current, next: Map<string, BoardTask[]>) => next,
+  );
 
   const columnMap = useMemo(
     () => new Map(orderedColumns.map((column) => [column.id, column])),
@@ -295,6 +300,8 @@ export function KanbanBoard({
     const draggedId = String(event.active.id);
     const overId = event.over ? String(event.over.id) : null;
     const type = (event.active.data.current?.type as "task" | "column" | undefined) ?? null;
+    const slotColumnId = overColumnId;
+    const slotIndex = dropIndex;
     setActiveId(null);
     setOverColumnId(null);
     setDropIndex(null);
@@ -308,19 +315,14 @@ export function KanbanBoard({
       const newIndex = orderedColumns.findIndex((column) => column.id === overColumnId);
       if (oldIndex < 0 || newIndex < 0) return;
       const next = arrayMove(orderedColumns, oldIndex, newIndex);
-      setOrderedColumns(next);
       start(async () => {
+        setOrderedColumns(next);
         const result = await reorderColumnsAction(
           orgSlug,
           resolvedProjectId,
           next.map((column) => column.id),
         );
-        if (result.error) {
-          toast.error(result.error);
-          setOrderedColumns(columns);
-          return;
-        }
-        router.refresh();
+        if (result.error) toast.error(result.error);
       });
       return;
     }
@@ -334,47 +336,39 @@ export function KanbanBoard({
     const fromIndex = fromList.findIndex((task) => task.id === draggedId);
     if (fromIndex < 0) return;
 
-    const next = new Map(items);
-    if (fromColumn === overColumn) {
-      const overIndex = toList.findIndex((task) => task.id === overId);
-      const target = overIndex < 0 ? fromIndex : overIndex;
-      next.set(fromColumn, arrayMove(fromList, fromIndex, target));
-    } else {
-      const moving = fromList[fromIndex];
-      const remaining = fromList.filter((task) => task.id !== draggedId);
-      const overIndex = toList.findIndex((task) => task.id === overId);
-      const status = useStatusLanes ? statusFromLaneId(overColumn) : null;
-      const inserted = [...toList];
-      inserted.splice(overIndex < 0 ? inserted.length : overIndex, 0, {
-        ...moving,
-        columnId: useStatusLanes ? moving.columnId : overColumn,
-        ...(status ? { status } : {}),
-      });
-      next.set(fromColumn, remaining);
-      next.set(overColumn, inserted);
-    }
-    setItems(next);
+    const sameColumn = fromColumn === overColumn;
+    const moving = fromList[fromIndex];
+    const remaining = fromList.filter((task) => task.id !== draggedId);
+    const target = sameColumn ? remaining : toList;
+    const overIndex = target.findIndex((task) => task.id === overId);
+    const insertAt =
+      slotColumnId === overColumn && slotIndex != null
+        ? Math.min(slotIndex, target.length)
+        : overIndex < 0
+          ? target.length
+          : overIndex;
+    if (sameColumn && insertAt === fromIndex) return;
 
-    const orderedIds = (next.get(overColumn) ?? []).map((task) => task.id);
+    const status = useStatusLanes ? statusFromLaneId(overColumn) : null;
+    const inserted = [...target];
+    inserted.splice(insertAt, 0, {
+      ...moving,
+      columnId: useStatusLanes ? moving.columnId : overColumn,
+      ...(status ? { status } : {}),
+    });
+    const next = new Map(items);
+    if (!sameColumn) next.set(fromColumn, remaining);
+    next.set(overColumn, inserted);
+
+    const orderedIds = inserted.map((task) => task.id);
     start(async () => {
-      if (useStatusLanes) {
-        const status = statusFromLaneId(overColumn);
-        if (!status) return;
-        const result = await updateTaskStatusAction(orgSlug, draggedId, status);
-        if (result.error) {
-          toast.error(result.error);
-          setItems(groupTasks(columns, filteredTasks, useStatusLanes));
-          return;
-        }
-      } else {
-        const result = await moveTaskAction(orgSlug, draggedId, overColumn, orderedIds);
-        if (result.error) {
-          toast.error(result.error);
-          setItems(groupTasks(columns, filteredTasks, useStatusLanes));
-          return;
-        }
-      }
-      router.refresh();
+      setItems(next);
+      const result = useStatusLanes
+        ? status
+          ? await updateTaskStatusAction(orgSlug, draggedId, status)
+          : null
+        : await moveTaskAction(orgSlug, draggedId, overColumn, orderedIds);
+      if (result?.error) toast.error(result.error);
     });
   }
 
@@ -397,7 +391,7 @@ export function KanbanBoard({
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col overflow-hidden", className)}>
       {orgMode ? (
-        <div className="flex shrink-0 items-center border-b border-border/40 px-3 py-2 sm:px-5 sm:py-2.5">
+        <div data-toolbar className="flex shrink-0 items-center border-b border-border/40 px-4 py-2 sm:px-6 sm:py-2.5">
           <MobileFilters
             title="Board filters"
             description="Narrow cards by project or client."
@@ -579,7 +573,12 @@ export function KanbanBoard({
             setDropIndex(null);
           }}
         >
-          <BoardCanvas className="h-full min-h-0 px-3 pb-3 pt-3 sm:px-4">
+          <BoardCanvas
+            className={cn(
+              "h-full min-h-0",
+              orgMode ? "px-4 pt-3 pb-3 sm:px-6" : "p-4 sm:gap-4 sm:p-5",
+            )}
+          >
             <SortableContext
               items={orderedColumns.map((column) => column.id)}
               strategy={horizontalListSortingStrategy}
@@ -758,7 +757,7 @@ function KanbanColumn({
       }}
       className={cn(isDragging && "opacity-40")}
       header={
-        <header className="flex shrink-0 items-center gap-1.5 px-2.5 py-2.5">
+        <header className="flex shrink-0 items-center gap-1.5 px-2.5 pt-2.5 pb-2">
           {manageLists && canWrite ? (
             <button
               type="button"

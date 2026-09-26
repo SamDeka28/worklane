@@ -216,7 +216,7 @@ export default async function InvoiceDetailPage({
 
   return (
     <InvoiceBusyProvider>
-      <WorkSurface>
+      <WorkSurface variant="panel">
         <StudioToolbar
           title={invoice.number}
           subtitle={

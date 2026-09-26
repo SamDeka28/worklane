@@ -65,7 +65,8 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && (pathname === "/login" || pathname === "/signup")) {
+  const switching = pathname === "/login" && request.nextUrl.searchParams.get("switch") === "1";
+  if (user && !switching && (pathname === "/login" || pathname === "/signup")) {
     const url = request.nextUrl.clone();
     const invitePath = invitePathFromSearch(url);
     if (invitePath) {
