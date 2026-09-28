@@ -459,7 +459,7 @@ function MilestoneRow({
   return (
     <li id={`milestone-${item.id}`} className={cn(highlighted && "bg-lane-blue/10")}>
       <div className="px-3 py-3.5 sm:px-4 sm:py-4">
-        <div className="flex items-start gap-3">
+        <div className="flex flex-wrap items-start gap-3 sm:flex-nowrap sm:items-center">
           <button
             type="button"
             className={cn(
@@ -504,11 +504,16 @@ function MilestoneRow({
             ) : null}
           </button>
 
+          <div
+            className="flex w-full shrink-0 items-center justify-end gap-1 sm:w-auto"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
           {showMoney ? (
             <button
               type="button"
               className={cn(
-                "shrink-0 pt-1 text-sm font-semibold tabular-nums tracking-tight",
+                "mr-1 shrink-0 text-sm font-semibold tabular-nums tracking-tight",
                 canWrite && "rounded-lg px-1.5 py-0.5 hover:bg-muted/50",
               )}
               onClick={openEditor}
@@ -517,14 +522,9 @@ function MilestoneRow({
               {item.amountMinor != null ? moneyLabel(item.amountMinor, currency) : "-"}
             </button>
           ) : null}
-        </div>
 
         {canWrite ? (
-          <div
-            className="mt-2.5 flex items-center gap-1"
-            onClick={(event) => event.stopPropagation()}
-            onKeyDown={(event) => event.stopPropagation()}
-          >
+          <>
             <NativeSelect
               className="h-8 w-29 text-xs"
               value={item.status}
@@ -576,7 +576,7 @@ function MilestoneRow({
               >
                 <MoreHorizontal className="size-3.5" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="min-w-44">
+              <DropdownMenuContent align="end" className="min-w-44">
                 {linkedTaskId ? (
                   <>
                     <DropdownMenuItem onClick={() => router.push(workHref ?? "#work")}>
@@ -667,8 +667,10 @@ function MilestoneRow({
                 ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
+          </>
         ) : null}
+          </div>
+        </div>
       </div>
     </li>
   );
