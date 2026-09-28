@@ -23,6 +23,10 @@ export const TEAM: DocArticle[] = [
           },
           { title: "Access", body: "Choose **Full**, **Progress**, **Partner**, or **Custom**. See [Roles and access](/docs/roles-and-access)." },
           { title: "Manage team (Members only)", body: "Lets them invite people and change access, up to their own level." },
+          {
+            title: "Own mailbox for lead emails (Members only)",
+            body: "Lets them send lead emails from their own Gmail, Outlook, or SMTP mailbox. Needs Leads set to Edit. See [Choose the address emails come from](/docs/email-tracking).",
+          },
           { title: "Click Send invite", body: "They get an email with **Accept invitation**. If email isn't configured, the invite link is copied for you to share." },
         ],
       },
@@ -36,7 +40,7 @@ export const TEAM: DocArticle[] = [
         type: "list",
         items: [
           "Signed out: **Create account & accept** or **Sign in & accept**. The email is locked to the invited address and no extra studio is created.",
-          "Signed in: access is set up automatically and they land on their first project with a welcome tour.",
+          "Signed in: access is set up automatically and they land on their first project (or Home, with no projects) with a welcome tour.",
           "Signed up with Google without the link? Pending invites for that email are still claimed on first sign-in.",
           "You're notified when they join: “{Name} joined {Studio}”.",
         ],
@@ -44,7 +48,7 @@ export const TEAM: DocArticle[] = [
       { type: "h2", text: "Pending invites" },
       {
         type: "p",
-        text: "The **Pending invites** card shows each invite as Pending or Expired. **Resend** creates a fresh link and resets the 14 days (old links stop working). **Revoke** invalidates the link.",
+        text: "The **Pending invites** card shows each invite as Pending or Expired. **Resend** creates a fresh link and resets the 14 days (old links stop working). **Revoke** invalidates the link. Only owners and admins can resend or revoke admin invites.",
       },
       { type: "h2", text: "Change access or remove someone" },
       {
@@ -52,6 +56,10 @@ export const TEAM: DocArticle[] = [
         items: [
           { title: "Click Access on their row", body: "The **Edit access** panel opens." },
           { title: "Change role, projects, or access", body: "Then click **Save access**. They're notified of the change." },
+          {
+            title: "Set up their lead mailbox (owners and admins)",
+            body: "For admins, and members with **Own mailbox** on, **Lead email mailbox** below the form lets you connect, test, edit, or remove the mailbox their lead emails go out from.",
+          },
           {
             title: "To remove them",
             body: "Scroll to **Remove from studio**, click **Remove member**, and type their email to confirm. Their tasks, logs, and comments are kept.",
@@ -81,7 +89,7 @@ export const TEAM: DocArticle[] = [
         rows: [
           ["Owner", "Created the studio. Full access to everything; can't be edited or removed. Gets copies of most studio notifications."],
           ["Admin", "Full access, manages the team, can always delete. Only owners can promote, edit, or remove admins."],
-          ["Member", "Edits where their module access is **Edit**. Deletes only where the **Delete** toggle is on. Can be given **Manage team**."],
+          ["Member", "Edits where their module access is **Edit**. Deletes only where the **Delete** toggle is on. Can be given **Manage team** and **Own mailbox for lead emails**."],
           ["Viewer", "Read-only everywhere, regardless of access settings."],
           ["Partner", "Read-only delivery plus their own partner earnings. Never gets edit access."],
         ],
@@ -101,10 +109,21 @@ export const TEAM: DocArticle[] = [
       {
         type: "list",
         items: [
+          "Pick **Custom**, or click **Customize** under a preset to start from it.",
           "Set each module — Projects, Finance, Partners, Leads, Documents — to **Off**, **View**, or **Edit**.",
           "Projects, Leads, and Partners have a **Delete** toggle (only with Edit). Leads delete also covers clients.",
           "**Project tabs** chooses which tabs show inside projects: Overview, Milestones, Work, Documents, Charges, Split, Credentials.",
           "Charges and Split also require Finance access.",
+          "**Manage team** and **Own mailbox for lead emails** are separate switches, shown only for Members. They're kept when you change presets. Own mailbox also needs Leads set to Edit.",
+        ],
+      },
+      { type: "h2", text: "Not controlled by access" },
+      {
+        type: "list",
+        items: [
+          "**Clients**, **Emails**, and **Team** show for everyone. Client amounts still need Finance access.",
+          "In **Emails**, everyone sees the emails they tracked. Owners and admins can switch to **Everyone** to see the whole studio's.",
+          "Viewers and partners can track emails but can't compose them in Worklane.",
         ],
       },
       { type: "h2", text: "Rules to know" },
@@ -115,7 +134,8 @@ export const TEAM: DocArticle[] = [
           "Without Finance access, no amounts appear anywhere — not on Home, clients, projects, milestones, or leads.",
           "Members only see projects they're on (owners and admins see all). See [Project teams](/docs/project-teams).",
           "Teammates with **Manage team** can only grant access up to their own level and can't invite admins.",
-          "Choosing Full or Progress for a Partner switches their role to Member — partners can only view.",
+          "Choosing Full or Progress, or setting any module to Edit, for a Partner switches their role to Member — partners can only view.",
+          "Partners see a project's credentials only when the **Credentials** tab is turned on for them. The Partner preset leaves it off.",
         ],
       },
       {
@@ -142,7 +162,10 @@ export const TEAM: DocArticle[] = [
       {
         type: "steps",
         items: [
-          { title: "Open the project → Split → Team", body: "The **Project team** panel opens." },
+          {
+            title: "Open the project → Split → Team",
+            body: "The **Project team** panel opens. You need edit access and the Split tab (which requires Finance access) to see it.",
+          },
           { title: "Tick teammates under Add teammates", body: "Owners, admins, and members who aren't on the team yet." },
           { title: "Role on project", body: "**Member** or **Lead**." },
           { title: "Click Add selected", body: "They're notified and can now see the board and tasks." },
@@ -150,7 +173,7 @@ export const TEAM: DocArticle[] = [
       },
       {
         type: "p",
-        text: "Or invite someone new by email right from the same panel — the invite is scoped to this project. You can also set projects from **Team → Access → Projects**.",
+        text: "Or invite someone new under **Invite by email** in the same panel — the invite is scoped to this project. You can also set projects from **Team → Access → Projects**.",
       },
       {
         type: "callout",
@@ -174,7 +197,7 @@ export const TEAM: DocArticle[] = [
     blocks: [
       {
         type: "p",
-        text: "The portal is an optional module. When it's enabled for your studio, a **Portal** section appears in **Studio settings** for people who can make changes.",
+        text: "The portal is an optional module. When it's enabled for your studio, a **Portal** tab appears in the left menu of **Studio settings** for people who can make changes.",
       },
       {
         type: "callout",
@@ -187,9 +210,12 @@ export const TEAM: DocArticle[] = [
           { title: "Studio settings → Portal", body: "" },
           { title: "Kind", body: "**Client portal** or **Partner portal**, then pick the client or partner." },
           { title: "Label", body: "For example “Q2 client share”." },
-          { title: "Choose what to expose", body: "Clients: invoices, milestones, documents, files. Partners: earnings." },
-          { title: "Expiry (optional)", body: "The link stops working after this date." },
-          { title: "Click Create share link", body: "Copy the URL now — it's shown once and never again. Send it to your client." },
+          {
+            title: "Expose",
+            body: "Clients: invoices, milestones, documents, files. Partners: earnings. All are ticked by default — untick what you don't want to share.",
+          },
+          { title: "Expires (optional)", body: "The link stops working after this date and time." },
+          { title: "Click Create share link", body: "Click **Copy URL** now — it's shown once and never again. Send it to your client." },
         ],
       },
       { type: "h2", text: "What the client sees" },
@@ -197,15 +223,17 @@ export const TEAM: DocArticle[] = [
         type: "list",
         items: [
           "No login needed. The page is read-only and never shows internal notes or partner splits.",
+          "Invoices show number, issue and due dates, status, and total. Void invoices are left out.",
           "Milestones show project, due date, and delivery status — no amounts.",
           "Documents show only those that are sent, accepted, or signed.",
+          "Files show only shared files attached to those invoices and documents.",
           "Partner links show Earned, Settled, and Payable.",
         ],
       },
       {
         type: "callout",
         tone: "warning",
-        text: "Anyone with the link can view it. Set an expiry and **Revoke** links you no longer need — revoking takes effect immediately.",
+        text: "Anyone with the link can view it. Set an expiry and **Revoke** links you no longer need from the list under the form — revoking takes effect immediately.",
       },
     ],
   },

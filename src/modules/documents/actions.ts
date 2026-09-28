@@ -18,6 +18,7 @@ import {
   signedDocumentAttachments,
 } from "@/modules/documents/signed-pdf";
 import { hashShareToken } from "@/modules/portal/token";
+import { resolveSender } from "@/modules/email-senders/server";
 import {
   documentEmailHtml,
   documentEmailText,
@@ -1235,8 +1236,11 @@ export async function sendDocumentEmailAction(
   formData: FormData,
 ) {
   const ctx = await requireWritableOrg(orgSlug);
-  if (!isEmailConfigured()) {
-    return { error: "Email isn't set up on this workspace yet (SMTP_USER and SMTP_PASS)." };
+  const sender = await resolveSender(ctx.org.id, ctx.userId);
+  if (!sender.via) {
+    return {
+      error: "Email sending isn't set up. An owner or admin can connect the studio's mailbox in Settings.",
+    };
   }
 
   const to = String(formData.get("to") ?? "").trim().toLowerCase();
@@ -1323,6 +1327,7 @@ export async function sendDocumentEmailAction(
     replyTo: ctx.user.email ?? undefined,
     html: documentEmailHtml(emailInput),
     text: documentEmailText(emailInput),
+    smtp: sender.smtp,
   });
   if (!result.ok) {
     await ctx.supabase.from("document_sends").delete().eq("id", send.id);

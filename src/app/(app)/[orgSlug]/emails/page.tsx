@@ -6,7 +6,9 @@ import { PixelGuideButton } from "@/modules/emails/components/pixel-guide";
 import { TrackEmailButton, TrackedEmailList } from "@/modules/emails/components/tracked-emails";
 import { ComposeEmailButton } from "@/modules/emails/components/compose-email";
 import { canSeeStudioEmails, listEmailContacts, listTrackedEmails } from "@/modules/emails/queries";
-import { isEmailConfigured } from "@/shared/email";
+import { resolveSender } from "@/modules/email-senders/server";
+import { SignatureSheet } from "@/modules/email-signatures/components/signature-forms";
+import { senderSignatureState } from "@/modules/email-signatures/server";
 import { mailPixelUrl } from "@/shared/email/pixel";
 import type { TrackedEmailScope, TrackedEmailStatus } from "@/modules/emails/types";
 import { requireOrg } from "@/modules/identity/org";
@@ -21,17 +23,21 @@ export default async function EmailsPage({ params, searchParams }: PageProps<"/[
   const status: TrackedEmailStatus =
     query.status === "opened" ? "opened" : query.status === "waiting" ? "waiting" : "all";
 
-  const [emails, contacts] = await Promise.all([
+  const [emails, contacts, sender, signatureState] = await Promise.all([
     listTrackedEmails(orgSlug, scope),
     ctx.canWrite ? listEmailContacts(ctx) : Promise.resolve([]),
+    resolveSender(ctx.org.id, ctx.userId),
+    ctx.canWrite ? senderSignatureState(ctx, "emails") : Promise.resolve(null),
   ]);
   const pixelBase = mailPixelUrl("");
   const compose = ctx.canWrite ? (
     <ComposeEmailButton
       orgSlug={orgSlug}
       contacts={contacts}
-      configured={isEmailConfigured()}
+      configured={sender.via !== null}
       replyTo={ctx.user.email}
+      fromAddress={sender.fromAddress}
+      signature={signatureState?.signature ?? null}
     />
   ) : null;
   const filtered = emails.filter((email) =>
@@ -60,6 +66,15 @@ export default async function EmailsPage({ params, searchParams }: PageProps<"/[
         actions={
           <>
             <PixelGuideButton />
+            {signatureState ? (
+              <SignatureSheet
+                orgSlug={orgSlug}
+                module="emails"
+                on={signatureState.moduleOn}
+                canEdit={ctx.role === "owner" || ctx.role === "admin"}
+                html={signatureState.signature?.html ?? null}
+              />
+            ) : null}
             <TrackEmailButton
               pixelBase={pixelBase}
               orgSlug={orgSlug}

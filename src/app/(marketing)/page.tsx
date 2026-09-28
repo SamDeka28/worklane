@@ -38,7 +38,7 @@ const FEATURES = [
     number: "01",
     kicker: "Sell",
     title: "Lead journey that becomes a client",
-    body: "Build the stages your studio actually uses — discovery, proposal, whatever you name them. Drag cards through the pipeline. When you win, Worklane creates the client from the lead so you never retype the company, contact, or deal value.",
+    body: "Build the stages your studio actually uses — discovery, proposal, whatever you name them. Drag cards through the pipeline. Start a lead just by emailing them from Worklane, from your own mailbox, and see when they open it. When you win, Worklane creates the client from the lead so you never retype the company, contact, or deal value.",
     Frame: LeadsProductFrame,
   },
   {
@@ -69,6 +69,10 @@ const COMPARE = [
     worklane: "Win a lead → client → project carries the same people and dollars",
   },
   {
+    stack: "Pitch from Gmail, then copy the prospect into the CRM by hand",
+    worklane: "Email a new lead and they’re on the pipeline the moment you hit send",
+  },
+  {
     stack: "Money living in a private spreadsheet only the owner opens",
     worklane: "Finance on the books — with access so Progress teammates never see it",
   },
@@ -86,6 +90,10 @@ const FAQ = [
   {
     q: "How is Studio Board different from a project board?",
     a: "Each project has its own board. Studio Board rolls every open card from active projects into one kanban — priority, kind, project chip, due date — so nothing hides behind a project tab.",
+  },
+  {
+    q: "Can I see when a lead or client opens my email?",
+    a: "Yes. Emails sent from Worklane carry open tracking, and you’re notified the first time they’re read. Send from your own Gmail, Outlook, or any SMTP mailbox so replies land in your inbox, or paste a tracking pixel into emails you write elsewhere. Opens are a strong hint, not proof: some mail apps block or pre-load images.",
   },
   {
     q: "Where can I learn how everything works?",

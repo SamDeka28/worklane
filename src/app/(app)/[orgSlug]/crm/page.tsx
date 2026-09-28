@@ -19,6 +19,7 @@ import { CrmReports } from "@/modules/crm/components/crm-reports";
 import { CrmSettingsSheet } from "@/modules/crm/components/crm-settings-sheet";
 import { CrmToolbar, type CrmFilters, type CrmView } from "@/modules/crm/components/crm-toolbar";
 import { LeadImportSheet } from "@/modules/crm/components/lead-import-sheet";
+import { StartLeadEmailButton } from "@/modules/crm/components/lead-email-start";
 import { LeadJourneyConfig } from "@/modules/crm/components/lead-journey-config";
 import { dueLabel } from "@/modules/crm/presentation";
 import {
@@ -41,7 +42,8 @@ import {
   type LeadRecord,
 } from "@/modules/crm/types";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
-import { canDeleteModule, canSeeMoney } from "@/modules/identity/permissions";
+import { canDeleteModule, canSeeMoney, canUseOwnMailbox } from "@/modules/identity/permissions";
+import { getLeadMailbox } from "@/modules/email-senders/server";
 import { JOURNEY } from "@/shared/journey-copy";
 import { formatMoney, type IsoCurrency } from "@/shared/money";
 
@@ -84,7 +86,7 @@ export default async function CrmPage({
   const leadId = param(query.lead) || undefined;
   const prefillClientId = query.new === "1" ? param(query.client) : "";
 
-  const [allLeads, selected, stageRows, settings, members, moves, prefillClient] =
+  const [allLeads, selected, stageRows, settings, members, moves, prefillClient, sender, mailbox] =
     await Promise.all([
       listLeads(orgSlug, { q: filters.q || undefined }),
       leadId ? getLead(orgSlug, leadId) : Promise.resolve(null),
@@ -101,6 +103,8 @@ export default async function CrmPage({
             .maybeSingle()
             .then(({ data }) => (data ? { id: String(data.id), name: String(data.name) } : null))
         : Promise.resolve(null),
+      leadEmailSender(ctx),
+      ctx.canWrite ? getLeadMailbox(ctx.org.id, ctx.userId, ctx.role, canUseOwnMailbox(ctx)) : Promise.resolve(null),
     ]);
   const stages = stagesOrDefault(stageRows);
 
@@ -145,7 +149,6 @@ export default async function CrmPage({
   const overdueCount = openLeads.filter((lead) => followState(lead) === "overdue").length;
   const memberName = new Map(members.map((member) => [member.userId, member.name]));
   const canDelete = canDeleteModule(ctx, "crm");
-
   return (
     <WorkSurface>
       <StudioToolbar
@@ -159,8 +162,28 @@ export default async function CrmPage({
                 stages={stages}
                 settings={settings}
                 members={members}
+                mailbox={{
+                  allowed: false,
+                  isAdmin: false,
+                  saved: null,
+                  fallback: "the studio mailbox",
+                  unavailable: null,
+                  ...mailbox,
+                  defaultFromName: sender.name,
+                }}
+                signature={{
+                  on: sender.signatureOn,
+                  canEdit: ctx.role === "owner" || ctx.role === "admin",
+                  html: sender.signature?.html ?? null,
+                }}
               />
               <LeadJourneyConfig orgSlug={orgSlug} stages={stages} canWrite={ctx.canWrite} />
+              <StartLeadEmailButton
+                orgSlug={orgSlug}
+                stages={stages}
+                settings={settings}
+                sender={sender}
+              />
               <CreateLeadDialog
                 orgSlug={orgSlug}
                 stages={stages}
@@ -363,7 +386,7 @@ export default async function CrmPage({
         settings={settings}
         members={members}
         currentUserId={ctx.userId}
-        sender={leadEmailSender(ctx)}
+        sender={sender}
       />
     </WorkSurface>
   );

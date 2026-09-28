@@ -1,14 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/studio/field";
 import {
-  signOutAction,
   updateOrgAction,
   updateOrgBusinessAction,
 } from "@/modules/identity/actions";
@@ -26,7 +25,6 @@ export function OrgSettingsForm({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [signingOut, setSigningOut] = useState(false);
 
   return (
     <div className="flex max-w-lg flex-col gap-6">
@@ -57,16 +55,6 @@ export function OrgSettingsForm({
             {pending ? "Saving…" : "Save"}
           </Button>
         ) : null}
-      </form>
-      <form
-        action={async () => {
-          setSigningOut(true);
-          await signOutAction();
-        }}
-      >
-        <Button type="submit" variant="ghost" disabled={signingOut}>
-          {signingOut ? "Signing out…" : "Sign out"}
-        </Button>
       </form>
     </div>
   );

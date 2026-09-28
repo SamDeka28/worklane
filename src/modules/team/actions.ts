@@ -53,12 +53,23 @@ function newInviteToken() {
   return randomBytes(24).toString("base64url");
 }
 
-/** "Manage team" is independent of presets; only members can hold it (admins have it implicitly). */
+/**
+ * "Manage team" and "Own mailbox" are independent of presets; only members can hold them
+ * (admins have both implicitly). The mailbox also needs Leads edit access.
+ */
 function withTeamFlag(permissions: MemberPermissions, formData: FormData, role: string) {
   const next: MemberPermissions = { ...permissions };
   delete next.team;
+  delete next.mailbox;
   if (role === "member" && String(formData.get("manage_team") ?? "") === "1") {
     next.team = { access: "write" };
+  }
+  if (
+    role === "member" &&
+    next.crm?.access === "write" &&
+    String(formData.get("own_mailbox") ?? "") === "1"
+  ) {
+    next.mailbox = { access: "write" };
   }
   return next;
 }

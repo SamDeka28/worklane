@@ -14,6 +14,18 @@ export type SendEmailInput = {
   inReplyTo?: string;
   references?: string[];
   attachments?: { filename: string; content: Buffer; contentType: string }[];
+  /** Send through this account instead of the workspace SMTP. */
+  smtp?: SmtpAccount | null;
+};
+
+export type SmtpAccount = {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  fromEmail: string;
+  fromName?: string | null;
 };
 
 export type SendEmailResult =
@@ -42,6 +54,13 @@ export function getAppUrl() {
 
 export function isEmailConfigured() {
   return Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+}
+
+/** The workspace sender address, for showing people where their email comes from. */
+export function defaultFromAddress() {
+  if (!isEmailConfigured()) return null;
+  const from = process.env.EMAIL_FROM?.trim() || process.env.SMTP_USER || "";
+  return from.match(/<([^>]+)>/)?.[1] ?? from;
 }
 
 let pooled: { key: string; transport: ReturnType<typeof nodemailer.createTransport> } | null = null;
@@ -74,8 +93,58 @@ function transporter() {
   return pooled.transport;
 }
 
+const accountPool = new Map<string, ReturnType<typeof nodemailer.createTransport>>();
+
+function accountTransport(account: SmtpAccount) {
+  const key = `${account.host}:${account.port}:${account.secure}:${account.user}:${account.pass}`;
+  let transport = accountPool.get(key);
+  if (!transport) {
+    if (accountPool.size >= 50) {
+      const [oldestKey, oldest] = accountPool.entries().next().value!;
+      oldest.close();
+      accountPool.delete(oldestKey);
+    }
+    transport = nodemailer.createTransport({
+      host: account.host,
+      port: account.port,
+      secure: account.secure,
+      auth: { user: account.user, pass: account.pass },
+      pool: true,
+      maxConnections: 2,
+      connectionTimeout: 15_000,
+      socketTimeout: 60_000,
+    });
+    accountPool.set(key, transport);
+  }
+  return transport;
+}
+
+/** Logs in to the account without sending anything; returns the server's error if it fails. */
+export async function verifySmtpAccount(account: SmtpAccount): Promise<string | null> {
+  const transport = nodemailer.createTransport({
+    host: account.host,
+    port: account.port,
+    secure: account.secure,
+    auth: { user: account.user, pass: account.pass },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+  });
+  try {
+    await transport.verify();
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Couldn't connect to the SMTP server";
+  } finally {
+    transport.close();
+  }
+}
+
+function formatFrom(name: string | null | undefined, address: string) {
+  return name ? `"${name.replace(/["\\\r\n]/g, "")}" <${address}>` : address;
+}
+
 export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
-  const transport = transporter();
+  const transport = input.smtp ? accountTransport(input.smtp) : transporter();
   if (!transport) {
     return {
       ok: false,
@@ -84,11 +153,14 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     };
   }
 
-  const defaultFrom = process.env.EMAIL_FROM?.trim() || `Worklane <${process.env.SMTP_USER}>`;
-  const fromAddress = defaultFrom.match(/<([^>]+)>/)?.[1] ?? defaultFrom;
-  const from = input.fromName
-    ? `"${input.fromName.replace(/["\\\r\n]/g, "")}" <${fromAddress}>`
-    : defaultFrom;
+  let from: string;
+  if (input.smtp) {
+    from = formatFrom(input.fromName || input.smtp.fromName, input.smtp.fromEmail);
+  } else {
+    const defaultFrom = process.env.EMAIL_FROM?.trim() || `Worklane <${process.env.SMTP_USER}>`;
+    const fromAddress = defaultFrom.match(/<([^>]+)>/)?.[1] ?? defaultFrom;
+    from = input.fromName ? formatFrom(input.fromName, fromAddress) : defaultFrom;
+  }
 
   try {
     const info = await transport.sendMail({
@@ -138,5 +210,6 @@ export {
   notificationEmailHtml,
   notificationEmailText,
   personalEmailHtml,
+  personalEmailText,
   roleLabel,
 } from "./templates";

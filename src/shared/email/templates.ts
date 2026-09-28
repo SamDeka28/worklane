@@ -322,7 +322,16 @@ export function documentEmailText(input: DocumentEmailInput) {
 export type PersonalEmailInput = {
   body: string;
   pixelUrl?: string | null;
+  /** Shown under the message, like a mail app signature. The HTML must already be safe. */
+  signature?: { html: string; text: string } | null;
 };
+
+/** The plain-text version of a personal email, with the conventional "-- " signature line. */
+export function personalEmailText(input: Pick<PersonalEmailInput, "body" | "signature">) {
+  const body = input.body.trim();
+  const signature = input.signature?.text.trim();
+  return signature ? `${body}\n\n-- \n${signature}` : body;
+}
 
 /**
  * A plain one-to-one email (CRM outreach): no branding or buttons, so it reads like
@@ -342,7 +351,10 @@ export function personalEmailHtml(input: PersonalEmailInput) {
   const pixel = input.pixelUrl
     ? `<img src="${escapeHtml(input.pixelUrl)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0">`
     : "";
-  return `<!doctype html><html><body style="margin:0;padding:0"><div style="font-family:${FONT};font-size:14px;line-height:22px;color:#1f2328">${blocks}${pixel}</div></body></html>`;
+  const signature = input.signature?.html
+    ? `<div style="margin-top:18px;color:#3d444d;font-size:13px;line-height:20px">${input.signature.html}</div>`
+    : "";
+  return `<!doctype html><html><body style="margin:0;padding:0"><div style="font-family:${FONT};font-size:14px;line-height:22px;color:#1f2328">${blocks}${signature}${pixel}</div></body></html>`;
 }
 
 export type DocumentUpdateEmailInput = {

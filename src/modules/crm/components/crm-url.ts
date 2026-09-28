@@ -10,6 +10,7 @@ export function setCrmUrl(
     new?: string | null;
     stage?: string | null;
     client?: string | null;
+    compose?: string | null;
   },
   mode: "push" | "replace" = "replace",
 ) {

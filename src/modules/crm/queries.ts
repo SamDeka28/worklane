@@ -1,7 +1,11 @@
 import { cache } from "react";
 import type { FollowCandidate } from "@/modules/ops/queue";
 import { listOrgMembers, requireOrg, type OrgContext } from "@/modules/identity/org";
-import { canAccessModule, resolveMemberPermissions } from "@/modules/identity/permissions";
+import {
+  canAccessModule,
+  canUseOwnMailbox,
+  resolveMemberPermissions,
+} from "@/modules/identity/permissions";
 import { parseCrmSettings, type CrmSettings } from "@/modules/crm/settings";
 import {
   isStale,
@@ -13,7 +17,10 @@ import {
   type LeadStageRecord,
   type LeadStageSystemKey,
 } from "@/modules/crm/types";
-import { isEmailConfigured } from "@/shared/email";
+import { resolveSender } from "@/modules/email-senders/server";
+import { senderSignatureState } from "@/modules/email-signatures/server";
+import type { RenderedSignature } from "@/modules/email-signatures/types";
+import type { SenderVia } from "@/modules/email-senders/types";
 import type { IsoCurrency } from "@/shared/money";
 
 type LeadRow = {
@@ -334,14 +341,29 @@ export type LeadEmailSender = {
   name: string;
   email: string | null;
   orgName: string;
+  /** The address recipients see, and whose account it goes through. */
+  fromAddress: string | null;
+  via: SenderVia | null;
+  /** Filled-in signature added below lead emails, or null for none. */
+  signature: RenderedSignature | null;
+  /** The studio adds signatures to lead emails. */
+  signatureOn: boolean;
 };
 
-export function leadEmailSender(ctx: OrgContext): LeadEmailSender {
+export async function leadEmailSender(ctx: OrgContext): Promise<LeadEmailSender> {
+  const [resolved, { signature, moduleOn }] = await Promise.all([
+    resolveSender(ctx.org.id, ctx.userId, { ownMailbox: canUseOwnMailbox(ctx) }),
+    senderSignatureState(ctx, "leads"),
+  ]);
   return {
-    configured: isEmailConfigured(),
+    configured: resolved.via !== null,
     name: ctx.user.displayName?.trim() || ctx.user.email?.split("@")[0] || "",
     email: ctx.user.email ?? null,
     orgName: ctx.org.name,
+    fromAddress: resolved.fromAddress,
+    via: resolved.via,
+    signature,
+    signatureOn: moduleOn,
   };
 }
 

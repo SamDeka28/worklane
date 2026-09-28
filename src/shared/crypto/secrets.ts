@@ -23,6 +23,12 @@ function loadKey(version: number): Buffer {
   return key;
 }
 
+export function secretsKeyProblem(): "missing" | "invalid" | null {
+  const raw = process.env.CREDENTIALS_ENCRYPTION_KEY ?? "";
+  if (!raw.trim()) return "missing";
+  return Buffer.from(raw, "base64").length === 32 ? null : "invalid";
+}
+
 export function isSecretsConfigured(): boolean {
   try {
     loadKey(CURRENT_KEY_VERSION);

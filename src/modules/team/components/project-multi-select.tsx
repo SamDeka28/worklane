@@ -8,6 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { PickerSearch, matchesQuery } from "@/components/ui/search-select";
 import { cn } from "@/lib/utils";
 
 export type ProjectOption = { id: string; name: string };
@@ -26,6 +27,8 @@ export function ProjectMultiSelect({
   emptyLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const visible = projects.filter((project) => matchesQuery(project.name, query));
 
   const selectedProjects = useMemo(
     () => projects.filter((project) => selectedIds.includes(project.id)),
@@ -44,7 +47,13 @@ export function ProjectMultiSelect({
 
   return (
     <div className="grid gap-2">
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery("");
+        }}
+      >
         <PopoverTrigger
           render={
             <button
@@ -68,8 +77,22 @@ export function ProjectMultiSelect({
             className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground"
           />
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-(--anchor-width) min-w-72 p-1.5">
+        <PopoverContent align="start" className="w-(--anchor-width) min-w-72 gap-0 p-1.5">
+          <PickerSearch
+            value={query}
+            onChange={setQuery}
+            placeholder="Search projects…"
+            onEnter={() => {
+              if (visible[0]) toggle(visible[0].id);
+              setQuery("");
+            }}
+          />
           <ul className="max-h-56 overflow-y-auto">
+            {query ? (
+              visible.length === 0 ? (
+                <li className="px-2.5 py-2 text-sm text-muted-foreground">No matches</li>
+              ) : null
+            ) : (
             <li>
               <button
                 type="button"
@@ -87,7 +110,8 @@ export function ProjectMultiSelect({
                 ) : null}
               </button>
             </li>
-            {projects.map((project) => {
+            )}
+            {visible.map((project) => {
               const active = selectedIds.includes(project.id);
               return (
                 <li key={project.id}>

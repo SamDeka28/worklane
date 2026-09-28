@@ -16,7 +16,12 @@ export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 export const NOTIFICATION_CATEGORY_META: Record<
   NotificationCategory,
-  { label: string; description: string; emailByDefault: boolean }
+  {
+    label: string;
+    description: string;
+    emailByDefault: boolean;
+    inAppOnly?: boolean;
+  }
 > = {
   mentions: {
     label: "Mentions",
@@ -57,6 +62,7 @@ export const NOTIFICATION_CATEGORY_META: Record<
     label: "Tracked emails",
     description: "The first time someone opens an email you tracked",
     emailByDefault: false,
+    inAppOnly: true,
   },
   partners: {
     label: "Partner payouts",

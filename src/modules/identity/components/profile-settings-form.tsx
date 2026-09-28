@@ -20,12 +20,16 @@ export function ProfileSettingsForm({
   displayName,
   email,
   avatarUrl,
+  role,
+  orgName,
   details,
 }: {
   orgSlug: string;
   displayName: string;
   email: string | null;
   avatarUrl: string | null;
+  role: string;
+  orgName: string;
   details: {
     jobTitle: string | null;
     phone: string | null;
@@ -38,15 +42,18 @@ export function ProfileSettingsForm({
   const fileRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <AvatarMark name={displayName} src={avatarUrl} size="lg" />
-        <div className="min-w-0 flex-1 space-y-2">
-          <p className="text-sm font-medium">Profile photo</p>
-          <p className="text-xs text-muted-foreground">
-            Google photos sync on sign-in. Upload a square image under 5 MB.
+    <div className="grid items-start gap-6 lg:grid-cols-[17rem_minmax(0,1fr)] lg:gap-10">
+      <aside className="flex flex-col items-center gap-4 rounded-2xl bg-muted/40 p-6 text-center ring-1 ring-foreground/5">
+        <AvatarMark name={displayName} src={avatarUrl} size="lg" className="size-20 text-2xl" />
+        <div className="min-w-0 max-w-full">
+          <p className="truncate text-base font-semibold tracking-tight">{displayName}</p>
+          {email ? <p className="truncate text-xs text-muted-foreground">{email}</p> : null}
+          <p className="mt-1 text-xs text-muted-foreground">
+            <span className="capitalize">{role}</span> · {orgName}
           </p>
-          <div className="flex flex-wrap gap-2">
+        </div>
+        <div className="w-full space-y-2 border-t border-border/60 pt-4">
+          <div className="flex flex-wrap justify-center gap-2">
             <Button
               type="button"
               size="sm"
@@ -79,6 +86,9 @@ export function ProfileSettingsForm({
               </Button>
             ) : null}
           </div>
+          <p className="text-[11px] leading-4 text-muted-foreground">
+            Google photos sync on sign-in. Square image under 5 MB.
+          </p>
           <input
             ref={fileRef}
             type="file"
@@ -102,10 +112,10 @@ export function ProfileSettingsForm({
             }}
           />
         </div>
-      </div>
+      </aside>
 
       <form
-        className="space-y-4"
+        className="grid gap-x-5 gap-y-4 sm:grid-cols-2"
         action={(formData) => {
           start(async () => {
             const result = await updateProfileAction(orgSlug, formData);
@@ -137,7 +147,6 @@ export function ProfileSettingsForm({
             className="rounded-2xl"
           />
         </Field>
-        <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Job title" htmlFor="job_title">
             <Input
               id="job_title"
@@ -158,8 +167,12 @@ export function ProfileSettingsForm({
               className="rounded-2xl"
             />
           </Field>
-        </div>
-        <Field label="Location" htmlFor="location" hint="City and country, shown on the team page">
+        <Field
+          label="Location"
+          htmlFor="location"
+          hint="City and country, shown on the team page"
+          className="sm:col-span-2"
+        >
           <Input
             id="location"
             name="location"
@@ -173,6 +186,7 @@ export function ProfileSettingsForm({
           label="Mailing address"
           htmlFor="address"
           hint="Optional. Teammates in your studios can see your profile details."
+          className="sm:col-span-2"
         >
           <Textarea
             id="address"
@@ -183,9 +197,11 @@ export function ProfileSettingsForm({
             className="rounded-2xl"
           />
         </Field>
-        <Button type="submit" disabled={pending}>
-          {pending ? "Saving…" : "Save profile"}
-        </Button>
+        <div className="sm:col-span-2">
+          <Button type="submit" disabled={pending}>
+            {pending ? "Saving…" : "Save profile"}
+          </Button>
+        </div>
       </form>
     </div>
   );

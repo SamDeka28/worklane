@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
+  AtSign,
   BookOpen,
   FileText,
   FolderKanban,
@@ -11,6 +12,8 @@ import {
   Home,
   LifeBuoy,
   LogOut,
+  MailCheck,
+  MailPlus,
   Palette,
   Plus,
   Receipt,
@@ -163,6 +166,9 @@ export function CommandPalette({
           <CommandItem onSelect={() => go(`${base}/clients`)}>
             <Search /> Clients
           </CommandItem>
+          <CommandItem onSelect={() => go(`${base}/emails`)}>
+            <MailCheck /> Emails
+          </CommandItem>
           {show("delivery") ? (
             <CommandItem onSelect={() => go(`${base}/projects`)}>
               <FolderKanban /> Projects
@@ -196,10 +202,21 @@ export function CommandPalette({
         <CommandSeparator />
         <CommandGroup heading="Sell">
           {show("crm") ? (
-            <CommandItem onSelect={() => go(`${base}/crm?new=1`)}>
-              <Target /> New lead
-            </CommandItem>
+            <>
+              <CommandItem onSelect={() => go(`${base}/crm?new=1`)}>
+                <Target /> New lead
+              </CommandItem>
+              <CommandItem
+                value="Email a new lead compose send outreach"
+                onSelect={() => go(`${base}/crm?compose=1`)}
+              >
+                <MailPlus /> Email a new lead
+              </CommandItem>
+            </>
           ) : null}
+          <CommandItem value="Compose tracked email" onSelect={() => go(`${base}/emails`)}>
+            <MailCheck /> Compose a tracked email
+          </CommandItem>
           <CommandItem onSelect={() => go(`${base}/clients?new=1`)}>
             <UserPlus /> New client
           </CommandItem>
@@ -243,6 +260,12 @@ export function CommandPalette({
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Account">
+          <CommandItem
+            value="Sending email SMTP mailbox settings"
+            onSelect={() => go(`${base}/settings?tab=email`)}
+          >
+            <AtSign /> Sending email (SMTP)
+          </CommandItem>
           <CommandItem
             onSelect={() => {
               setOpen(false);

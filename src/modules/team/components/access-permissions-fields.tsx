@@ -58,6 +58,7 @@ function clonePermissions(value: MemberPermissions): MemberPermissions {
 function withoutTeam(value: MemberPermissions): MemberPermissions {
   const rest = { ...value };
   delete rest.team;
+  delete rest.mailbox;
   return rest;
 }
 
@@ -119,6 +120,7 @@ export function useAccessPermissionsState(
   );
   const [permissions, setPermissions] = useState<MemberPermissions>(seed);
   const [manageTeam, setManageTeam] = useState(initial?.team?.access === "write");
+  const [ownMailbox, setOwnMailbox] = useState(initial?.mailbox?.access === "write");
 
   const shownPermissions = useMemo(() => {
     if (preset === "progress") return PROGRESS_ONLY_PERMISSIONS;
@@ -175,6 +177,7 @@ export function useAccessPermissionsState(
 
   function reset(next: MemberPermissions | null | undefined, role?: string) {
     setManageTeam(next?.team?.access === "write");
+    setOwnMailbox(next?.mailbox?.access === "write");
     setPreset(inferAccessPreset(next, role));
     setPermissions(
       next
@@ -193,6 +196,8 @@ export function useAccessPermissionsState(
     setTab,
     manageTeam,
     setManageTeam,
+    ownMailbox,
+    setOwnMailbox,
   };
 }
 
@@ -302,6 +307,9 @@ export function AccessPermissionsFields({
   grantLimit,
   manageTeam,
   onManageTeamChange,
+  ownMailbox,
+  onOwnMailboxChange,
+  ownMailboxLocked = false,
 }: {
   preset: AccessPreset;
   shownPermissions: MemberPermissions;
@@ -315,7 +323,13 @@ export function AccessPermissionsFields({
   /** Shown only when the role can hold it (members). */
   manageTeam?: boolean;
   onManageTeamChange?: (next: boolean) => void;
+  /** Shown only when the role can hold it (members). */
+  ownMailbox?: boolean;
+  onOwnMailboxChange?: (next: boolean) => void;
+  /** Team managers can't grant it without holding it. */
+  ownMailboxLocked?: boolean;
 }) {
+  const leadsEditable = shownPermissions.crm?.access === "write";
   const deliveryOn = (shownPermissions.delivery?.access ?? "none") !== "none";
   const custom = preset === "custom";
 
@@ -450,35 +464,76 @@ export function AccessPermissionsFields({
       )}
 
       {onManageTeamChange ? (
-        <button
-          type="button"
-          role="switch"
-          aria-checked={Boolean(manageTeam)}
-          onClick={() => onManageTeamChange(!manageTeam)}
-          className="flex items-center justify-between gap-3 rounded-2xl bg-muted/35 px-3 py-2.5 text-left ring-1 ring-border/25 transition-colors hover:bg-muted/55"
-        >
-          <span className="min-w-0">
-            <span className="block text-sm font-medium tracking-tight">Manage team</span>
-            <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">
-              Invite people and change access, up to their own level
-            </span>
-          </span>
-          <span
-            aria-hidden
-            className={cn(
-              "relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors",
-              manageTeam ? "bg-primary" : "bg-muted-foreground/30",
-            )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform",
-                manageTeam ? "translate-x-4.5" : "translate-x-0.5",
-              )}
-            />
-          </span>
-        </button>
+        <FlagSwitch
+          title="Manage team"
+          hint="Invite people and change access, up to their own level"
+          on={Boolean(manageTeam)}
+          onChange={onManageTeamChange}
+        />
+      ) : null}
+
+      {onOwnMailboxChange ? (
+        <FlagSwitch
+          title="Own mailbox for lead emails"
+          hint={
+            ownMailboxLocked
+              ? "You can’t grant this without having it yourself"
+              : leadsEditable
+                ? "Connect their own Gmail, Outlook, or SMTP in CRM settings → Mailbox"
+                : "Needs Leads set to Edit"
+          }
+          on={Boolean(ownMailbox) && leadsEditable}
+          disabled={!leadsEditable || (ownMailboxLocked && !ownMailbox)}
+          onChange={onOwnMailboxChange}
+        />
       ) : null}
     </div>
+  );
+}
+
+function FlagSwitch({
+  title,
+  hint,
+  on,
+  disabled = false,
+  onChange,
+}: {
+  title: string;
+  hint: string;
+  on: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={() => onChange(!on)}
+      className={cn(
+        "flex items-center justify-between gap-3 rounded-2xl bg-muted/35 px-3 py-2.5 text-left ring-1 ring-border/25 transition-colors hover:bg-muted/55",
+        disabled && "cursor-not-allowed opacity-60 hover:bg-muted/35",
+      )}
+    >
+      <span className="min-w-0">
+        <span className="block text-sm font-medium tracking-tight">{title}</span>
+        <span className="mt-0.5 block text-[11px] leading-snug text-muted-foreground">{hint}</span>
+      </span>
+      <span
+        aria-hidden
+        className={cn(
+          "relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors",
+          on ? "bg-primary" : "bg-muted-foreground/30",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform",
+            on ? "translate-x-4.5" : "translate-x-0.5",
+          )}
+        />
+      </span>
+    </button>
   );
 }

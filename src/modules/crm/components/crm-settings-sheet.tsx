@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
 import {
+  AtSign,
   Copy,
   ExternalLink,
   Globe,
@@ -26,7 +27,13 @@ import {
   updateStageProbabilitiesAction,
 } from "@/modules/crm/settings-actions";
 import type { CrmSettings } from "@/modules/crm/settings";
+import {
+  SignatureModuleSwitch,
+  SignaturePreview,
+} from "@/modules/email-signatures/components/signature-forms";
 import { CrmEmailTemplates } from "@/modules/crm/components/crm-email-templates";
+import { SmtpSenderForm } from "@/modules/email-senders/components/smtp-sender-form";
+import type { SmtpSenderSummary } from "@/modules/email-senders/types";
 import {
   openPipelineStages,
   stageProbabilityBps,
@@ -34,7 +41,25 @@ import {
   type LeadStageRecord,
 } from "@/modules/crm/types";
 
-type SettingsTab = "pipeline" | "lists" | "email" | "intake";
+type SettingsTab = "pipeline" | "lists" | "email" | "mailbox" | "intake";
+
+export type CrmSignature = {
+  /** The studio adds signatures to lead emails. */
+  on: boolean;
+  canEdit: boolean;
+  /** The sender's own signature as it will appear, or null. */
+  html: string | null;
+};
+
+export type CrmMailbox = {
+  allowed: boolean;
+  isAdmin: boolean;
+  saved: SmtpSenderSummary | null;
+  /** Where lead emails go out from without a personal mailbox. */
+  fallback: string;
+  unavailable: string | null;
+  defaultFromName: string;
+};
 
 const noopSubscribe = () => () => {};
 
@@ -95,11 +120,15 @@ export function CrmSettingsSheet({
   stages,
   settings,
   members,
+  mailbox,
+  signature,
 }: {
   orgSlug: string;
   stages: LeadStageRecord[];
   settings: CrmSettings;
   members: CrmMember[];
+  mailbox: CrmMailbox;
+  signature: CrmSignature;
 }) {
   const router = useRouter();
   const origin = useOrigin();
@@ -151,6 +180,7 @@ export function CrmSettingsSheet({
       triggerVariant="outline"
       triggerSize="sm"
       triggerIcon={<SlidersHorizontal className="size-3.5" />}
+      width={tab === "email" ? "wide" : "default"}
       triggerIconOnly
       triggerAriaLabel="CRM settings"
       tabs={
@@ -162,8 +192,14 @@ export function CrmSettingsSheet({
           tabs={[
             { id: "pipeline", label: "Pipeline", icon: TrendingUp },
             { id: "lists", label: "Lists", icon: ListChecks },
-            { id: "email", label: "Email templates", icon: Mail, badge: settings.emailTemplates.length },
-            { id: "intake", label: "Enquiry form", icon: Globe, badge: intake.enabled ? "On" : null },
+            { id: "email", label: "Templates", icon: Mail, badge: settings.emailTemplates.length },
+            {
+              id: "mailbox",
+              label: "Mailbox",
+              icon: AtSign,
+              badge: mailbox.saved && mailbox.allowed ? "On" : null,
+            },
+            { id: "intake", label: "Form", icon: Globe, badge: intake.enabled ? "On" : null },
           ]}
         />
       }
@@ -300,12 +336,92 @@ export function CrmSettingsSheet({
         </div>
       </form>
 
-      <div {...tabPanelProps(idPrefix, "email", tab === "email")}>
+      <div {...tabPanelProps(idPrefix, "email", tab === "email")} className="grid gap-4">
         <Section
           title="Email templates"
           description="Used by Send email on a lead. The composer suggests one based on where the lead is."
         >
           <CrmEmailTemplates orgSlug={orgSlug} templates={settings.emailTemplates} />
+        </Section>
+        <Section
+          title="Signature"
+          description="Added below lead emails and Email a new lead, so templates don’t need one. You can still remove it from a single email."
+        >
+          <SignatureModuleSwitch
+            orgSlug={orgSlug}
+            module="leads"
+            on={signature.on}
+            canEdit={signature.canEdit}
+          />
+          {signature.on ? (
+            signature.html ? (
+              <SignaturePreview html={signature.html} />
+            ) : (
+              <p className="text-sm text-muted-foreground">You don’t have a signature yet.</p>
+            )
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            <a
+              href={`/${orgSlug}/profile#signature`}
+              className="font-medium text-foreground underline-offset-2 hover:underline"
+            >
+              Edit your signature
+            </a>
+            {signature.canEdit ? (
+              <>
+                {" · "}
+                <a
+                  href={`/${orgSlug}/settings?tab=signature`}
+                  className="font-medium text-foreground underline-offset-2 hover:underline"
+                >
+                  Studio signature
+                </a>
+              </>
+            ) : null}
+          </p>
+        </Section>
+      </div>
+
+      <div {...tabPanelProps(idPrefix, "mailbox", tab === "mailbox")}>
+        <Section
+          title="Your mailbox"
+          description="Send lead emails from your own Gmail, Outlook, or any SMTP mailbox, so they come from you and replies land in your inbox. Only used for lead emails."
+        >
+          {mailbox.allowed ? (
+            <SmtpSenderForm
+              orgSlug={orgSlug}
+              scope="personal"
+              saved={mailbox.saved}
+              fallback={mailbox.fallback}
+              unavailable={mailbox.unavailable}
+              defaultFromName={mailbox.defaultFromName}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Your lead emails go out from {mailbox.fallback}. To use your own mailbox, ask an owner
+              or admin to turn on <span className="text-foreground">Own mailbox</span> in your Team
+              access.
+            </p>
+          )}
+          {mailbox.isAdmin ? (
+            <p className="text-xs text-muted-foreground">
+              Choose who can use their own in{" "}
+              <a
+                href={`/${orgSlug}/team`}
+                className="font-medium text-foreground underline-offset-2 hover:underline"
+              >
+                Team → Access
+              </a>
+              . The studio mailbox is in{" "}
+              <a
+                href={`/${orgSlug}/settings?tab=email`}
+                className="font-medium text-foreground underline-offset-2 hover:underline"
+              >
+                Settings
+              </a>
+              .
+            </p>
+          ) : null}
         </Section>
       </div>
 

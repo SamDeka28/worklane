@@ -8,6 +8,8 @@ import { DangerZone } from "@/components/studio/type-to-confirm";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
+import { SmtpSenderForm } from "@/modules/email-senders/components/smtp-sender-form";
+import type { SmtpSenderSummary } from "@/modules/email-senders/types";
 import type { MemberPermissions } from "@/modules/identity/permissions";
 import type { OrgRole } from "@/modules/identity/types";
 import { removeMemberAction, updateMemberAccessAction } from "@/modules/team/actions";
@@ -24,8 +26,11 @@ export function EditMemberAccessSheet({
   actorRole,
   actorPermissions,
   projects = [],
+  mailbox,
 }: {
   orgSlug: string;
+  /** Owners and admins only: the member's lead-email mailbox, which they can set up for them. */
+  mailbox?: { sender: SmtpSenderSummary | null; fallback: string; unavailable: string | null };
   member: {
     id: string;
     userId: string;
@@ -67,6 +72,11 @@ export function EditMemberAccessSheet({
   const canEditAdmins = actorRole === "owner";
   const canRemove = !member.isYou && (actorRole === "owner" || member.role !== "admin");
   const confirmValue = (member.email || member.displayName || "").trim();
+  const mailboxInUse =
+    member.role === "admin" ||
+    (member.role === "member" &&
+      member.permissions?.mailbox?.access === "write" &&
+      member.permissions?.crm?.access === "write");
 
   if (lockedOwner) return null;
   if (!elevated && (member.isYou || member.role === "admin")) return null;
@@ -96,6 +106,7 @@ export function EditMemberAccessSheet({
           formData.set("permissions", JSON.stringify(access.shownPermissions));
           formData.set("project_role", projectRole);
           if (role === "member" && access.manageTeam) formData.set("manage_team", "1");
+          if (role === "member" && access.ownMailbox) formData.set("own_mailbox", "1");
           for (const pid of selectedProjectIds) {
             formData.append("project_ids", pid);
           }
@@ -175,6 +186,9 @@ export function EditMemberAccessSheet({
           grantLimit={elevated ? undefined : actorPermissions}
           manageTeam={access.manageTeam}
           onManageTeamChange={role === "member" ? access.setManageTeam : undefined}
+          ownMailbox={access.ownMailbox}
+          onOwnMailboxChange={role === "member" ? access.setOwnMailbox : undefined}
+          ownMailboxLocked={!elevated && actorPermissions.mailbox?.access !== "write"}
           onTabToggle={access.setTab}
         />
 
@@ -182,6 +196,26 @@ export function EditMemberAccessSheet({
           {pending ? "Saving…" : "Save access"}
         </Button>
       </form>
+      {mailbox && mailboxInUse ? (
+        <section className="mt-6 grid gap-2 border-t border-border/50 pt-5">
+          <div>
+            <p className="text-sm font-semibold tracking-tight">Lead email mailbox</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {member.isYou ? "Your" : `${label}’s`} lead emails go out from this mailbox. You can
+              connect it for them, or they can in CRM settings → Mailbox.
+            </p>
+          </div>
+          <SmtpSenderForm
+            orgSlug={orgSlug}
+            scope="personal"
+            memberId={member.isYou ? undefined : member.userId}
+            saved={mailbox.sender}
+            fallback={mailbox.fallback}
+            unavailable={mailbox.unavailable}
+            defaultFromName={member.displayName?.trim() || label}
+          />
+        </section>
+      ) : null}
       {canRemove && confirmValue ? (
         <DangerZone
           className="mt-8"

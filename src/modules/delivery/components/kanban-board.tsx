@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { LayoutGrid, List, MoreHorizontal, Plus } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { TaskListView } from "@/modules/delivery/components/task-list-view";
 import { cn } from "@/lib/utils";
 import {
   createColumnAction,
@@ -187,7 +188,19 @@ export function KanbanBoard({
   const [activeHeight, setActiveHeight] = useState(76);
   const [modal, setModal] = useState<TaskModalState | null>(null);
   const sensors = useBoardDndSensors();
-  const linkedTaskId = useSearchParams().get("task");
+  const searchParams = useSearchParams();
+  const linkedTaskId = searchParams.get("task");
+  const [view, setViewState] = useState<"board" | "list">(() =>
+    orgMode && searchParams.get("view") === "list" ? "list" : "board",
+  );
+
+  function setView(next: "board" | "list") {
+    setViewState(next);
+    const url = new URL(window.location.href);
+    if (next === "list") url.searchParams.set("view", "list");
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
   const linkedModal = useMemo<TaskModalState | null>(
     () =>
       linkedTaskId && tasks.some((task) => task.id === linkedTaskId)
@@ -372,6 +385,60 @@ export function KanbanBoard({
     });
   }
 
+  function moveTaskTo(taskId: string, toColumn: string) {
+    const fromColumn = columnOf(taskId);
+    if (!canWrite || !fromColumn || fromColumn === toColumn) return;
+    const moving = items.get(fromColumn)?.find((task) => task.id === taskId);
+    if (!moving) return;
+    const status = useStatusLanes ? statusFromLaneId(toColumn) : null;
+    const inserted = [
+      ...(items.get(toColumn) ?? []),
+      {
+        ...moving,
+        columnId: useStatusLanes ? moving.columnId : toColumn,
+        ...(status ? { status } : {}),
+      },
+    ];
+    const next = new Map(items);
+    next.set(fromColumn, (items.get(fromColumn) ?? []).filter((task) => task.id !== taskId));
+    next.set(toColumn, inserted);
+    start(async () => {
+      setItems(next);
+      const result = useStatusLanes
+        ? status
+          ? await updateTaskStatusAction(orgSlug, taskId, status)
+          : null
+        : await moveTaskAction(
+            orgSlug,
+            taskId,
+            toColumn,
+            inserted.map((task) => task.id),
+          );
+      if (result?.error) toast.error(result.error);
+    });
+  }
+
+  function addCard(columnId: string) {
+    setModal({
+      mode: "create",
+      columnId: useStatusLanes ? null : columnId,
+      status: useStatusLanes ? (statusFromLaneId(columnId) ?? "todo") : undefined,
+      projectId: filterProject || projects[0]?.id || resolvedProjectId,
+    });
+  }
+
+  function peopleFor(task: BoardTask) {
+    const ids = task.assigneeUserIds?.length
+      ? task.assigneeUserIds
+      : task.assigneeUserId
+        ? [task.assigneeUserId]
+        : [];
+    return ids.map((userId, index) => ({
+      name: task.assigneeLabels?.[index] ?? assigneeById.get(userId)?.label ?? "Assignee",
+      src: assigneeById.get(userId)?.avatarUrl,
+    }));
+  }
+
   const mentions: MentionItem[] = useMemo(
     () => [
       ...milestones.map((item) => ({
@@ -521,10 +588,49 @@ export function KanbanBoard({
             <p className="ml-auto shrink-0 text-sm font-bold tabular-nums text-muted-foreground">
               {filteredTasks.length}
             </p>
+            <div data-slot="segmented" className="flex shrink-0 items-center gap-1 rounded-full bg-muted p-1">
+              {(
+                [
+                  { value: "board", label: "Board view", Icon: LayoutGrid },
+                  { value: "list", label: "List view", Icon: List },
+                ] as const
+              ).map(({ value, label, Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  title={label}
+                  aria-label={label}
+                  aria-current={view === value ? "page" : undefined}
+                  onClick={() => setView(value)}
+                  className={cn(
+                    "inline-flex size-8 items-center justify-center rounded-full transition-colors",
+                    view === value
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}
 
+      {view === "list" ? (
+        <TaskListView
+          columns={orderedColumns}
+          items={items}
+          showProject={orgMode}
+          taskMilestoneRefs={taskMilestoneRefs}
+          peopleFor={peopleFor}
+          canWrite={canWrite}
+          selectedTaskId={activeModal?.mode === "edit" ? activeModal.taskId : null}
+          onOpenTask={openTask}
+          onAddCard={addCard}
+          onMove={moveTaskTo}
+        />
+      ) : (
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <DndContext
           sensors={sensors}
@@ -604,16 +710,7 @@ export function KanbanBoard({
                   dropHeight={activeHeight}
                   showProject={orgMode}
                   onOpenTask={openTask}
-                  onAddCard={() =>
-                    setModal({
-                      mode: "create",
-                      columnId: useStatusLanes ? null : column.id,
-                      status: useStatusLanes
-                        ? (statusFromLaneId(column.id) ?? "todo")
-                        : undefined,
-                      projectId: filterProject || projects[0]?.id || resolvedProjectId,
-                    })
-                  }
+                  onAddCard={() => addCard(column.id)}
                 />
               ))}
             </SortableContext>
@@ -635,20 +732,7 @@ export function KanbanBoard({
                         dueOn={overlayTask.dueOn}
                         projectLabel={overlayTask.projectName}
                         clientLabel={overlayTask.clientName}
-                        people={
-                          (overlayTask.assigneeUserIds?.length
-                            ? overlayTask.assigneeUserIds
-                            : overlayTask.assigneeUserId
-                              ? [overlayTask.assigneeUserId]
-                              : []
-                          ).map((userId, index) => ({
-                            name:
-                              overlayTask.assigneeLabels?.[index] ??
-                              assigneeById.get(userId)?.label ??
-                              "Assignee",
-                            src: assigneeById.get(userId)?.avatarUrl,
-                          }))
-                        }
+                        people={peopleFor(overlayTask)}
                         commentCount={overlayTask.commentCount}
                         className="shadow-lift ring-primary/30"
                       />
@@ -666,6 +750,7 @@ export function KanbanBoard({
             : null}
         </DndContext>
       </div>
+      )}
 
       <TaskModal
         orgSlug={orgSlug}

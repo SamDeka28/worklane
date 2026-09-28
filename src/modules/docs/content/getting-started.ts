@@ -48,10 +48,12 @@ export const GETTING_STARTED: DocArticle[] = [
           ["Home", "Studio health: what's owed, what to bill next, pipeline, and a single **Do next** action."],
           ["Leads", "Your sales pipeline as a board or a list, with customizable stages."],
           ["Clients", "Who you work with and bill: contacts, projects, documents, and the ledger."],
-          ["Projects", "Delivery: milestones, tasks, hours, documents, split, and a credential vault."],
+          ["Emails", "Send tracked emails, or track the ones you send from your own mail app, and see when they're opened."],
+          ["Projects", "Delivery: milestones, tasks, hours, documents, split, and a **Credentials** vault."],
           ["Board", "Studio Board — every open card across active projects in one kanban."],
-          ["Documents", "Proposals and SOWs with live @ tags, versions, and click-to-sign."],
+          ["Documents", "Proposals, SOWs, contracts, NDAs, and more — with live @ tags, versions, and click-to-sign."],
           ["Finance", "Charges, payments, what's ready to bill, and a month-end wrap."],
+          ["Invoices", "Draft invoices, issue them to the ledger, then send them to the client."],
           ["Partners", "Collaborator earnings from project splits, balances, and payouts."],
           ["Team", "Invite people and choose exactly what each person can see."],
         ],
@@ -88,7 +90,7 @@ export const GETTING_STARTED: DocArticle[] = [
         items: [
           {
             title: "Go to Sign up",
-            body: "Open [/signup](/signup) and enter your **Studio name** (optional), **Email**, and a **Password** of at least 8 characters — or use **Google**.",
+            body: "Open [/signup](/signup) and enter your **Studio name** (optional), **Email**, a **Password** of at least 8 characters, and **Confirm password**, then click **Create account** — or use **Google**.",
           },
           {
             title: "Confirm your email if asked",
@@ -103,7 +105,7 @@ export const GETTING_STARTED: DocArticle[] = [
       {
         type: "callout",
         tone: "note",
-        text: "You become the studio **Owner**. Leads, Documents, Projects, Finance, and Partners are switched on from the start.",
+        text: "You become the studio **Owner**. Leads, Documents, Projects, Finance (with Invoices), and Partners are switched on from the start. The client portal starts off.",
       },
       { type: "h2", text: "2. Add your first lead or client" },
       {
@@ -146,6 +148,7 @@ export const GETTING_STARTED: DocArticle[] = [
         type: "steps",
         items: [
           { title: "Charge a milestone", body: "On the milestone's **…** menu choose **Charge**. You'll see “Charge posted: collect when paid”." },
+          { title: "Send an invoice if the client needs one", body: "Go to **Invoices → New invoice**, issue it to the ledger, then send it. See [Invoices](/docs/invoices)." },
           { title: "Record the payment", body: "When the client pays, go to **Finance → Collect**, pick the client, enter the amount and method, and click **Record**." },
           { title: "Share with partners", body: "If partners worked on it, their share of net is posted automatically. Pay them from **Partners → Settle**." },
         ],
@@ -170,19 +173,23 @@ export const GETTING_STARTED: DocArticle[] = [
       { type: "h2", text: "Sidebar" },
       {
         type: "p",
-        text: "The sidebar is grouped the way work flows: **Home**, then **Sell** (Leads, Clients), **Deliver** (Projects, Board, Documents, Team), and **Money** (Finance, Invoices, Partners).",
+        text: "The sidebar is grouped the way work flows: **Home**, then **Sell** (Leads, Clients, Emails), **Deliver** (Projects, Board, Documents, Team), and **Money** (Finance, Invoices, Partners).",
       },
       {
         type: "list",
         items: [
-          "Home, Clients, and Team are always visible.",
-          "Other items appear only when the module is on for your studio and your access to it isn't **Off**. Board follows your Projects access.",
+          "Home, Clients, Emails, and Team are always visible.",
+          "Other items appear only when the module is on for your studio and your access to it isn't **Off**. Board follows your Projects access, and Invoices follows your Finance access.",
           "On wide screens you see icons and labels; on medium screens an icon strip (hover for names); on phones it opens from the menu button in the header.",
         ],
       },
       {
         type: "p",
-        text: "At the top of the sidebar, click your studio name to switch studios or **Add organization**. At the bottom, your account menu has **Profile**, **Appearance**, **Studio settings**, **Help & docs**, and **Sign out**.",
+        text: "At the top of the sidebar, click your studio name to switch studios or **Add organization**. At the bottom, your account menu has **Profile**, **Appearance** (a quick theme picker plus **Browse all themes…**), **Studio settings**, **Help & docs**, and **Sign out**.",
+      },
+      {
+        type: "p",
+        text: "**Studio settings** has a menu on the left: **Studio** (name, currency, your role), **Business details** (legal name, address, tax ID — used in the Billed by block on invoices and in email signature fields), **Sending email** and **Email signature** for owners and admins, and **Portal** share links when the client portal is on. **Team** and **Invoices** at the bottom jump to those pages.",
       },
       { type: "h2", text: "Header" },
       {
@@ -190,9 +197,10 @@ export const GETTING_STARTED: DocArticle[] = [
         head: ["Control", "What it does"],
         rows: [
           ["Page title", "Shows where you are — Home is titled **Overview**."],
-          ["Search (⌘K)", "Opens the command palette to jump anywhere or create something."],
+          ["Search (⌘K)", "Opens the command palette to jump anywhere, create something, or search the docs."],
+          ["Docs", "Opens this documentation in a new tab."],
           ["Bell", "Your notifications, with an unread badge and live updates."],
-          ["+ Create", "Quick create: New lead, New client, New project, New charge, Collect, New document. Hidden for read-only roles."],
+          ["+ Create", "Quick create: New lead, Email a new lead, New client, New project, New charge, Collect, New document. Each item shows only if you can use that module. Hidden for read-only roles."],
           ["Avatar", "The same account menu as the sidebar."],
         ],
       },
@@ -205,11 +213,12 @@ export const GETTING_STARTED: DocArticle[] = [
         type: "table",
         head: ["Group", "Items"],
         rows: [
-          ["Go", "Home, Leads, Clients, Projects, Documents, Finance, Partners, Team, Settings, Appearance"],
-          ["Sell", "New lead, New client, New document"],
+          ["Documentation", "Matching help articles as you type — they open in a new tab"],
+          ["Go", "Home, Leads, Clients, Emails, Projects, Documents, Finance, Partners, Team, Settings, Appearance"],
+          ["Sell", "New lead, Email a new lead, Compose a tracked email, New client, New document"],
           ["Deliver", "New project, Log work, Invite teammate"],
           ["Money", "Collect, New charge, Invoices"],
-          ["Account", "Help & documentation, Sign out"],
+          ["Account", "Sending email (SMTP), Help & documentation, Sign out"],
         ],
       },
       {
@@ -251,10 +260,15 @@ export const GETTING_STARTED: DocArticle[] = [
         type: "p",
         text: "Open the switcher and pick a studio. Worklane keeps you in the same section when it exists — switching while on Projects lands you on the other studio's Projects. Your last studio is remembered and opened the next time you sign in.",
       },
+      { type: "h2", text: "Rename a studio" },
+      {
+        type: "p",
+        text: "Open **Studio settings** from the account menu and edit **Studio name**. Each studio has its own settings, business details, sending email, and invoice settings.",
+      },
       {
         type: "callout",
         tone: "note",
-        text: "Your profile, theme, and notification email preferences are personal and follow you across every studio. Access and roles are set separately in each studio.",
+        text: "Your profile, theme, and notification email preferences are personal and follow you across every studio. Access, roles, and your own sending mailbox are set separately in each studio.",
       },
     ],
   },

@@ -44,6 +44,43 @@ export function suggestTemplate(
   return templates.find((item) => item.purpose === purpose) ?? templates[0] ?? null;
 }
 
+const PERSONAL_MAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.com",
+  "yahoo.co.in",
+  "yahoo.co.uk",
+  "outlook.com",
+  "hotmail.com",
+  "live.com",
+  "msn.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "aol.com",
+  "proton.me",
+  "protonmail.com",
+  "zoho.com",
+  "yandex.com",
+  "gmx.com",
+  "mail.com",
+  "rediffmail.com",
+]);
+
+/** "sam@acme-studio.co.uk" → "Acme Studio"; personal mailboxes give null. */
+export function companyFromEmail(email: string) {
+  const domain = email.trim().toLowerCase().split("@")[1];
+  if (!domain || PERSONAL_MAIL_DOMAINS.has(domain)) return null;
+  const parts = domain.split(".");
+  const label = parts.length > 2 && parts.at(-2)!.length <= 3 ? parts.at(-3) : parts.at(-2);
+  if (!label) return null;
+  return label
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
 export function replySubject(subject: string) {
   return /^re:/i.test(subject.trim()) ? subject.trim() : `Re: ${subject.trim()}`;
 }

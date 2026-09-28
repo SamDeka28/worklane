@@ -1,18 +1,23 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { ChevronDown, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { Braces, ChevronDown, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { Field } from "@/components/studio/field";
+import {
+  VariableChips,
+  VariableField,
+  insertVariableAt,
+  type FieldElement,
+} from "@/modules/crm/components/email-variables";
 import { saveEmailTemplatesAction } from "@/modules/crm/settings-actions";
 import {
   DEFAULT_EMAIL_TEMPLATES,
-  EMAIL_MERGE_FIELDS,
   EMAIL_TEMPLATE_PURPOSES,
   type EmailTemplatePurpose,
   type LeadEmailTemplate,
@@ -29,6 +34,9 @@ export function CrmEmailTemplates({
   const [pending, start] = useTransition();
   const [templates, setTemplates] = useState(initial);
   const [openId, setOpenId] = useState<string | null>(null);
+  const subjectRef = useRef<FieldElement | null>(null);
+  const bodyRef = useRef<FieldElement | null>(null);
+  const lastField = useRef<FieldElement | null>(null);
 
   function patch(id: string, change: Partial<LeadEmailTemplate>) {
     setTemplates((list) => list.map((item) => (item.id === id ? { ...item, ...change } : item)));
@@ -46,20 +54,25 @@ export function CrmEmailTemplates({
     });
   }
 
+  function insert(el: FieldElement, text: string, template: LeadEmailTemplate) {
+    if (el === subjectRef.current) {
+      insertVariableAt(el, template.subject, text, (subject) => patch(template.id, { subject }));
+    } else {
+      insertVariableAt(el, template.body, text, (body) => patch(template.id, { body }));
+    }
+  }
+
   return (
-    <div className="grid gap-2">
-      <p className="text-xs text-muted-foreground">
-        Placeholders:{" "}
-        {EMAIL_MERGE_FIELDS.map((field, index) => (
-          <span key={field.key}>
-            {index > 0 ? ", " : ""}
-            <code className="rounded bg-card px-1 py-0.5 text-[11px] ring-1 ring-foreground/8" title={field.label}>
-              {`{{${field.key}}}`}
-            </code>
-          </span>
-        ))}
-      </p>
-      <ul className="grid gap-2">
+    <div className="grid gap-4">
+      <div className="flex items-start gap-2.5 rounded-xl bg-muted/50 px-3.5 py-3 text-xs leading-5 text-muted-foreground">
+        <Braces className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+        <p>
+          Type <kbd className="rounded bg-card px-1 font-sans font-semibold text-foreground ring-1 ring-foreground/10">@</kbd>{" "}
+          in a subject or message to insert a variable like first name or company. It’s filled in
+          from the lead when the email is sent.
+        </p>
+      </div>
+      <ul className="grid gap-2.5">
         {templates.map((template) => {
           const open = openId === template.id;
           return (
@@ -68,7 +81,7 @@ export function CrmEmailTemplates({
                 type="button"
                 aria-expanded={open}
                 onClick={() => setOpenId(open ? null : template.id)}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+                className="flex w-full items-center gap-2 px-4 py-3 text-left"
               >
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">
                   {template.name || "Untitled"}
@@ -81,44 +94,68 @@ export function CrmEmailTemplates({
                 />
               </button>
               {open ? (
-                <div className="grid gap-2.5 border-t border-border/60 p-3">
-                  <div className="grid gap-2 sm:grid-cols-[1fr_11rem]">
-                    <Input
-                      value={template.name}
-                      maxLength={60}
-                      aria-label="Template name"
-                      placeholder="Template name"
-                      onChange={(event) => patch(template.id, { name: event.target.value })}
-                    />
-                    <NativeSelect
-                      aria-label="Used for"
-                      value={template.purpose}
-                      onChange={(event) =>
-                        patch(template.id, { purpose: event.target.value as EmailTemplatePurpose })
-                      }
-                    >
-                      {EMAIL_TEMPLATE_PURPOSES.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {item.label}
-                        </option>
-                      ))}
-                    </NativeSelect>
+                <div className="grid gap-4 border-t border-border/60 px-4 pt-4 pb-3">
+                  <div className="grid gap-3 sm:grid-cols-[1fr_11rem]">
+                    <Field label="Name" htmlFor={`${template.id}_name`}>
+                      <Input
+                        id={`${template.id}_name`}
+                        value={template.name}
+                        maxLength={60}
+                        placeholder="Template name"
+                        onChange={(event) => patch(template.id, { name: event.target.value })}
+                      />
+                    </Field>
+                    <Field label="Used for" htmlFor={`${template.id}_purpose`}>
+                      <NativeSelect
+                        id={`${template.id}_purpose`}
+                        value={template.purpose}
+                        onChange={(event) =>
+                          patch(template.id, { purpose: event.target.value as EmailTemplatePurpose })
+                        }
+                      >
+                        {EMAIL_TEMPLATE_PURPOSES.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </Field>
                   </div>
-                  <Input
-                    value={template.subject}
-                    maxLength={200}
-                    aria-label="Subject"
-                    placeholder="Subject"
-                    onChange={(event) => patch(template.id, { subject: event.target.value })}
+                  <Field label="Subject" htmlFor={`${template.id}_subject`}>
+                    <VariableField
+                      id={`${template.id}_subject`}
+                      value={template.subject}
+                      onValueChange={(subject) => patch(template.id, { subject })}
+                      values={{}}
+                      fieldRef={subjectRef}
+                      onFocusField={(el) => (lastField.current = el)}
+                      maxLength={200}
+                      placeholder="Subject line"
+                    />
+                  </Field>
+                  <Field label="Message" htmlFor={`${template.id}_body`}>
+                    <VariableField
+                      id={`${template.id}_body`}
+                      multiline
+                      value={template.body}
+                      onValueChange={(body) => patch(template.id, { body })}
+                      values={{}}
+                      fieldRef={bodyRef}
+                      onFocusField={(el) => (lastField.current = el)}
+                      rows={8}
+                      maxLength={10_000}
+                      className="leading-6"
+                      placeholder="Write the email. Type @ to insert a variable."
+                    />
+                  </Field>
+                  <VariableChips
+                    values={{}}
+                    highlightMissing={false}
+                    target={lastField}
+                    fallback={bodyRef}
+                    onInsert={(el, text) => insert(el, text, template)}
                   />
-                  <Textarea
-                    value={template.body}
-                    rows={8}
-                    maxLength={10_000}
-                    aria-label="Message"
-                    onChange={(event) => patch(template.id, { body: event.target.value })}
-                  />
-                  <div>
+                  <div className="-ml-2">
                     <Button
                       type="button"
                       size="sm"

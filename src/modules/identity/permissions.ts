@@ -37,8 +37,11 @@ export function canDeleteModule(
   return mod?.access === "write" && mod.delete === true;
 }
 
-/** `team` is not an org module: `write` lets a member invite people and change access. */
-export type PermissionKey = ModuleKey | "team";
+/**
+ * Not org modules: `team: write` lets a member invite people and change access;
+ * `mailbox: write` lets them send lead emails from their own SMTP mailbox.
+ */
+export type PermissionKey = ModuleKey | "team" | "mailbox";
 
 export type MemberPermissions = Partial<Record<PermissionKey, ModulePermission>>;
 
@@ -46,6 +49,16 @@ export type MemberPermissions = Partial<Record<PermissionKey, ModulePermission>>
 export function canManageTeam(input: { role: string; permissions: MemberPermissions }): boolean {
   if (input.role === "owner" || input.role === "admin") return true;
   return input.role === "member" && input.permissions.team?.access === "write";
+}
+
+/** Owners and admins always; members with `mailbox: write` who can also edit leads. */
+export function canUseOwnMailbox(input: { role: string; permissions: MemberPermissions }): boolean {
+  if (input.role === "owner" || input.role === "admin") return true;
+  return (
+    input.role === "member" &&
+    input.permissions.mailbox?.access === "write" &&
+    input.permissions.crm?.access === "write"
+  );
 }
 
 const ACCESS_RANK: Record<AccessLevel, number> = { none: 0, read: 1, write: 2 };
@@ -58,6 +71,7 @@ const GRANT_LABELS: Record<PermissionKey, string> = {
   documents: "Documents",
   portal: "Portal",
   team: "Team",
+  mailbox: "Own mailbox",
 };
 
 /**
@@ -178,7 +192,11 @@ export function parseMemberPermissions(raw: unknown): MemberPermissions | null {
     const mod = parsed[key];
     if (!mod) continue;
     const allowDelete =
-      key !== "team" && isDeletableModule(key) && mod.access === "write" && mod.delete === true;
+      key !== "team" &&
+      key !== "mailbox" &&
+      isDeletableModule(key) &&
+      mod.access === "write" &&
+      mod.delete === true;
     cleaned[key] = { ...mod, delete: allowDelete ? true : undefined };
   }
   return cleaned;
@@ -227,7 +245,7 @@ export function resolveMemberPermissions(input: {
   for (const key of Object.keys(base) as PermissionKey[]) {
     const mod = base[key];
     if (!mod) continue;
-    if (key !== "team" && key !== "portal" && !input.orgModules[key]) {
+    if (key !== "team" && key !== "mailbox" && key !== "portal" && !input.orgModules[key]) {
       resolved[key] = { ...mod, access: "none" };
       continue;
     }

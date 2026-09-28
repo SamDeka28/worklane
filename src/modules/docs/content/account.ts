@@ -16,19 +16,19 @@ export const ACCOUNT: DocArticle[] = [
         items: [
           "The badge shows unread count and updates live — new notifications also pop up as a toast.",
           "Switch between **All** and **Unread**, or **Mark all read**.",
-          "Click an item to open what it's about. Its **…** menu marks it read/unread or deletes it.",
+          "Click an item to open what it's about and mark it read. Its **…** menu has **Mark as read** / **Mark as unread** and **Delete**.",
           "**View all** opens the full inbox; the gear opens email settings.",
         ],
       },
       { type: "h2", text: "The inbox" },
       {
         type: "p",
-        text: "The Notifications page groups items by day, filters by **Unread** and category, and loads older items 30 at a time.",
+        text: "The Notifications page groups items by day (**Today**, **Yesterday**, then dates). Filter by **All** or **Unread** and by category, and click **Load older** to fetch 30 more.",
       },
       { type: "h2", text: "Choose what reaches your email" },
       {
         type: "p",
-        text: "In-app notifications are always on. In the **Email me about** card, switch each category on or off, then click **Save email settings**. Preferences apply across all your studios.",
+        text: "In-app notifications are always on. In the **Email me about** card, switch each category on or off, then click **Save email settings**. Preferences apply across all your studios. If email isn't configured for your Worklane deployment, only in-app notifications are sent.",
       },
       {
         type: "table",
@@ -36,10 +36,11 @@ export const ACCOUNT: DocArticle[] = [
         rows: [
           ["Mentions", "Someone @mentions you", "On"],
           ["Tasks", "A task is assigned to you", "On"],
-          ["Comments", "New comments on tasks you're on", "Off"],
+          ["Comments", "New comments on tasks you're assigned to or discussing", "Off"],
           ["Projects", "You're added to a project", "On"],
-          ["Leads", "Someone moves a lead you own", "On"],
-          ["Clients", "Clients added or removed (owners)", "On"],
+          ["Leads", "A lead you own changes stage, a lead is handed to you, a new enquiry arrives, or a lead opens your email", "On"],
+          ["Clients", "Clients added or removed (owners), and client activity on documents you sent", "On"],
+          ["Tracked emails", "The first time someone opens an email you tracked", "Off"],
           ["Payments & invoices", "Payments received; invoices created, issued, sent, voided", "Off"],
           ["Partner payouts", "Settlements for your partner profile", "On"],
           ["Team & access", "Invites accepted, your access changed", "On"],
@@ -50,6 +51,11 @@ export const ACCOUNT: DocArticle[] = [
       {
         type: "p",
         text: "When you send a document, you're notified under **Clients** the first time the client opens the email and the first time they view the link, and whenever they comment, suggest a change, request changes, or sign. **Changes requested** and **signed** always email you, whatever your settings. Signed notifications attach the signed PDF, plus the signature certificate once both sides have signed.",
+      },
+      { type: "h2", text: "Email open alerts" },
+      {
+        type: "p",
+        text: "You hear about the first open of a tracked email (under **Tracked emails**), a document email (under **Clients**), and a lead email (under **Leads**). These open alerts appear in the app only — they aren't emailed or copied to owners, whatever your settings.",
       },
       {
         type: "callout",
@@ -68,7 +74,11 @@ export const ACCOUNT: DocArticle[] = [
     blocks: [
       {
         type: "p",
-        text: "Type **@** in task descriptions, comments, lead notes, or documents. A menu appears grouped into **People**, **Partners**, **Clients**, **Leads**, **Projects**, **Milestones**, and **Tasks**.",
+        text: "Type **@** in any rich-text field that shows **Type @ to tag** — task descriptions, comments, lead notes, documents, and client, partner, project, and milestone notes. A menu appears grouped into **People**, **Partners**, **Clients**, **Leads**, **Projects**, **Milestones**, and **Tasks**. Keep typing to filter.",
+      },
+      {
+        type: "p",
+        text: "In documents, the menu also offers **Create client**, project, milestone, or task, so you can add one without leaving the editor.",
       },
       {
         type: "keys",
@@ -84,8 +94,10 @@ export const ACCOUNT: DocArticle[] = [
         type: "list",
         items: [
           "Tagged teammates and partners with a login get “{Name} mentioned you in …” with a **View mention** link.",
-          "Only newly added mentions notify — editing a comment won't ping people twice.",
-          "You only see things in the menu you have access to — for example, Clients and Leads need Leads access.",
+          "Mentions notify from task descriptions, comments, lead notes, and documents. Tags in other notes are links only.",
+          "Only newly added mentions notify — editing a task description, lead note, or document won't ping people twice.",
+          "Someone mentioned in a comment gets the mention, not a separate comment notification.",
+          "You only see things in the menu you have access to — Clients and Leads need Leads access; Projects, Milestones, and Tasks need Projects access.",
         ],
       },
     ],
@@ -93,7 +105,7 @@ export const ACCOUNT: DocArticle[] = [
   {
     slug: "profile-and-appearance",
     title: "Profile and themes",
-    summary: "Set your name and photo, and pick from twelve editor-style themes that follow you across devices.",
+    summary: "Set your name and photo, and pick from fifteen themes that follow you across devices.",
     category: "account",
     kind: "how-to",
     related: ["navigating-worklane", "keyboard-shortcuts"],
@@ -102,22 +114,31 @@ export const ACCOUNT: DocArticle[] = [
       {
         type: "steps",
         items: [
-          { title: "Account menu → Profile", body: "" },
-          { title: "Photo", body: "**Upload photo** — a square PNG, JPEG, WebP, or GIF under 5 MB. Google photos sync on sign-in unless you've uploaded your own." },
-          { title: "Display name", body: "Shown on cards, comments, and mentions." },
-          { title: "Contact details", body: "**Job title**, **Phone**, and **Location** show next to your name on the Team page. **Mailing address** is optional. Everyone in your studios can see your profile details." },
+          { title: "Account menu → Profile", body: "At the bottom of the sidebar." },
+          { title: "Photo", body: "**Upload photo** (or **Change photo**) — a square PNG, JPEG, WebP, or GIF under 5 MB. **Remove** clears it. Google photos sync on sign-in unless you've uploaded your own." },
+          { title: "Display name", body: "Required. Shown on cards, comments, and mentions." },
+          { title: "Contact details", body: "**Job title**, **Phone**, and **Location** show next to your name on the Team page. **Mailing address** is optional. Teammates in your studios can see your profile details." },
           { title: "Click Save profile", body: "" },
         ],
+      },
+      {
+        type: "p",
+        text: "**Email** is read-only — it's managed by your sign-in provider.",
+      },
+      { type: "h2", text: "Email signature" },
+      {
+        type: "p",
+        text: "Under **Email signature** on your Profile, choose **Studio signature** (the one an owner or admin set in **Settings**), **My own**, or **None**. Your choice saves right away. **My own** opens the editor with a live preview beside it; click **Save signature** there, and **Edit signature** later to change it. It's added below lead emails and Compose emails you send. If your studio uses one signature for everyone, you'll see it here without choices. See [Add a signature](/docs/email-tracking).",
       },
       { type: "h2", text: "Studio business details" },
       {
         type: "p",
-        text: "In **Studio settings → Business details**, owners and editors set the studio's legal name, address, email, phone, tax ID, website, and registration numbers like PAN or CIN. Invoices print these in **Billed by**. They're the same details as the **Business details** tab in invoice settings, so editing either place updates both.",
+        text: "In **Studio settings**, open **Business details** in the left menu. Owners, admins, and members with edit access set the studio's legal name, address, email, phone, tax ID, website, and registration numbers like PAN or CIN under **More details**, then click **Save business details**. Invoices print these in **Billed by**. They're the same details as the **Business details** tab in invoice settings, so editing either place updates both.",
       },
       { type: "h2", text: "Themes" },
       {
         type: "p",
-        text: "Open **Appearance** from the account menu, Studio settings, or ⌘K. Click a theme and it applies instantly; it's saved to your account and follows you to every device.",
+        text: "Open **Appearance** from the account menu or ⌘K. The gallery groups themes into **Worklane**, **Dark**, and **Light**. Click a theme and it applies instantly; it's saved to your account and follows you to every device.",
       },
       {
         type: "table",
@@ -144,12 +165,12 @@ export const ACCOUNT: DocArticle[] = [
       { type: "h3", text: "Style, surface and components" },
       {
         type: "p",
-        text: "The tabs above the themes hold three more settings. **Style** sets the material of every card: **Clean** (the default), **Glass** (frosted, translucent layers), **Neumorphic** (soft extruded shapes in one tone), **Clay** (puffy and playful), or **Brutalist** (bold outlines and hard shadows). **Surface** sets what sits behind each page: **Tinted** (the default), **Gradient**, **Solid**, **Outline**, or **Open** (cards float on the background). **Components** sets the shape of cards, buttons, and fields, from **Fluid** and **Soft** (pill buttons) through **Balanced** to **Crisp** and **Sharp** (square corners). The preview updates as you hover, and every choice saves to your account.",
+        text: "The tabs above the themes hold three more settings. **Style** sets the material of every card: **Clean** (the default), **Glass** (frosted, translucent layers), **Neumorphic** (soft extruded shapes in one tone), **Clay** (puffy and playful), or **Brutalist** (bold outlines and hard shadows). **Surface** sets what sits behind each page: **Tinted** (the default), **Gradient**, **Solid**, **Outline**, or **Open** (cards float on the background). **Components** sets the shape of cards, buttons, and fields, from **Fluid** and **Soft** (pill buttons) through **Balanced** (the default) to **Crisp** and **Sharp** (square corners). The preview updates as you hover, and every choice saves to your account. **Reset to defaults** returns to Worklane Dark, Clean, Tinted, and Balanced.",
       },
       {
         type: "callout",
         tone: "tip",
-        text: "Quick switch: account menu → **Appearance** lists every theme with a swatch. In the gallery, arrow keys preview themes as you move.",
+        text: "Quick switch: account menu → **Appearance** lists every theme with a swatch, plus **Browse all themes…**. In the gallery, arrow keys apply themes as you move.",
       },
     ],
   },
@@ -167,6 +188,7 @@ export const ACCOUNT: DocArticle[] = [
         items: [
           { keys: ["⌘/Ctrl", "K"], label: "Open or close the command palette" },
           { keys: ["↑", "↓", "Enter"], label: "Move and choose in menus" },
+          { keys: ["←", "→"], label: "Switch tabs in a sheet header" },
           { keys: ["Esc"], label: "Close sheets, dialogs, and menus" },
         ],
       },
@@ -180,13 +202,30 @@ export const ACCOUNT: DocArticle[] = [
           { keys: ["@"], label: "Mention something" },
         ],
       },
+      { type: "h2", text: "Leads and emails" },
+      {
+        type: "keys",
+        items: [
+          { keys: ["⌘/Ctrl", "Enter"], label: "Log a lead activity, or send an email from a lead or the Emails page" },
+          { keys: ["@"], label: "Insert a variable like first name or company in an email subject or message" },
+          { keys: ["↑", "↓", "Enter", "Tab"], label: "Pick a variable from the @ list" },
+        ],
+      },
       { type: "h2", text: "Document editor" },
       {
         type: "keys",
         items: [
+          { keys: ["⌘/Ctrl", "S"], label: "Save" },
+          { keys: ["⌘/Ctrl", "⇧", "F"], label: "Enter or exit full screen (Esc also exits)" },
+          { keys: ["⌘/Ctrl", "Z"], label: "Undo" },
+          { keys: ["⌘/Ctrl", "⇧", "Z"], label: "Redo" },
           { keys: ["⌘/Ctrl", "B"], label: "Bold" },
           { keys: ["⌘/Ctrl", "I"], label: "Italic" },
           { keys: ["⌘/Ctrl", "U"], label: "Underline" },
+          { keys: ["⌘/Ctrl", "⇧", "S"], label: "Strikethrough" },
+          { keys: ["⌘/Ctrl", "⇧", "8"], label: "Bulleted list" },
+          { keys: ["⌘/Ctrl", "⇧", "7"], label: "Numbered list" },
+          { keys: ["⌘/Ctrl", "⇧", "9"], label: "Checklist" },
           { keys: ["⌘/Ctrl", "⇧", "."], label: "Bigger text" },
           { keys: ["⌘/Ctrl", "⇧", ","], label: "Smaller text" },
           { keys: ["Tab", "⇧ Tab"], label: "Indent / outdent" },
@@ -205,6 +244,14 @@ export const ACCOUNT: DocArticle[] = [
         type: "p",
         text: "Drag with a mouse after a small movement; on touch screens, press and hold a card briefly before dragging so normal swipes still scroll.",
       },
+      { type: "h2", text: "Help docs" },
+      {
+        type: "keys",
+        items: [
+          { keys: ["/"], label: "Jump to search on the docs home page" },
+          { keys: ["↑", "↓", "Enter"], label: "Pick a search result" },
+        ],
+      },
     ],
   },
   {
@@ -215,6 +262,16 @@ export const ACCOUNT: DocArticle[] = [
     kind: "guide",
     related: ["credentials", "roles-and-access", "project-teams"],
     blocks: [
+      { type: "h2", text: "Signing in" },
+      {
+        type: "list",
+        items: [
+          "Sign in with email and password (at least 8 characters) or with **Google**.",
+          "New accounts confirm their email with a code before signing in. If you try to sign in unconfirmed, a new code is sent.",
+          "**Forgot password?** on the sign-in page emails a reset code. Enter it with your new password and click **Update password**.",
+          "Codes can be resent after 60 seconds. **Sign out** is in the account menu and ⌘K.",
+        ],
+      },
       { type: "h2", text: "Access is enforced by the database" },
       {
         type: "p",
@@ -272,7 +329,7 @@ export const ACCOUNT: DocArticle[] = [
       { type: "h3", text: "I can't delete a client" },
       {
         type: "p",
-        text: "Clients with projects, charges, invoices, or payments can't be deleted — use **Archive** instead to take them off the active list.",
+        text: "Clients with projects, charges, invoices, or payments can't be deleted — use **Archive** instead to take them off the active list. Deleting also needs delete permission; owners and admins always have it.",
       },
       { type: "h3", text: "The Charge option is missing on a milestone" },
       {
@@ -292,7 +349,7 @@ export const ACCOUNT: DocArticle[] = [
       { type: "h3", text: "Invite, invoice, or document emails aren't arriving" },
       {
         type: "p",
-        text: "If Team shows **Email not configured**, the studio's email (SMTP) isn't set up. Invite links are copied for you to share yourself. For invoices, download the **PDF** and use **I sent it another way**. Documents are sent by email, so sending one needs email set up. If email is configured, ask the recipient to check spam and look at the document's **Delivery log** to confirm the address it went to. **Copy link** there gives you the client's link to share another way.",
+        text: "If Team shows **Email not configured**, the studio's email (SMTP) isn't set up. Invite links are copied for you to share yourself. For invoices, download the **PDF** and use **I sent it another way**. Documents, lead emails, and Compose can still send if an owner or admin connects the studio's mailbox under **Settings → Sending email**, and lead emails can also go out from your own mailbox in **CRM settings → Mailbox** (see [Choose the address emails come from](/docs/email-tracking)); if one fails, click **Send test email** there to see the error. If email is configured, ask the recipient to check spam and look at the document's **Delivery log** to confirm the address it went to. **Copy link** there gives you the client's link to share another way.",
       },
       { type: "h3", text: "I can't edit a sent or signed document" },
       {
@@ -308,6 +365,16 @@ export const ACCOUNT: DocArticle[] = [
       {
         type: "p",
         text: "A line is linked to a milestone or work log that already has an open charge. Remove the line, or click **Issue anyway (double bill)** if you really mean to bill it twice. See [Invoices](/docs/invoices).",
+      },
+      { type: "h3", text: "I'm not getting notification emails" },
+      {
+        type: "p",
+        text: "Check the category is on under **Notifications → Email me about**, and that you clicked **Save email settings**. If the card says email isn't configured, only in-app notifications are sent. Email open alerts are in-app only. See [Notifications](/docs/notifications).",
+      },
+      { type: "h3", text: "I forgot my password" },
+      {
+        type: "p",
+        text: "Click **Forgot password?** on the sign-in page, then **Send reset code**. Enter the code from the email with a new password. If you signed up with Google, use the **Google** button instead.",
       },
       { type: "h3", text: "My theme didn't change" },
       {

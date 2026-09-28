@@ -5,7 +5,9 @@ import { requireOrg, requireWritableOrg } from "@/modules/identity/org";
 import { generateShareToken } from "@/modules/portal/token";
 import { TRACKED_EMAIL_COLUMNS, mapTrackedEmail } from "@/modules/emails/queries";
 import type { ComposeEmailInput, TrackedEmail, TrackedEmailOpen } from "@/modules/emails/types";
-import { isEmailConfigured, personalEmailHtml, sendEmail } from "@/shared/email";
+import { resolveSender } from "@/modules/email-senders/server";
+import { senderSignature } from "@/modules/email-signatures/server";
+import { personalEmailHtml, personalEmailText, sendEmail } from "@/shared/email";
 import { mailPixelUrl } from "@/shared/email/pixel";
 
 const CREATE_LIMIT = 200;
@@ -129,8 +131,11 @@ export async function sendTrackedEmailAction(
   input: ComposeEmailInput,
 ): Promise<{ ok: true; id: string } | { error: string }> {
   const ctx = await requireWritableOrg(orgSlug);
-  if (!isEmailConfigured()) {
-    return { error: "Email isn't set up on this workspace yet (SMTP_USER and SMTP_PASS)." };
+  const sender = await resolveSender(ctx.org.id, ctx.userId);
+  if (!sender.via) {
+    return {
+      error: "Email sending isn't set up. An owner or admin can connect the studio's mailbox in Settings.",
+    };
   }
 
   const to = input.to.trim().toLowerCase();
@@ -152,13 +157,14 @@ export async function sendTrackedEmailAction(
   if (!subject) return { error: "Add a subject" };
   if (!body) return { error: "Write the email first" };
 
-  const [{ count: recent }, leadId] = await Promise.all([
+  const [{ count: recent }, leadId, signature] = await Promise.all([
     ctx.supabase
       .from("mail_pixels")
       .select("id", { count: "exact", head: true })
       .eq("created_by", ctx.userId)
       .gt("sent_at", new Date(Date.now() - SEND_WINDOW_MS).toISOString()),
     matchLead(ctx, to),
+    input.includeSignature ? senderSignature(ctx, "emails") : Promise.resolve(null),
   ]);
   if ((recent ?? 0) >= SEND_LIMIT) {
     return { error: "You've sent a lot of emails in the last few minutes. Try again shortly." };
@@ -188,8 +194,9 @@ export async function sendTrackedEmailAction(
     subject,
     fromName: senderName ? `${senderName} · ${ctx.org.name}` : ctx.org.name,
     replyTo: ctx.user.email ?? undefined,
-    html: personalEmailHtml({ body, pixelUrl: mailPixelUrl(token) }),
-    text: body,
+    html: personalEmailHtml({ body, signature, pixelUrl: mailPixelUrl(token) }),
+    text: personalEmailText({ body, signature }),
+    smtp: sender.smtp,
   });
   if (!result.ok) {
     await ctx.supabase.from("mail_pixels").delete().eq("id", id);

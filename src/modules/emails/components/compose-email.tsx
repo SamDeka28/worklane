@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { sendTrackedEmailAction } from "@/modules/emails/actions";
 import type { EmailContact } from "@/modules/emails/types";
+import { ComposerSignature } from "@/modules/email-signatures/components/signature-forms";
+import type { RenderedSignature } from "@/modules/email-signatures/types";
 
 const EMPTY = { to: "", cc: "", subject: "", body: "" };
 
@@ -26,12 +28,17 @@ export function ComposeEmailButton({
   contacts,
   configured,
   replyTo,
+  fromAddress,
+  signature,
 }: {
   orgSlug: string;
   contacts: EmailContact[];
   /** SMTP is set up on this workspace. */
   configured: boolean;
   replyTo: string | null;
+  fromAddress: string | null;
+  /** Filled-in signature added below the message, or null for none. */
+  signature: RenderedSignature | null;
 }) {
   const router = useRouter();
   const listId = useId();
@@ -39,6 +46,7 @@ export function ComposeEmailButton({
   const [showCc, setShowCc] = useState(false);
   const [draft, setDraft] = useState(EMPTY);
   const [sending, setSending] = useState(false);
+  const [withSignature, setWithSignature] = useState(true);
 
   const contact = contacts.find((item) => item.email === draft.to.trim().toLowerCase());
   const canSend =
@@ -54,7 +62,10 @@ export function ComposeEmailButton({
     setOpen(false);
     const toastId = toast.loading(`Sending to ${draft.to.trim()}…`);
     try {
-      const result = await sendTrackedEmailAction(orgSlug, draft);
+      const result = await sendTrackedEmailAction(orgSlug, {
+        ...draft,
+        includeSignature: withSignature && Boolean(signature),
+      });
       if ("error" in result) {
         toast.error(result.error, { id: toastId });
         setOpen(true);
@@ -78,7 +89,11 @@ export function ComposeEmailButton({
         type="button"
         onClick={() => setOpen(true)}
         disabled={!configured}
-        title={configured ? undefined : "Email sending isn’t set up on this workspace yet"}
+        title={
+          configured
+            ? undefined
+            : "Email sending isn’t set up. An owner or admin can connect the studio’s mailbox in Settings."
+        }
       >
         <PenLine />
         Compose
@@ -88,7 +103,7 @@ export function ComposeEmailButton({
           <DialogHeader>
             <DialogTitle>New email</DialogTitle>
             <DialogDescription>
-              Sent from your studio’s address with open tracking built in.
+              Sent from {fromAddress ?? "your studio’s address"} with open tracking built in.
               {replyTo ? ` Replies go to ${replyTo}.` : ""}
             </DialogDescription>
           </DialogHeader>
@@ -176,6 +191,16 @@ export function ComposeEmailButton({
                   }
                 }}
               />
+              {signature ? (
+                <div className="rounded-xl ring-1 ring-foreground/10">
+                  <ComposerSignature
+                    signature={signature}
+                    include={withSignature}
+                    onIncludeChange={setWithSignature}
+                    editHref={`/${orgSlug}/profile#signature`}
+                  />
+                </div>
+              ) : null}
             </div>
           </form>
           <DialogFooter className="items-center sm:justify-between">

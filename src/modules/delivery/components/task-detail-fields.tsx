@@ -19,6 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { PickerSearch, matchesQuery } from "@/components/ui/search-select";
 import { cn } from "@/lib/utils";
 import {
   KIND_MARK,
@@ -112,6 +113,12 @@ export function TaskDetailFields({
   const [milestoneOpen, setMilestoneOpen] = useState(false);
   const [projectOpen, setProjectOpen] = useState(false);
   const [labelDraft, setLabelDraft] = useState("");
+  const [projectQuery, setProjectQuery] = useState("");
+  const [assigneeQuery, setAssigneeQuery] = useState("");
+  const [milestoneQuery, setMilestoneQuery] = useState("");
+  const visibleProjects = (projects ?? []).filter((row) => matchesQuery(row.name, projectQuery));
+  const visibleAssignees = assignees.filter((row) => matchesQuery(row.label, assigneeQuery));
+  const visibleMilestones = milestones.filter((row) => matchesQuery(row.name, milestoneQuery));
 
   const selectedAssignees = assignees.filter((row) =>
     assigneeUserIds.includes(row.userId),
@@ -156,7 +163,13 @@ export function TaskDetailFields({
 
       {showProjectPicker ? (
         <PropertyRow icon={<FolderKanban className="size-3.5" />} label="Project">
-          <Popover open={projectOpen} onOpenChange={setProjectOpen}>
+          <Popover
+            open={projectOpen}
+            onOpenChange={(open) => {
+              setProjectOpen(open);
+              if (!open) setProjectQuery("");
+            }}
+          >
             <PopoverTrigger
               disabled={!canWrite || projectLocked}
               render={
@@ -172,9 +185,23 @@ export function TaskDetailFields({
               </span>
               <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
             </PopoverTrigger>
-            <PopoverContent align="start" className="w-64 p-1.5">
+            <PopoverContent align="start" className="w-64 gap-0 p-1.5">
+              <PickerSearch
+                value={projectQuery}
+                onChange={setProjectQuery}
+                placeholder="Search projects…"
+                onEnter={() => {
+                  const first = visibleProjects[0];
+                  if (!first) return;
+                  onProjectChange(first.id);
+                  setProjectOpen(false);
+                }}
+              />
               <ul className="max-h-56 overflow-y-auto">
-                {(projects ?? []).map((project) => {
+                {visibleProjects.length === 0 ? (
+                  <li className="px-2.5 py-2 text-sm text-muted-foreground">No matches</li>
+                ) : null}
+                {visibleProjects.map((project) => {
                   const active = project.id === projectId;
                   return (
                     <li key={project.id}>
@@ -270,7 +297,13 @@ export function TaskDetailFields({
       </PropertyRow>
 
       <PropertyRow icon={<UserRound className="size-3.5" />} label="Assignees">
-        <Popover open={assigneeOpen} onOpenChange={setAssigneeOpen}>
+        <Popover
+          open={assigneeOpen}
+          onOpenChange={(open) => {
+            setAssigneeOpen(open);
+            if (!open) setAssigneeQuery("");
+          }}
+        >
           <PopoverTrigger
             disabled={!canWrite || assignees.length === 0}
             render={
@@ -309,8 +342,19 @@ export function TaskDetailFields({
             </span>
             <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-72 p-1.5">
+          <PopoverContent align="start" className="w-72 gap-0 p-1.5">
+            <PickerSearch
+              value={assigneeQuery}
+              onChange={setAssigneeQuery}
+              placeholder="Search people…"
+              onEnter={() => {
+                const first = visibleAssignees[0];
+                if (first) toggleAssignee(first.userId);
+                setAssigneeQuery("");
+              }}
+            />
             <ul className="max-h-56 overflow-y-auto">
+              {assigneeQuery ? null : (
               <li>
                 <button
                   type="button"
@@ -328,7 +372,11 @@ export function TaskDetailFields({
                   Clear all
                 </button>
               </li>
-              {assignees.map((member) => {
+              )}
+              {visibleAssignees.length === 0 ? (
+                <li className="px-2.5 py-2 text-sm text-muted-foreground">No matches</li>
+              ) : null}
+              {visibleAssignees.map((member) => {
                 const active = assigneeUserIds.includes(member.userId);
                 return (
                   <li key={member.userId}>
@@ -367,7 +415,13 @@ export function TaskDetailFields({
       </PropertyRow>
 
       <PropertyRow icon={<MilestoneIcon className="size-3.5" />} label="Milestone">
-        <Popover open={milestoneOpen} onOpenChange={setMilestoneOpen}>
+        <Popover
+          open={milestoneOpen}
+          onOpenChange={(open) => {
+            setMilestoneOpen(open);
+            if (!open) setMilestoneQuery("");
+          }}
+        >
           <PopoverTrigger
             disabled={!canWrite}
             render={
@@ -383,8 +437,24 @@ export function TaskDetailFields({
             </span>
             <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-64 p-1.5">
+          <PopoverContent align="start" className="w-64 gap-0 p-1.5">
+            <PickerSearch
+              value={milestoneQuery}
+              onChange={setMilestoneQuery}
+              placeholder="Search milestones…"
+              onEnter={() => {
+                const first = visibleMilestones[0];
+                if (!first) return;
+                onMilestoneChange(first.id);
+                setMilestoneOpen(false);
+              }}
+            />
             <ul className="max-h-56 overflow-y-auto">
+              {milestoneQuery ? (
+                visibleMilestones.length === 0 ? (
+                  <li className="px-2.5 py-2 text-sm text-muted-foreground">No matches</li>
+                ) : null
+              ) : (
               <li>
                 <button
                   type="button"
@@ -402,7 +472,8 @@ export function TaskDetailFields({
                   None
                 </button>
               </li>
-              {milestones.map((item) => {
+              )}
+              {visibleMilestones.map((item) => {
                 const active = item.id === milestoneId;
                 return (
                   <li key={item.id}>

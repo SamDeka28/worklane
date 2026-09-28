@@ -13,8 +13,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  VariableChips,
+  VariableField,
+  insertVariableAt,
+} from "@/modules/crm/components/email-variables";
 import { sendLeadEmailAction } from "@/modules/crm/email-actions";
 import type { LeadEmailHistory, LeadEmailSender } from "@/modules/crm/queries";
 import {
@@ -33,6 +37,11 @@ import {
   type LeadRecord,
   type LeadStageRecord,
 } from "@/modules/crm/types";
+import { ComposerSignature } from "@/modules/email-signatures/components/signature-forms";
+
+/** Fields inside the composer box: the box draws the frame, so the themed well is switched off. */
+export const BARE_FIELD =
+  "rounded-none! border-0 bg-transparent! shadow-none! ring-0 backdrop-blur-none! hover:ring-0 focus-visible:ring-0";
 
 const FOLLOW_UP_PRESETS = [
   { label: "2 days", days: 2 },
@@ -41,11 +50,15 @@ const FOLLOW_UP_PRESETS = [
   { label: "2 weeks", days: 14 },
 ];
 
+const fieldClass = `h-11 w-full px-0 ${BARE_FIELD}`;
+
 const NO_HISTORY: LeadEmailHistory = { proposalSent: false, previous: [] };
 const historyCache = new Map<string, LeadEmailHistory>();
 const historyRequests = new Map<string, Promise<LeadEmailHistory>>();
 
 const historyKey = (orgSlug: string, leadId: string) => `${orgSlug}/${leadId}`;
+
+type FieldElement = HTMLInputElement | HTMLTextAreaElement;
 
 /** `fresh` skips the cached result but still joins a request already in flight. */
 function loadEmailHistory(orgSlug: string, leadId: string, fresh = false) {
@@ -88,6 +101,88 @@ function Toggle({
       />
       {children}
     </label>
+  );
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 px-3.5">
+      <span className="w-16 shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
+    </div>
+  );
+}
+
+export function AfterSending({
+  followUp,
+  onFollowUp,
+  followDays,
+  onFollowDays,
+  stageToggle,
+  track,
+  onTrack,
+}: {
+  followUp: boolean;
+  onFollowUp: (value: boolean) => void;
+  followDays: number;
+  onFollowDays: (value: number) => void;
+  stageToggle: { label: string; checked: boolean; onChange: (value: boolean) => void } | null;
+  track: boolean;
+  onTrack: (value: boolean) => void;
+}) {
+  return (
+    <div className="grid gap-3 rounded-xl bg-muted/40 px-3.5 py-3">
+      <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
+        After sending
+      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <Toggle checked={followUp} onChange={onFollowUp}>
+          Follow up if no reply in
+        </Toggle>
+        <div className="flex flex-wrap gap-1.5">
+          {FOLLOW_UP_PRESETS.map((preset) => (
+            <button
+              key={preset.days}
+              type="button"
+              aria-pressed={followUp && followDays === preset.days}
+              disabled={!followUp}
+              onClick={() => onFollowDays(preset.days)}
+              className={cn(
+                "rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition-colors disabled:opacity-50",
+                followUp && followDays === preset.days
+                  ? "bg-primary text-primary-foreground ring-primary"
+                  : "bg-card text-muted-foreground ring-foreground/10 hover:text-foreground",
+              )}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {stageToggle ? (
+        <Toggle checked={stageToggle.checked} onChange={stageToggle.onChange}>
+          {stageToggle.label}
+        </Toggle>
+      ) : null}
+      <Toggle checked={track} onChange={onTrack}>
+        Track opens and notify me
+      </Toggle>
+    </div>
+  );
+}
+
+export function SenderNote({ sender }: { sender: LeadEmailSender }) {
+  if (!sender.configured || !sender.fromAddress) return <span />;
+  return (
+    <p className="min-w-0 truncate text-xs text-muted-foreground">
+      From <span className="font-medium text-foreground">{sender.fromAddress}</span>
+      {sender.via === "personal"
+        ? " (your SMTP)"
+        : sender.via === "studio"
+          ? " (studio SMTP)"
+          : ""}
+      {sender.email && sender.via !== "personal" ? ` · replies to ${sender.email}` : ""}
+    </p>
   );
 }
 
@@ -172,6 +267,9 @@ function LeadEmailComposer({
   onClose: () => void;
 }) {
   const sending = useRef(false);
+  const subjectRef = useRef<FieldElement | null>(null);
+  const bodyRef = useRef<FieldElement | null>(null);
+  const lastField = useRef<FieldElement | null>(null);
   const templates = settings.emailTemplates;
   const [history, setHistory] = useState<LeadEmailHistory | null>(
     () => historyCache.get(historyKey(orgSlug, lead.id)) ?? null,
@@ -184,6 +282,7 @@ function LeadEmailComposer({
   const [cc, setCc] = useState("");
   const [showCc, setShowCc] = useState(false);
   const [track, setTrack] = useState(true);
+  const [withSignature, setWithSignature] = useState(true);
   const [followUp, setFollowUp] = useState(true);
   const [followDays, setFollowDays] = useState(3);
 
@@ -191,22 +290,23 @@ function LeadEmailComposer({
   const nextStage = open[0]?.slug === lead.stage ? open[1] : undefined;
   const [advance, setAdvance] = useState(Boolean(nextStage));
 
+  const values = Object.fromEntries(
+    Object.entries(leadMergeValues(lead, { name: sender.name, orgName: sender.orgName })).filter(
+      ([, value]) => value,
+    ),
+  );
+
   function compose(
     template: LeadEmailTemplate | null,
     known: LeadEmailHistory,
     threadId: string | null,
   ): Draft {
-    const values = leadMergeValues(lead, { name: sender.name, orgName: sender.orgName });
     const thread = threadId ? known.previous.find((item) => item.id === threadId) : undefined;
     return {
       templateId: template?.id ?? null,
       threadId: thread?.id ?? null,
-      subject: thread
-        ? replySubject(thread.subject)
-        : template
-          ? fillTemplate(template.subject, values)
-          : "",
-      body: template ? fillTemplate(template.body, values) : "",
+      subject: thread ? replySubject(thread.subject) : (template?.subject ?? ""),
+      body: template?.body ?? "",
     };
   }
 
@@ -223,6 +323,14 @@ function LeadEmailComposer({
   function edit(next: Draft | ((current: Draft) => Draft)) {
     touched.current = true;
     setDraft(next);
+  }
+
+  function insert(el: FieldElement, text: string) {
+    if (el === subjectRef.current) {
+      insertVariableAt(el, draft.subject, text, (subject) => edit((current) => ({ ...current, subject })));
+    } else {
+      insertVariableAt(el, draft.body, text, (body) => edit((current) => ({ ...current, body })));
+    }
   }
 
   useEffect(() => {
@@ -248,13 +356,13 @@ function LeadEmailComposer({
 
   const known = history ?? NO_HISTORY;
   const lastEmail = known.previous[0] ?? null;
-  const leftover = unfilledFields(`${draft.subject}\n${draft.body}`);
+  const missing = unfilledFields(fillTemplate(`${draft.subject}\n${draft.body}`, values));
   const followOn = addDays(followDays);
   const firstName = lead.contactName?.trim().split(/\s+/)[0];
   const canSend =
     sender.configured &&
     Boolean(to.trim() && draft.subject.trim() && draft.body.trim()) &&
-    leftover.length === 0;
+    missing.length === 0;
 
   async function send() {
     if (!sender.configured || sending.current || !canSend) return;
@@ -264,17 +372,19 @@ function LeadEmailComposer({
     const toastId = toast.loading(`Sending to ${recipient}…`);
     const followUpOn = followUp ? followOn : null;
     const movedTo = advance && nextStage ? nextStage : null;
+    const subject = fillTemplate(draft.subject, values);
     try {
       const result = await sendLeadEmailAction(orgSlug, lead.id, {
         to: recipient,
         cc: showCc ? cc : "",
-        subject: draft.subject,
-        body: draft.body,
+        subject,
+        body: fillTemplate(draft.body, values),
         trackOpens: track,
+        includeSignature: withSignature && Boolean(sender.signature),
         templateId: draft.templateId,
         replyToId: draft.threadId,
         followUp: followUpOn
-          ? { text: `Follow up on “${draft.subject.replace(/^re:\s*/i, "")}”`, on: followUpOn }
+          ? { text: `Follow up on “${subject.replace(/^re:\s*/i, "")}”`, on: followUpOn }
           : null,
         moveToStage: movedTo?.slug ?? null,
       });
@@ -310,21 +420,21 @@ function LeadEmailComposer({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[92dvh] grid-cols-[minmax(0,1fr)] gap-5 overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Email {firstName || lead.name}</DialogTitle>
           <DialogDescription>
-            Sent from your address, logged on the timeline, and tracked when it’s opened.
+            Logged on the timeline and tracked when it’s opened.
           </DialogDescription>
         </DialogHeader>
 
         {!sender.configured ? (
           <p className="rounded-xl bg-muted/50 p-4 text-sm text-muted-foreground">
-            Email isn’t set up on this workspace yet. Add SMTP_USER and SMTP_PASS to send from
-            Worklane.
+            Email sending isn’t set up yet. Connect a mailbox in CRM settings → Mailbox, or ask
+            an owner or admin to connect the studio’s in Settings.
           </p>
         ) : (
-          <div className="grid gap-3">
+          <div className="grid gap-4">
             {templates.length > 0 ? (
               <div role="radiogroup" aria-label="Template" className="flex flex-wrap gap-1.5">
                 {templates.map((template) => {
@@ -359,68 +469,90 @@ function LeadEmailComposer({
               </div>
             ) : null}
 
-            <div className="grid gap-2 rounded-xl ring-1 ring-foreground/8">
-              <div className="flex items-center gap-2 border-b border-border/60 px-3">
-                <span className="w-14 text-xs font-medium text-muted-foreground">To</span>
-                <Input
-                  type="email"
-                  value={to}
-                  onChange={(event) => setTo(event.target.value)}
-                  placeholder="name@company.com"
-                  aria-label="To"
-                  className="h-10 flex-1 border-0 bg-transparent px-0 shadow-none ring-0 hover:ring-0 focus-visible:ring-0"
-                />
-                {!showCc ? (
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-muted-foreground hover:text-foreground"
-                    onClick={() => setShowCc(true)}
-                  >
-                    Cc
-                  </button>
-                ) : null}
-              </div>
-              {showCc ? (
-                <div className="flex items-center gap-2 border-b border-border/60 px-3">
-                  <span className="w-14 text-xs font-medium text-muted-foreground">Cc</span>
+            <div className="grid gap-2">
+              <div className="rounded-xl ring-1 ring-foreground/10 [&>*+*]:border-t [&>*+*]:border-border/60">
+                <Row label="To">
                   <Input
-                    value={cc}
-                    onChange={(event) => setCc(event.target.value)}
-                    placeholder="Separate addresses with commas"
-                    aria-label="Cc"
-                    className="h-10 flex-1 border-0 bg-transparent px-0 shadow-none ring-0 hover:ring-0 focus-visible:ring-0"
+                    type="email"
+                    value={to}
+                    onChange={(event) => setTo(event.target.value)}
+                    placeholder="name@company.com"
+                    aria-label="To"
+                    autoComplete="off"
+                    data-1p-ignore
+                    data-lpignore="true"
+                    data-bwignore
+                    className={fieldClass}
                   />
-                </div>
-              ) : null}
-              <div className="flex items-center gap-2 border-b border-border/60 px-3">
-                <span className="w-14 text-xs font-medium text-muted-foreground">Subject</span>
-                <Input
-                  value={draft.subject}
-                  onChange={(event) => edit((current) => ({ ...current, subject: event.target.value }))}
-                  maxLength={200}
-                  aria-label="Subject"
-                  className="h-10 flex-1 border-0 bg-transparent px-0 shadow-none ring-0 hover:ring-0 focus-visible:ring-0"
+                  {!showCc ? (
+                    <button
+                      type="button"
+                      className="shrink-0 text-xs font-semibold text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowCc(true)}
+                    >
+                      Cc
+                    </button>
+                  ) : null}
+                </Row>
+                {showCc ? (
+                  <Row label="Cc">
+                    <Input
+                      value={cc}
+                      onChange={(event) => setCc(event.target.value)}
+                      placeholder="Separate addresses with commas"
+                      aria-label="Cc"
+                      autoComplete="off"
+                      className={fieldClass}
+                    />
+                  </Row>
+                ) : null}
+                <Row label="Subject">
+                  <VariableField
+                    value={draft.subject}
+                    onValueChange={(subject) => edit((current) => ({ ...current, subject }))}
+                    values={values}
+                    fieldRef={subjectRef}
+                    onFocusField={(el) => (lastField.current = el)}
+                    maxLength={200}
+                    aria-label="Subject"
+                    autoComplete="off"
+                    wrapperClassName="w-full"
+                    className={fieldClass}
+                  />
+                </Row>
+                <VariableField
+                  multiline
+                  value={draft.body}
+                  onValueChange={(body) => edit((current) => ({ ...current, body }))}
+                  values={values}
+                  fieldRef={bodyRef}
+                  onFocusField={(el) => (lastField.current = el)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                      event.preventDefault();
+                      send();
+                    }
+                  }}
+                  rows={12}
+                  maxLength={20_000}
+                  aria-label="Message"
+                  placeholder="Write your email. Type @ to insert a variable."
+                  className={`min-h-56 resize-y px-3.5 py-3 leading-6 ${BARE_FIELD}`}
+                />
+                <ComposerSignature
+                  signature={sender.signature}
+                  include={withSignature}
+                  onIncludeChange={setWithSignature}
+                  editHref={`/${orgSlug}/profile#signature`}
                 />
               </div>
-              <Textarea
-                value={draft.body}
-                onChange={(event) => edit((current) => ({ ...current, body: event.target.value }))}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                    event.preventDefault();
-                    send();
-                  }
-                }}
-                rows={12}
-                maxLength={20_000}
-                aria-label="Message"
-                className="min-h-56 resize-y border-0 bg-transparent px-3 shadow-none ring-0 hover:ring-0 focus-visible:ring-0"
-              />
+              <VariableChips values={values} target={lastField} fallback={bodyRef} onInsert={insert} />
             </div>
 
-            {leftover.length > 0 ? (
+            {missing.length > 0 ? (
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                Fill in {leftover.map((key) => `{{${key}}}`).join(", ")} before sending.
+                This lead has no value for {missing.map((key) => `{{${key}}}`).join(", ")}. Fill
+                it in on the lead or remove it from the email.
               </p>
             ) : null}
 
@@ -443,54 +575,33 @@ function LeadEmailComposer({
               </Toggle>
             ) : null}
 
-            <div className="grid gap-2.5 rounded-xl bg-muted/40 p-3">
-              <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-                After sending
-              </p>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                <Toggle checked={followUp} onChange={setFollowUp}>
-                  Follow up if no reply in
-                </Toggle>
-                <div className="flex flex-wrap gap-1.5">
-                  {FOLLOW_UP_PRESETS.map((preset) => (
-                    <button
-                      key={preset.days}
-                      type="button"
-                      aria-pressed={followUp && followDays === preset.days}
-                      disabled={!followUp}
-                      onClick={() => setFollowDays(preset.days)}
-                      className={cn(
-                        "rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition-colors disabled:opacity-50",
-                        followUp && followDays === preset.days
-                          ? "bg-primary text-primary-foreground ring-primary"
-                          : "bg-card text-muted-foreground ring-foreground/10 hover:text-foreground",
-                      )}
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {nextStage ? (
-                <Toggle checked={advance} onChange={setAdvance}>
-                  Move to {nextStage.name}
-                </Toggle>
-              ) : null}
-              <Toggle checked={track} onChange={setTrack}>
-                Track opens and notify me
-              </Toggle>
-            </div>
+            <AfterSending
+              followUp={followUp}
+              onFollowUp={setFollowUp}
+              followDays={followDays}
+              onFollowDays={setFollowDays}
+              stageToggle={
+                nextStage
+                  ? { label: `Move to ${nextStage.name}`, checked: advance, onChange: setAdvance }
+                  : null
+              }
+              track={track}
+              onTrack={setTrack}
+            />
           </div>
         )}
 
-        <DialogFooter>
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="button" onClick={send} disabled={!canSend}>
-            <Mail />
-            Send
-          </Button>
+        <DialogFooter className="items-center sm:justify-between">
+          <SenderNote sender={sender} />
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={send} disabled={!canSend}>
+              <Mail />
+              Send
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

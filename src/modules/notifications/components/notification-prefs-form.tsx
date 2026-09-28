@@ -51,6 +51,24 @@ export function NotificationPrefsForm({
         {NOTIFICATION_CATEGORIES.map((category) => {
           const meta = NOTIFICATION_CATEGORY_META[category];
           const on = state[category];
+          if (meta.inAppOnly) {
+            return (
+              <div
+                key={category}
+                className="flex items-center justify-between gap-4 rounded-xl px-2.5 py-2.5"
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{meta.label}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {meta.description}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  In-app only
+                </span>
+              </div>
+            );
+          }
           return (
             <label
               key={category}

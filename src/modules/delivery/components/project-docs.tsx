@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { FileImage, FileText, X } from "lucide-react";
+import { FileImage, FileText, UploadCloud, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type DragEvent,
+  type ReactNode,
+} from "react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ActionSheet } from "@/components/studio/action-sheet";
 import { Field } from "@/components/studio/field";
@@ -266,11 +275,13 @@ export function ProjectDocumentsHub({
   canWrite: boolean;
   createDocument?: ReactNode;
 }) {
+  const { pending, upload } = useProjectUpload(orgSlug, projectId);
+
   return (
-    <div className="space-y-4">
+    <div className="flex flex-1 flex-col gap-4">
       {canWrite ? (
         <div className="flex flex-wrap items-center gap-2">
-          <UploadProjectFileButton orgSlug={orgSlug} projectId={projectId} />
+          <UploadProjectFileButton pending={pending} onFiles={upload} />
           {createDocument ? (
             <div key="create-document" className="contents">
               {createDocument}
@@ -285,46 +296,55 @@ export function ProjectDocumentsHub({
         </div>
       ) : null}
 
-      {documents.length === 0 && files.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Link a proposal/SOW from Docs, or upload a PDF for this engagement.
-        </p>
-      ) : (
-        <ul className="divide-y divide-border/40 overflow-hidden rounded-[1.75rem] bg-muted/40 ring-1 ring-border/30">
-          {documents.map((doc) => (
-            <li key={`doc-${doc.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
-              <div className="min-w-0">
-                <Link
-                  href={`/${orgSlug}/documents/${doc.id}`}
-                  className="truncate font-medium hover:underline"
-                >
-                  {doc.title}
-                </Link>
-                <p className="mt-0.5 text-xs capitalize text-muted-foreground">
-                  {doc.kind} · {doc.status}
-                  {doc.mentionedVia === "tag"
-                    ? " · tagged in body"
-                    : doc.mentionedVia === "both"
-                      ? " · linked & tagged"
-                      : " · in Docs"}
-                  {doc.mentionCount && doc.mentionCount > 0
-                    ? ` · ${doc.mentionCount} tag${doc.mentionCount === 1 ? "" : "s"}`
-                    : ""}
-                </p>
-              </div>
-            </li>
-          ))}
-          {files.map((file) => (
-            <ProjectFileListItem
-              key={`file-${file.id}`}
-              file={file}
-              trailing={
-                canWrite ? <RemoveFileButton orgSlug={orgSlug} fileId={file.id} /> : null
-              }
-            />
-          ))}
-        </ul>
-      )}
+      <FileDropZone enabled={canWrite} pending={pending} onFiles={upload}>
+        {documents.length === 0 && files.length === 0 ? (
+          <p className="flex flex-1 items-center justify-center rounded-[1.75rem] border border-dashed border-border/60 px-4 py-6 text-center text-sm text-muted-foreground">
+            Link a proposal/SOW from Docs, or upload a PDF for this engagement.
+            {canWrite ? " You can also drag files here." : null}
+          </p>
+        ) : (
+          <ul className="divide-y divide-border/40 overflow-hidden rounded-[1.75rem] bg-muted/40 ring-1 ring-border/30">
+            {documents.map((doc) => (
+              <li key={`doc-${doc.id}`} className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                <div className="min-w-0">
+                  <Link
+                    href={`/${orgSlug}/documents/${doc.id}`}
+                    className="truncate font-medium hover:underline"
+                  >
+                    {doc.title}
+                  </Link>
+                  <p className="mt-0.5 text-xs capitalize text-muted-foreground">
+                    {doc.kind} · {doc.status}
+                    {doc.mentionedVia === "tag"
+                      ? " · tagged in body"
+                      : doc.mentionedVia === "both"
+                        ? " · linked & tagged"
+                        : " · in Docs"}
+                    {doc.mentionCount && doc.mentionCount > 0
+                      ? ` · ${doc.mentionCount} tag${doc.mentionCount === 1 ? "" : "s"}`
+                      : ""}
+                  </p>
+                </div>
+              </li>
+            ))}
+            {files.map((file) => (
+              <ProjectFileListItem
+                key={`file-${file.id}`}
+                file={file}
+                trailing={
+                  canWrite ? <RemoveFileButton orgSlug={orgSlug} fileId={file.id} /> : null
+                }
+              />
+            ))}
+          </ul>
+        )}
+        {canWrite && (documents.length > 0 || files.length > 0) ? (
+          <p className="mt-auto flex items-center justify-center gap-1.5 pt-6 text-xs text-muted-foreground">
+            <UploadCloud className="size-3.5" />
+            Drag files anywhere here to upload
+          </p>
+        ) : null}
+      </FileDropZone>
     </div>
   );
 }
@@ -418,16 +438,52 @@ function AttachExistingDocsSheet({
   );
 }
 
-function UploadProjectFileButton({
-  orgSlug,
-  projectId,
-}: {
-  orgSlug: string;
-  projectId: string;
-}) {
+const UPLOAD_ACCEPT = ".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,application/pdf";
+const UPLOAD_EXTENSIONS = /\.(pdf|docx?|png|jpe?g|webp)$/i;
+
+function useProjectUpload(orgSlug: string, projectId: string) {
   const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [pending, start] = useTransition();
+
+  function upload(list: File[]) {
+    const accepted = list.filter((file) => UPLOAD_EXTENSIONS.test(file.name));
+    const skipped = list.length - accepted.length;
+    if (skipped > 0) {
+      toast.error(
+        accepted.length === 0
+          ? "Only PDF, Word, and image files can be uploaded"
+          : `Skipped ${skipped} file${skipped === 1 ? "" : "s"}: only PDF, Word, and images`,
+      );
+    }
+    if (accepted.length === 0) return;
+    start(async () => {
+      for (const file of accepted) {
+        const fd = new FormData();
+        fd.set("file", file);
+        fd.set("entity_type", "project");
+        fd.set("entity_id", projectId);
+        const result = await uploadFileAction(orgSlug, fd);
+        if (result.error) {
+          toast.error(result.error);
+          return;
+        }
+      }
+      toast.success(accepted.length === 1 ? "File uploaded" : "Files uploaded");
+      router.refresh();
+    });
+  }
+
+  return { pending, upload };
+}
+
+function UploadProjectFileButton({
+  pending,
+  onFiles,
+}: {
+  pending: boolean;
+  onFiles: (files: File[]) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
 
   return (
     <>
@@ -435,27 +491,13 @@ function UploadProjectFileButton({
         ref={inputRef}
         type="file"
         className="hidden"
-        accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,application/pdf"
+        accept={UPLOAD_ACCEPT}
         multiple
         onChange={(event) => {
           const list = event.target.files;
           if (!list?.length) return;
-          start(async () => {
-            for (const file of Array.from(list)) {
-              const fd = new FormData();
-              fd.set("file", file);
-              fd.set("entity_type", "project");
-              fd.set("entity_id", projectId);
-              const result = await uploadFileAction(orgSlug, fd);
-              if (result.error) {
-                toast.error(result.error);
-                return;
-              }
-            }
-            toast.success(list.length === 1 ? "File uploaded" : "Files uploaded");
-            if (inputRef.current) inputRef.current.value = "";
-            router.refresh();
-          });
+          onFiles(Array.from(list));
+          event.target.value = "";
         }}
       />
       <Button
@@ -465,6 +507,72 @@ function UploadProjectFileButton({
         {pending ? "Uploading…" : "Upload PDF"}
       </Button>
     </>
+  );
+}
+
+function hasFiles(event: DragEvent<HTMLElement>) {
+  return Array.from(event.dataTransfer.types).includes("Files");
+}
+
+/** Shows a drop target while files are dragged over it. Fills the space below the list, so files can land anywhere. */
+function FileDropZone({
+  enabled,
+  pending,
+  onFiles,
+  children,
+}: {
+  enabled: boolean;
+  pending: boolean;
+  onFiles: (files: File[]) => void;
+  children: ReactNode;
+}) {
+  const [over, setOver] = useState(false);
+  const depth = useRef(0);
+
+  if (!enabled) return <>{children}</>;
+
+  return (
+    <div
+      className="relative flex min-h-64 flex-1 flex-col"
+      onDragEnter={(event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        depth.current += 1;
+        setOver(true);
+      }}
+      onDragOver={(event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      }}
+      onDragLeave={(event) => {
+        if (!hasFiles(event)) return;
+        depth.current = Math.max(0, depth.current - 1);
+        if (depth.current === 0) setOver(false);
+      }}
+      onDrop={(event) => {
+        if (!hasFiles(event)) return;
+        event.preventDefault();
+        depth.current = 0;
+        setOver(false);
+        if (pending) return;
+        const list = Array.from(event.dataTransfer.files);
+        if (list.length) onFiles(list);
+      }}
+    >
+      {children}
+      <div
+        aria-hidden={!over}
+        className={cn(
+          "pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-1.5 rounded-[1.75rem] border-2 border-dashed border-primary/60 bg-primary/8 text-primary backdrop-blur-[2px] transition-opacity duration-150",
+          over ? "opacity-100" : "opacity-0",
+        )}
+      >
+        <UploadCloud className="size-6" />
+        <p className="text-sm font-semibold tracking-tight">Drop to upload</p>
+        <p className="text-xs text-primary/80">PDF, Word, or images</p>
+      </div>
+    </div>
   );
 }
 

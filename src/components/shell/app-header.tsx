@@ -8,6 +8,7 @@ import {
   FilePlus,
   FolderPlus,
   HandCoins,
+  MailPlus,
   Menu,
   Plus,
   Receipt,
@@ -39,6 +40,8 @@ const TITLES: Record<string, string> = {
   invoices: "Invoices",
   partners: "Partners",
   documents: "Documents",
+  emails: "Emails",
+  notifications: "Notifications",
   team: "Team",
   settings: "Settings",
   profile: "Profile",
@@ -162,10 +165,16 @@ export function AppHeader({
             />
             <DropdownMenuContent align="end" className="min-w-44">
               {org.modules.crm && canAccessModule(permissions, "crm") ? (
-                <DropdownMenuItem onClick={() => router.push(`${base}/crm?new=1`)}>
-                  <Sparkles />
-                  New lead
-                </DropdownMenuItem>
+                <>
+                  <DropdownMenuItem onClick={() => router.push(`${base}/crm?new=1`)}>
+                    <Sparkles />
+                    New lead
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push(`${base}/crm?compose=1`)}>
+                    <MailPlus />
+                    Email a new lead
+                  </DropdownMenuItem>
+                </>
               ) : null}
               <DropdownMenuItem onClick={() => router.push(`${base}/clients?new=1`)}>
                 <UserPlus />

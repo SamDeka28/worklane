@@ -22,16 +22,16 @@ export const DELIVER: DocArticle[] = [
           { title: "Pick the client and name it", body: "For example “Website rebuild” or “Q3 retainer”." },
           {
             title: "Set status and billing",
-            body: "**Status** defaults to Active. **Billing** decides how charges get posted — see the table below.",
+            body: "**Status** defaults to Active. **Billing** defaults to **Hourly (logs post charges)** and decides how charges get posted — see the table below.",
           },
           {
             title: "Platform fee and partner earnings",
-            body: "**Platform fee** is taken off gross before anything is shared: None (0%), 4%, 5% Upwork, or 13%. **Partner earn on** decides whether partners earn **When charged** or **When collected**.",
+            body: "**Platform fee** is taken off gross before anything is shared: None (0%), 4%, 5% Upwork (the default), or 13%. **Partner earn on** decides whether partners earn **When charged** or **When collected**.",
           },
           { title: "Dates and scope", body: "Add **Contracted amount**, **Starts**, **Due**, and internal **Scope** notes." },
           {
             title: "Attach documents (optional)",
-            body: "Tick existing proposals or SOWs from Docs, or upload PDFs, Word files, or images.",
+            body: "Tick existing proposals or SOWs from Docs, or use **Upload files** to add PDFs, Word files, or images.",
           },
           { title: "Click Create project", body: "You become the project lead. The board starts with To do, Doing, and Done." },
         ],
@@ -43,7 +43,7 @@ export const DELIVER: DocArticle[] = [
         rows: [
           ["Milestones", "Milestones", "You charge each milestone when it's due."],
           ["Hourly (logs post charges)", "Hourly", "Every work log posts a charge for hours × rate or a fixed amount."],
-          ["Single contracted charge", "Contracted", "One charge for the contracted amount via **Post contracted charge**."],
+          ["Single contracted charge", "Contracted", "One charge for the contracted amount via **… → Post contracted charge**."],
           ["Manual", "Manual", "Charge milestones or the contracted amount by hand when you choose."],
           ["None (track only)", "Track only", "No charges — pure delivery tracking."],
         ],
@@ -51,23 +51,28 @@ export const DELIVER: DocArticle[] = [
       { type: "h2", text: "Project statuses" },
       {
         type: "p",
-        text: "**Planning**, **Active**, **On hold**, **Completed**, and **Cancelled**. Planning, Active, and On hold projects appear on Studio Board. In the Projects **Board** view you can drag a project between status columns to change it.",
+        text: "**Planning**, **Active**, **On hold**, **Completed**, and **Cancelled**. Planning, Active, and On hold projects appear on Studio Board.",
+      },
+      { type: "h2", text: "The projects list" },
+      {
+        type: "p",
+        text: "Switch between **List**, **Board**, and **Cards** views. Use **Search projects** and the status and client filters to narrow it down. The **Board** view has Planning, Active, On hold, and Completed columns (cancelled projects are hidden); drag a project to another column to change its status.",
       },
       { type: "h2", text: "The project page" },
       {
         type: "p",
-        text: "The header shows status, client, billing mode, due date, and (with Finance access) the total. A **next step** card suggests exactly one action — **Add milestone**, **Log work**, **Review milestones**, **Collect**, or **Open board**.",
+        text: "The header shows status, client, billing mode, due date, and (with Finance access) the total or amount due. The **…** menu holds **Collect**, **Post contracted charge** (Contracted and Manual billing), and **Project settings**. A **next step** card suggests exactly one action — **Add milestone**, **Log work**, **Review milestones**, **Collect**, or **Open board**.",
       },
       {
         type: "table",
         head: ["Tab", "What it's for"],
         rows: [
-          ["Overview", "Snapshot of tasks, what's ready to bill, what's owed, docs, and milestone progress."],
+          ["Overview", "Snapshot of tasks, what's ready to bill, what's owed, docs, and milestone progress, plus shortcuts to **Add partners** and **Set build pool**."],
           ["Milestones", "Phases with amounts, delivery status, and deliverables. See [Milestones](/docs/milestones)."],
           ["Work", "The task board and, on hourly projects, the work log. See [Tasks](/docs/tasks-and-boards) and [Log work](/docs/log-work)."],
           ["Charges", "Every charge on the project and a form to record payments. Finance access only."],
-          ["Split", "Partner economics, the project team, and split versions. Finance access only."],
-          ["Documents", "Linked proposals, SOWs, and uploaded files."],
+          ["Split", "Economics, partners, and access. Manage the project **Team** and **Partners**, and **Set split** or **Edit split**. Finance access only."],
+          ["Documents", "Linked proposals, SOWs, and uploaded files. Use **Upload PDF**, **New in Docs**, or **Attach from Docs**."],
           ["Credentials", "An encrypted vault for logins and keys. See [Credential vault](/docs/credentials)."],
         ],
       },
@@ -79,7 +84,7 @@ export const DELIVER: DocArticle[] = [
       { type: "h2", text: "Project settings and deletion" },
       {
         type: "p",
-        text: "Use **… → Project settings** to change name, status, billing, fee, partner earnings, contracted amount, dates, and scope. **Delete project** removes milestones, tasks, work logs, comments, and the split; charges, invoices, and documents are kept but unlinked. Deletion is blocked once partner payouts exist — set the project to Completed or Cancelled instead.",
+        text: "Use **… → Project settings** to change name, status, billing, fee, partner earnings, contracted amount, dates, and scope, then click **Save**. **Delete project** asks you to type the project name and needs delete permission. It removes milestones, tasks, work logs, comments, and the split; charges, invoices, and documents are kept but unlinked. Deletion is blocked once partner payouts exist — set the project to Completed or Cancelled instead.",
       },
     ],
   },
@@ -105,25 +110,26 @@ export const DELIVER: DocArticle[] = [
           { title: "Delivery status", body: "**Planned**, **In progress**, **Done**, or **Cancelled**." },
           { title: "Amount and due date", body: "The amount is what you'll charge later. It's optional for track-only projects." },
           { title: "Description", body: "Scope notes. You'll add concrete deliverables after saving." },
+          { title: "Click Add milestone", body: "It appears as **M1**, **M2**, and so on. Change its delivery status any time from the select on its row." },
         ],
       },
       {
         type: "callout",
         tone: "note",
-        text: "The project's contracted amount always equals the sum of its non-cancelled milestone amounts, so the project total stays accurate as you add phases.",
+        text: "Once milestones have amounts, the project's contracted amount is kept equal to the sum of its priced, non-cancelled milestones, so the project total stays accurate as you add phases.",
       },
       { type: "h2", text: "Deliverables become tasks" },
       {
         type: "steps",
         items: [
-          { title: "Click the pencil on a milestone", body: "The **Edit M1** sheet opens." },
-          { title: "Add deliverables", body: "Type an item such as “Content hierarchy map” and press Enter." },
-          { title: "Click Task on a deliverable", body: "A card is created in the **To do** list, tagged with the milestone. The row then shows **On board**." },
+          { title: "Click a milestone row (or its pencil)", body: "The **Edit M1** sheet opens. Save changes with **Save M1**." },
+          { title: "Add deliverables", body: "Type an item such as “Content hierarchy map” and press Enter or click **Add**." },
+          { title: "Click Task on a deliverable", body: "A card is created in the **To do** list, tagged with the milestone. The row then shows **On board**; **Unlink** removes that card from the board." },
         ],
       },
       {
         type: "p",
-        text: "You can also put the whole milestone on the board with **… → Add to board**. Each milestone row shows how many deliverables it has and how many are on the board.",
+        text: "You can also put the whole milestone on the board with **… → Add to board**, then use **Open on board** or **Remove from board** (which deletes the card). Each milestone row shows how many deliverables it has and how many are on the board.",
       },
       { type: "h2", text: "Billing badges" },
       {
@@ -139,7 +145,7 @@ export const DELIVER: DocArticle[] = [
       },
       {
         type: "p",
-        text: "To bill a milestone, use **… → Charge**. After charging, the amount is locked so the books can't drift. Full steps in [Post charges](/docs/charges).",
+        text: "To bill a milestone, use **… → Charge**. It's available on Milestones and Manual billing once the milestone has an amount and isn't cancelled. Charging takes you to the Charges tab to record payment; afterwards the menu shows **Collect** or **View charge**. The amount is locked after charging so the books can't drift. Full steps in [Post charges](/docs/charges).",
       },
     ],
   },
@@ -154,7 +160,7 @@ export const DELIVER: DocArticle[] = [
     blocks: [
       {
         type: "p",
-        text: "Every project has its own kanban board on the **Work** tab. Cards move left to right as work progresses, and every open card also rolls up to [Studio Board](/docs/studio-board).",
+        text: "Every project has its own kanban board on the **Work** tab. Cards move left to right as work progresses, and every card on a Planning, Active, or On hold project also rolls up to [Studio Board](/docs/studio-board).",
       },
       { type: "h2", text: "Create a card" },
       {
@@ -164,7 +170,7 @@ export const DELIVER: DocArticle[] = [
           { title: "Give it a title and description", body: "The description is rich text — type **@** to reference people, milestones, or other tasks." },
           {
             title: "Fill in details",
-            body: "**Type** (Task, Bug, Feature, Chore), **Priority** (Low, Medium, High), **Assignees** (up to 8), **Milestone**, **Due**, and **Labels** (up to 12).",
+            body: "**Type** (Task, Bug, Feature, Chore), **Priority** (L, M, H), **Assignees** (up to 8), **Milestone**, **Due**, and **Labels** (up to 12, each up to 24 characters — press Enter or comma to add one).",
           },
           { title: "Click Create card", body: "Newly assigned people are notified: “Sam assigned you a task”." },
         ],
@@ -180,15 +186,16 @@ export const DELIVER: DocArticle[] = [
         type: "list",
         items: [
           "Hover a card to reveal its grip, then drag it to another list. A dashed placeholder shows where it will land.",
-          "Click a card to open it. Add attachments (after the first save), change details, or **Remove card**.",
-          "Comment at the bottom and press **⌘/Ctrl + Enter** to send. Assignees and earlier commenters are notified.",
-          "Share a direct link to an open card — the URL includes the task.",
+          "Click a card to open it. Add attachments with **Add file** (after the first save), change details and click **Save card**, or **Remove card**.",
+          "Click **Activity** in the card to see its history, and **Back to details** to return.",
+          "Comment at the bottom and click **Comment** or press **⌘/Ctrl + Enter**. Assignees and earlier commenters are notified; anyone you @mention gets a mention notification instead.",
+          "Use the **Copy link** button (in the card, or on hover on the board) to share a direct link to the card.",
         ],
       },
       { type: "h2", text: "Reading a card" },
       {
         type: "p",
-        text: "Cards show the type badge (except plain Task), milestone chip (for example “M2 · Wireframes”), priority as **L / M / H**, up to two labels, the due date (red when overdue), comment count, and up to three assignee avatars.",
+        text: "Cards show the type badge (except plain Task), milestone chip (for example “M2 · Wireframes”), priority as **L / M / H**, up to two labels (then “+N”), the due date (red when overdue), comment count, and up to three assignee avatars.",
       },
       { type: "h2", text: "Customize lists" },
       {
@@ -198,7 +205,7 @@ export const DELIVER: DocArticle[] = [
           ["Rename a list", "Click its name and type."],
           ["Reorder lists", "Drag a list by its handle."],
           ["Add a list", "Click **Add a list**, enter a name, and click **Add list**."],
-          ["Delete a list", "**… → Delete column**. Its cards move to the first remaining list."],
+          ["Delete a list", "**… → Delete column** (only when there's more than one list). Its cards move to the first remaining list."],
         ],
       },
       {
@@ -210,16 +217,16 @@ export const DELIVER: DocArticle[] = [
   },
   {
     slug: "studio-board",
-    title: "Studio Board: every open card in one place",
+    title: "Studio Board: every card in one place",
     summary:
-      "See work across all active projects, filter by client, assignee, or priority, and drag cards between status lanes.",
+      "See work across all active projects as a board or a list, filter by client, assignee, or priority, and move cards between status lanes.",
     category: "deliver",
     kind: "how-to",
     related: ["tasks-and-boards", "projects"],
     blocks: [
       {
         type: "p",
-        text: "Studio Board rolls every card from projects that are **Planning**, **Active**, or **On hold** into one kanban, so nothing hides behind a project tab. Each card carries a project chip so you always know where it belongs.",
+        text: "Studio Board rolls every card from projects that are **Planning**, **Active**, or **On hold** into one kanban, including cards already in Done, so nothing hides behind a project tab. Each card carries a project chip so you always know where it belongs.",
       },
       { type: "h2", text: "Filters" },
       {
@@ -235,6 +242,20 @@ export const DELIVER: DocArticle[] = [
       {
         type: "p",
         text: "Dragging a card between status lanes changes its status. You can also create cards here — pick the project in the card's details (it's locked after creation).",
+      },
+      { type: "h2", text: "Board and list views" },
+      {
+        type: "p",
+        text: "Use the toggle at the right of the toolbar to switch between **Board** (kanban columns) and **List**. The list is one flat table of cards; each row's status is a badge you can click to move the card. Click a row to open the card, and **New card** to add one. Filters apply to both views, and the choice is kept in the URL (`?view=list`) so you can bookmark or share it.",
+      },
+      {
+        type: "table",
+        head: ["In list view", "What it does"],
+        rows: [
+          ["Column headers", "Click to sort by that column; click again to reverse, a third time to go back to board order. **Clear sort** resets it."],
+          ["**Group**", "**No grouping** (default), or group rows by **Status**, **Project**, **Priority**, or **Assignee**. Click a group header to collapse it; **Add** on a status group creates a card there."],
+          ["**Columns**", "Show or hide Project, Status, Assignee, Priority, Due, Milestone, Labels, and Comments."],
+        ],
       },
       {
         type: "callout",
@@ -253,15 +274,15 @@ export const DELIVER: DocArticle[] = [
     blocks: [
       {
         type: "p",
-        text: "On projects billed **Hourly**, the Work tab has a **Log** view. One row replaces the timesheet spreadsheet: date, hours, rate, and what shipped.",
+        text: "On projects billed **Hourly**, the Work tab has a **Log** view, and it opens there by default. One row replaces the timesheet spreadsheet: date, hours, rate, and what shipped.",
       },
       {
         type: "steps",
         items: [
           { title: "Open the project → Work → Log", body: "Or use the next-step button **Log work**, or ⌘K → “Log work”." },
-          { title: "Date and hours", body: "Date defaults to today. Hours accept decimals — 1.5 or 1,5 both work." },
-          { title: "Rate or fixed amount", body: "Rate is prefilled with your last rate. Enter a **Fixed** amount instead to bill a flat figure." },
-          { title: "Milestone and notes", body: "Optionally tag a milestone, describe **What shipped**, and paste a Trello URL." },
+          { title: "Date and hours", body: "Date defaults to today. Hours accept up to three decimals — 1.5 or 1,5 both work." },
+          { title: "Rate or fixed amount", body: "Rate is prefilled with the last rate used on the project. Enter a **Fixed** amount instead to bill a flat figure." },
+          { title: "Milestone and notes", body: "Optionally tag a milestone (shown once the project has milestones), describe **What shipped**, and paste a Trello URL." },
           { title: "Check the preview and save", body: "The line “Posts ~$X net after fee” shows what will land. Click **Log and charge**." },
         ],
       },
@@ -271,7 +292,7 @@ export const DELIVER: DocArticle[] = [
         items: [
           "An open charge is posted to the client, dated on the work date, with gross, platform fee, and net.",
           "If the project splits earnings **When charged**, partners earn their share immediately.",
-          "Each row shows **Charged** and hours × rate (or the fixed amount).",
+          "Each row shows **Charged** (or **No charge**) and hours × rate (or the fixed amount).",
         ],
       },
       {
@@ -299,15 +320,29 @@ export const DELIVER: DocArticle[] = [
         type: "steps",
         items: [
           { title: "Click New document", body: "From Documents, a client's Documents card, or a project's **New in Docs** button (which prefill the client and project)." },
-          { title: "Title and kind", body: "**Proposal**, **SOW**, or **Other**." },
+          { title: "Title and template", body: "Enter a **Title** and pick a **Template**. The template also sets the document's kind." },
           { title: "Context", body: "Optionally link a **Client** and **Project**." },
-          { title: "Click Create", body: "The editor opens with a starter template." },
+          { title: "Click Create", body: "The editor opens with the template filled in." },
         ],
       },
-      { type: "h2", text: "The starter template" },
+      { type: "h2", text: "Templates" },
+      {
+        type: "table",
+        head: ["Template", "Kind"],
+        rows: [
+          ["Project proposal", "Proposal"],
+          ["Statement of work", "Statement of work"],
+          ["Master services agreement", "Services agreement"],
+          ["Mutual NDA", "NDA"],
+          ["Project brief", "Project brief"],
+          ["Change order", "Change order"],
+          ["Status report", "Status report"],
+          ["Meeting notes, Blank document", "Document"],
+        ],
+      },
       {
         type: "p",
-        text: "Every new document starts with a professional layout you can edit freely: a details table (Document, Client, Project, Status), then numbered sections — **Overview**, **Scope of work** (included and out of scope), **Delivery milestones**, **Investment** (or **Fees & payment** for SOWs), and **Next steps**.",
+        text: "Each template gives you a professional layout you can edit freely: a cover, a details table, numbered sections, and a signature block. The linked client and project are filled in as @ tags; anything else is a highlighted placeholder to fill in.",
       },
       { type: "h2", text: "Live @ tags" },
       {
@@ -323,27 +358,28 @@ export const DELIVER: DocArticle[] = [
       { type: "h2", text: "Tables from project data" },
       {
         type: "p",
-        text: "In the right-hand **Tags & structure** panel, **Insert milestones table** adds a Milestone / Amount / Due / Status table from the linked project, and **Insert tasks table** does the same for tasks. **Template library** opens a gallery of full templates; choosing one replaces the page and, if it belongs to another type, changes the document's type too. Highlighted fields are placeholders to fill in.",
+        text: "In the right-hand **Insert** card, **Milestones table** adds a Milestone / Amount / Due / Status table from the linked project, and **Tasks table** does the same for tasks. **Template library** opens a gallery of full templates; choosing one replaces the page and, if it belongs to another kind, changes the document's kind too. Change the client or project in the **Linked to** card (pick a client before a project).",
       },
       { type: "h2", text: "Save and link" },
       {
         type: "p",
-        text: "Click **Save** — you'll see “Draft saved: tags indexed”. A document tagged with a project appears on that project's Documents tab as **tagged in body**, **linked & tagged**, or **in Docs**.",
+        text: "Click **Save** or press **⌘/Ctrl + S** — you'll see “Draft saved: tags indexed”. A document tagged with a project appears on that project's Documents tab as **tagged in body**, **linked & tagged**, or **in Docs**.",
       },
       { type: "h2", text: "The documents list" },
       {
         type: "p",
-        text: "The summary at the top counts documents **With clients** (sent, not yet signed), **Needs your signature** (the client signed and you still need to countersign), **Open comments**, and **Drafts**.",
+        text: "Filter by kind with the chips at the top. The summary counts documents **With clients** (sent, not yet signed), **Needs your signature** (the client signed and you still need to countersign), **Open comments**, and **Drafts**.",
       },
       {
         type: "table",
         head: ["Column", "Shows"],
         rows: [
           ["Document", "Title, kind, current version, client, and project."],
-          ["Client activity", "Who it was sent to, whether by email or link only, how long ago, and whether they viewed the link or opened the email."],
-          ["Review", "Open client comments, or “No open items”."],
-          ["Signatures", "Whether the client and your side have signed: **Fully signed**, **Countersign needed**, or **Awaiting client**."],
+          ["Client activity", "Who it was sent to and whether they viewed the link or opened the email — for example “Viewed 2h ago”, “Not opened yet”, or “Not shared yet”."],
+          ["Review", "The number of open client comments, or “—”."],
+          ["Signatures", "**Countersign needed**, **Awaiting client**, **No signatures** (accepted without signing), or a check for each side that has signed (Client, You)."],
           ["Status", "Draft, Sent, Accepted, Signed, or Void."],
+          ["Updated", "When the document last changed."],
         ],
       },
     ],
@@ -362,18 +398,28 @@ export const DELIVER: DocArticle[] = [
         head: ["Group", "Controls"],
         rows: [
           ["History", "Undo, Redo"],
-          ["Type", "Font (Default, Sans, Serif, Georgia, Times, Arial, Mono) and size 10–48px with A− / A+"],
-          ["Headings", "H1, H2, H3"],
-          ["Style", "Bold, Italic, Underline, Strikethrough, Text colour, Highlight"],
-          ["Alignment", "Left, Center, Right, Justify"],
-          ["Blocks", "Bullet list, Numbered list, Quote, Divider"],
+          ["Type", "**Font** (Default, Sans, Serif, Georgia, Times, Arial, Mono) and **Font size** 10–48 with A− / A+"],
+          ["Paragraph style", "Normal text, Heading 1, Heading 2, Heading 3"],
+          ["Style", "Bold, Italic, Underline, Strikethrough, Text color, Highlight"],
+          ["Alignment", "Left, Center, Right, Justify, and **Line spacing** (Auto, 1, 1.15, 1.5, 2)"],
+          ["Blocks", "Bullet list, Ordered list, Checklist, Decrease / Increase indent, Quote, Divider, Clear formatting"],
           ["Insert", "Link, Table (8×8 grid picker), Attach file"],
         ],
       },
       { type: "h2", text: "Tables" },
       {
         type: "p",
-        text: "Insert a table from the grid picker — it starts with a header row. With your cursor inside a table you get: add column after, add row after, delete column, delete row, delete table, and toggle header row.",
+        text: "Insert a table from the grid picker — it starts with a header row. With your cursor inside a table the toolbar adds: add column after, add row after, delete column, delete row, delete table, and toggle header row.",
+      },
+      { type: "h2", text: "Right-click menu" },
+      {
+        type: "p",
+        text: "Right-click in the page for **Cut**, **Copy**, **Paste**, **Paste without formatting**, **Delete**, links, **Format text**, **Paragraph style**, **Lists**, and **Insert** (a 3 × 3 table or a horizontal line). Inside a table it adds **Table options**: insert rows above or below, insert columns left or right, and **More table options** to merge or unmerge cells, toggle the header row, or delete. **Select all** and **Clear formatting** are at the bottom.",
+      },
+      { type: "h2", text: "Pages" },
+      {
+        type: "p",
+        text: "The document is laid out as real pages, numbered in the footer. The bar under the page shows the page and word count, a **Page size** picker (A4, Letter, or Legal), and **Full screen** for distraction-free writing (press Esc to exit).",
       },
       { type: "h2", text: "Images and files" },
       {
@@ -383,12 +429,14 @@ export const DELIVER: DocArticle[] = [
       { type: "h2", text: "Selection menu and ruler" },
       {
         type: "p",
-        text: "Select text for a floating menu with Bold, Italic, Underline, colour, highlight, and link. The ruler above the page lets you drag the left indent, first-line indent, and right indent like a word processor.",
+        text: "Select text for a floating menu with Bold, Italic, Underline, colour, highlight, and link. The ruler above the page lets you drag the page margins and the left, first-line, and right indents like a word processor.",
       },
       { type: "h2", text: "Shortcuts" },
       {
         type: "keys",
         items: [
+          { keys: ["⌘/Ctrl", "S"], label: "Save draft" },
+          { keys: ["⌘/Ctrl", "⇧", "F"], label: "Full screen (Esc to exit)" },
           { keys: ["⌘/Ctrl", "B"], label: "Bold" },
           { keys: ["⌘/Ctrl", "I"], label: "Italic" },
           { keys: ["⌘/Ctrl", "U"], label: "Underline" },
@@ -403,7 +451,7 @@ export const DELIVER: DocArticle[] = [
       { type: "h2", text: "Edit and Preview" },
       {
         type: "p",
-        text: "Toggle **Edit** / **Preview** in the top bar. Preview (“Client preview”) expands every @ tag into live data so you can read the document the way your client will.",
+        text: "Toggle **Edit** / **Preview** in the top bar. Preview (“Showing what the client sees”) expands every @ tag into live data so you can read the document the way your client will. Once a document has more than one version, **v1 / v2** buttons in the top bar switch between them.",
       },
     ],
   },
@@ -436,22 +484,27 @@ export const DELIVER: DocArticle[] = [
       {
         type: "steps",
         items: [
-          { title: "Click Send by email", body: "The email is sent from Worklane through your workspace's mail server; no mail app opens." },
-          { title: "Recipient, CC, and subject", body: "Pick one of the client's contacts or type an address. Add up to five CC addresses." },
+          { title: "Click Send by email", body: "The email is sent from Worklane through your workspace's mail server; no mail app opens. Replies go to you." },
+          { title: "To, CC, and Subject", body: "Pick one of the client's contacts or type an address. Add up to five **CC** addresses, separated by commas." },
           { title: "Write the message", body: "A friendly default is filled in. When you've sent this document to them before, it says the document was revised and that the changes are highlighted." },
-          { title: "Track opens (optional)", body: "Adds a tiny invisible image so you can see when the email was opened. Link views are always tracked." },
-          { title: "Click Send", body: "The client gets a branded email with a **View** button. The version you sent is frozen, and the document moves to **Sent**." },
+          { title: "Track opens", body: "On by default. Adds a tiny invisible image so you can see when the email was opened. Link views are always tracked." },
+          { title: "Click Send email", body: "The client gets a branded email with a button such as **View proposal**. The version you sent is frozen, and the document moves to **Sent**." },
         ],
       },
       {
         type: "callout",
         tone: "note",
-        text: "Sending needs SMTP to be configured for the workspace (SMTP_USER and SMTP_PASS). Email opens are a hint, not proof: some mail apps block or pre-load images.",
+        text: "Documents go out from the studio's mailbox set in Settings, otherwise Worklane's default address. Replies go to you. See [Choose the address emails come from](/docs/email-tracking). Email opens are a hint, not proof: some mail apps block or pre-load images.",
       },
       { type: "h3", text: "Delivery log" },
       {
         type: "p",
-        text: "Each send appears under the Share panel with its version and status chips: **Not opened yet**, **Opened** (the email), **Viewed** (the link), or **Published to link**. You get a notification the first time a client opens the email or views the link. **Copy link** gives you the client's link again; **Revoke** turns it off.",
+        text: "Each send appears under the Share panel with its version, recipient, and status chips: **Not opened yet**, **Opened** (the email), **Viewed** (the link), **Delivered** (sent without open tracking), **Published to link**, or **Link revoked**. You get a notification the first time a client views the link. On a send, **Copy link** gives you the client's link again; **Revoke** turns it off.",
+      },
+      {
+        type: "callout",
+        tone: "note",
+        text: "The **Copy link** button at the top of the Share card copies an internal link for teammates with access to this workspace, not the client's link.",
       },
       { type: "h2", text: "Revise and publish" },
       {
@@ -459,7 +512,7 @@ export const DELIVER: DocArticle[] = [
         items: [
           { title: "Start a revision", body: "A sent version can't be edited. Click **Start revision v2** on the banner (or **Start a new version**) to copy it into an editable draft." },
           { title: "Address the feedback", body: "Edit the draft. The **Client review** card lists every comment and suggestion; mark each one addressed as you go." },
-          { title: "Click Publish v2 to client", body: "Add a short **What changed?** note and choose whether to **Email them a short update**. Untick it for small fixes." },
+          { title: "Click Publish v2 to client", body: "Add a short **What changed?** note and choose whether to **Email them a short update**. Untick it for small fixes; the link updates without an email." },
         ],
       },
       {
@@ -475,14 +528,14 @@ export const DELIVER: DocArticle[] = [
         type: "table",
         head: ["Situation", "What to do"],
         rows: [
-          ["The client signed first", "A **Countersign** card appears. Your name and email are prefilled; type your signature, tick the consent box, and click **Countersign**. The client is emailed the fully signed copy."],
-          ["You want to sign first", "Use **Record a signature**. The client's link then shows **Sign** and asks them to complete it."],
+          ["The client signed first", "A **Countersign** card appears. Your name and email are prefilled; fill in **Type your signature**, tick the consent box, and click **Countersign**. The client is emailed the fully signed copy, and you're copied."],
+          ["You want to sign first", "Use **Record a signature**: enter **Full name** and **Email**, then click **Sign document**. No email is sent; the client's link then shows **Sign** and asks them to complete it."],
           ["No signatures needed", "**Mark as accepted** locks the version as the agreed copy."],
         ],
       },
       {
         type: "p",
-        text: "Each signature records the name, email, typed signature, time, IP address, browser, and a SHA-256 fingerprint of the signed content. The signatures are shown under the document on both sides, with an **Awaiting signature** line for whoever hasn't signed yet.",
+        text: "Client signatures and countersignatures record the name, email, typed signature, time, IP address, browser, and a SHA-256 fingerprint of the signed content. **Record a signature** keeps only the name, email, time, and browser. The signatures are shown under the document on both sides, with an **Awaiting signature** line for whoever hasn't signed yet.",
       },
       { type: "h2", text: "Signed copies and the certificate" },
       {
@@ -499,7 +552,7 @@ export const DELIVER: DocArticle[] = [
         type: "list",
         items: [
           "**Create statement of work** (proposals only) creates “SOW · {title}” ready to fill in.",
-          "**Create project** (once locked, when no project is linked) opens a Planning project on Milestones billing for the linked client.",
+          "**Create project** (once locked, when a client but no project is linked) opens a Planning project on Milestones billing with a 5% platform fee.",
         ],
       },
     ],
@@ -522,10 +575,10 @@ export const DELIVER: DocArticle[] = [
         type: "table",
         head: ["Action", "How"],
         rows: [
-          ["Comment", "Type in the comments panel, or select text in the document and choose **Comment** to quote it."],
-          ["Suggest an edit", "Select text and choose **Suggest edit**, then type the replacement. You see the original struck through and the suggestion beside it."],
-          ["Request changes", "**Request changes** sends a summary of what needs to change. You're notified by email."],
-          ["Accept & sign", "Type their full name and signature, tick the consent box, and sign. They're emailed a PDF of the signed copy."],
+          ["Comment", "Type in the comments panel and click **Send comment**, or select text in the document and choose **Comment** to quote it."],
+          ["Suggest an edit", "Select text and choose **Suggest edit**, type the replacement (and an optional reason), then click **Send suggestion**. You see the original struck through and the suggestion beside it."],
+          ["Request changes", "**Request changes** → describe what needs to change → **Send request**. You're always notified by email."],
+          ["Accept & sign", "**Accept & sign** (or **Sign** if you've already signed) → **Full legal name**, **Signature**, tick the consent box, and click **Sign document**. They're emailed a PDF of the signed copy."],
           ["Print", "**Print** produces a clean copy without the review panel."],
         ],
       },
@@ -536,6 +589,8 @@ export const DELIVER: DocArticle[] = [
           "Their link always opens the latest version you published. A banner says what changed, for example “Revised (v2): 3 sections changed since v1”.",
           "Changed sections aren't highlighted by default. **Highlight changes** turns the highlights on; **Hide highlights** turns them off.",
           "Small **v1 / v2** buttons next to the title open earlier versions read-only, with a link back to the latest.",
+          "A status pill shows where things stand, for example **In review**, **Awaiting your signature**, or **Fully signed**.",
+          "If a newer revision was sent to someone else, their link says so and they can only comment.",
           "Once signed or accepted, the page shows who signed and becomes read-only.",
         ],
       },
@@ -544,9 +599,9 @@ export const DELIVER: DocArticle[] = [
         type: "steps",
         items: [
           { title: "Open the Client review card", body: "It shows the number of open items. Each entry is tagged with the version it was left on." },
-          { title: "Reply", body: "Type a reply. It appears on their page, and **Email the client** (on by default) also emails them a link." },
+          { title: "Reply", body: "Type in “Reply to the client…” and click **Reply**. It appears on their page, and **Email the client** (on by default) also emails them a link. With several recipients, choose who to send it to." },
           { title: "Mark addressed", body: "Click **Mark addressed** once you've handled an item, or **Reopen** to bring it back. Addressed items fold into an **Addressed** section on both sides." },
-          { title: "Publish the revision", body: "When you're ready, publish the new version to the same link. See Send, sign, and version documents." },
+          { title: "Publish the revision", body: "When you're ready, publish the new version to the same link. See [Send, sign, and version documents](/docs/sign-and-version)." },
         ],
       },
       {
@@ -570,7 +625,7 @@ export const DELIVER: DocArticle[] = [
         rows: [
           ["Leads", "Drop files in the lead sheet — proposals, briefs, screenshots."],
           ["Tasks", "**Add file** in the card (after the first save)."],
-          ["Projects", "**Upload PDF** on the Documents tab, or when creating the project."],
+          ["Projects", "**Upload PDF** on the Documents tab, or drag files anywhere onto the tab's list. You can also use **Upload files** when creating the project."],
           ["Documents", "**Attach file** in the editor — images inline, other files as links."],
         ],
       },
@@ -611,9 +666,9 @@ export const DELIVER: DocArticle[] = [
           { title: "URL or host", body: "A web address or a host like db.example.com:5432." },
           {
             title: "Username and password",
-            body: "Labels adapt to the type — **Key ID / client ID** and **Secret key** for API keys, **Password or private key** for servers. Use **Generate strong password** for a random 20-character password.",
+            body: "Labels adapt to the type — **Key ID / client ID** and **Secret key** for API keys, **User** for databases, **Password or private key** for servers. Use **Generate strong password** for a random 20-character password.",
           },
-          { title: "Extra fields", body: "**+ Add field** for things like 2FA backup codes. Mark each **Hidden** or **Plain**." },
+          { title: "Extra fields", body: "**Add field** for things like 2FA backup codes. Mark each **Hidden** or **Plain**." },
           { title: "Notes", body: "Recovery steps, account owner, renewal dates." },
           { title: "Choose who can see it", body: "See below, then click **Save credential**." },
         ],
@@ -639,12 +694,14 @@ export const DELIVER: DocArticle[] = [
           "Click **Reveal** to see the details. Passwords stay masked until you click the eye, and every value has a copy button.",
           "The revealed panel hides itself after **45 seconds**.",
           "The copy icon on the card copies the password without revealing it.",
+          "**… → Edit** opens the credential with its secret shown, so opening it is logged as a reveal. Click **Save changes** when done.",
+          "Use **Search credentials** to filter by name, URL, or type.",
         ],
       },
       { type: "h2", text: "Access history" },
       {
         type: "p",
-        text: "From the card's **…** menu, **Access history** lists who added, edited, revealed, copied, re-shared, or deleted the credential, and when. Owners, admins, and whoever added the credential can see it.",
+        text: "From the card's **…** menu, **Access history** lists who added, edited, revealed, copied, or deleted the credential, or changed who can see it, and when. Owners, admins, and whoever added the credential can see it.",
       },
       { type: "h2", text: "Permissions" },
       {

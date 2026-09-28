@@ -26,7 +26,13 @@ export type TrackedEmail = {
 
 export type EmailContact = { name: string; email: string; kind: "lead" | "contact" };
 
-export type ComposeEmailInput = { to: string; cc: string; subject: string; body: string };
+export type ComposeEmailInput = {
+  to: string;
+  cc: string;
+  subject: string;
+  body: string;
+  includeSignature: boolean;
+};
 
 export type TrackedEmailOpen = { id: number; at: string; client: string | null };
 

@@ -11,6 +11,11 @@ import {
   PARTNER_DEFAULT_PERMISSIONS,
   resolveMemberPermissions,
 } from "@/modules/identity/permissions";
+import {
+  leadFallbackLabel,
+  listOrgSmtp,
+  smtpStorageUnavailable,
+} from "@/modules/email-senders/server";
 import { isEmailConfigured } from "@/shared/email";
 import { listPendingInvitations } from "@/modules/team/actions";
 import { EditMemberAccessSheet } from "@/modules/team/components/edit-member-access";
@@ -26,7 +31,7 @@ export default async function TeamPage({
   const ctx = await requireOrg(orgSlug);
   const canManage = canManageTeam(ctx);
   const elevated = ctx.role === "owner" || ctx.role === "admin";
-  const [members, board, pendingInvites, projectMembershipRows] = await Promise.all([
+  const [members, board, pendingInvites, projectMembershipRows, smtp] = await Promise.all([
     listOrgMembers(orgSlug),
     listProjectBoard(orgSlug).catch(() => []),
     canManage ? listPendingInvitations(orgSlug) : Promise.resolve([]),
@@ -37,7 +42,10 @@ export default async function TeamPage({
           .eq("organization_id", ctx.org.id)
           .then(({ data }) => data ?? [])
       : Promise.resolve([] as { user_id: string; project_id: string; role: string }[]),
+    elevated ? listOrgSmtp(ctx.org.id) : Promise.resolve(null),
   ]);
+  const smtpUnavailable = elevated ? smtpStorageUnavailable() : null;
+  const smtpFallback = smtp ? leadFallbackLabel(smtp.studio) : "";
   const projects = board.map((row) => ({
     id: row.project.id,
     name: row.project.name,
@@ -141,6 +149,11 @@ export default async function TeamPage({
                           {member.role === "member" && member.permissions?.team?.access === "write"
                             ? " · Manages team"
                             : null}
+                          {member.role === "member" &&
+                          member.permissions?.mailbox?.access === "write" &&
+                          effective.crm?.access === "write"
+                            ? " · Own mailbox"
+                            : null}
                         </span>
                         {canManage ? (
                           <EditMemberAccessSheet
@@ -148,6 +161,15 @@ export default async function TeamPage({
                             actorRole={ctx.role}
                             actorPermissions={ctx.permissions}
                             projects={projects}
+                            mailbox={
+                              smtp
+                                ? {
+                                    sender: smtp.members.get(member.userId) ?? null,
+                                    fallback: smtpFallback,
+                                    unavailable: smtpUnavailable,
+                                  }
+                                : undefined
+                            }
                             member={{
                               ...member,
                               projectIds: projectsByUser.get(member.userId)?.projectIds ?? [],

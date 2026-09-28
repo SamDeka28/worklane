@@ -245,7 +245,7 @@ export default async function ProjectDetailPage({
     needDocCount
       ? listFilesForEntity(orgSlug, "project", projectId).catch(() => [])
       : Promise.resolve([]),
-    needSplitFull
+    needPartnerHints || needSplitFull
       ? loadProjectPartnerEarnings(orgSlug, projectId).catch(() => ({
           rows: [],
           details: [],
@@ -1188,7 +1188,7 @@ export default async function ProjectDetailPage({
         ) : null}
 
         {tab === "documents" ? (
-          <HubSection title="Documents">
+          <HubSection title="Documents" className="flex flex-1 flex-col">
             <ProjectDocumentsHub
               orgSlug={orgSlug}
               projectId={project.id}
