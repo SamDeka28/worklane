@@ -26,6 +26,7 @@ import { KanbanBoard } from "@/modules/delivery/components/kanban-board";
 import { MilestoneStudioList } from "@/modules/delivery/components/milestone-studio";
 import { ProjectDocumentsHub } from "@/modules/delivery/components/project-docs";
 import { ProjectOverviewRail } from "@/modules/delivery/components/project-overview-rail";
+import { LogTimeRange, TaskClocks } from "@/modules/delivery/components/task-time";
 import { formatHoursMillis } from "@/modules/delivery/ledger";
 import {
   chargeByMilestoneId,
@@ -358,6 +359,7 @@ export default async function ProjectDetailPage({
       name: project.name,
       totalMinor: money.totalPriceMinor.toString(),
       feeBps: project.defaultFeeBps,
+      billingMode: project.billingMode,
     },
   ];
   const feeBps = project.defaultFeeBps;
@@ -876,24 +878,45 @@ export default async function ProjectDetailPage({
                   className="min-h-0 flex-1"
                 />
               </div>
-            ) : logs.length === 0 ? (
+            ) : (
+              <>
+              <TaskClocks
+                orgSlug={orgSlug}
+                tasks={tasks}
+                canWrite={ctx.canWrite}
+                currency={project.currency}
+                defaultRateMinor={project.hourlyRateMinor ?? lastRate}
+              />
+              {logs.length === 0 ? (
               <EmptyState icon={CalendarClock}
-                title="Log the first day"
-                body="Date, hours, rate or a fixed amount: one row replaces the spreadsheet."
+                title="Log the first hours"
+                body="Move a card to Doing to start its clock and to Done to log it, or enter a start and end time below."
               />
             ) : (
               <ol className="space-y-2">
-                {logs.map((log) => (
+                {logs.map((log) => {
+                  const logTask = log.taskId ? tasks.find((task) => task.id === log.taskId) : null;
+                  return (
                   <li
                     key={log.id}
                     className="rounded-3xl bg-muted/40 px-4 py-3 ring-1 ring-border/30"
                   >
                     <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="text-sm font-semibold">{formatDay(log.workedOn)}</p>
+                      <p className="text-sm font-semibold">
+                        {formatDay(log.workedOn)}
+                        {log.startedAt && log.endedAt ? (
+                          <LogTimeRange startedAt={log.startedAt} endedAt={log.endedAt} />
+                        ) : null}
+                      </p>
                       <StatusChip tone={log.chargeId ? "paid" : "due"}>
                         {log.chargeId ? "Charged" : "No charge"}
                       </StatusChip>
                     </div>
+                    {logTask ? (
+                      <p className="mt-1 text-xs font-medium text-muted-foreground">
+                        Task · {logTask.title}
+                      </p>
+                    ) : null}
                     <p className="mt-1 text-sm">{log.description || "Work logged"}</p>
                     <p className="mt-1 text-sm tabular-nums text-muted-foreground">
                       {log.fixedMinor != null && log.fixedMinor > BigInt(0)
@@ -907,8 +930,11 @@ export default async function ProjectDetailPage({
                           : "-"}
                     </p>
                   </li>
-                ))}
+                  );
+                })}
               </ol>
+            )}
+              </>
             )}
           </HubSection>
         ) : null}
@@ -1258,7 +1284,8 @@ export default async function ProjectDetailPage({
           milestones={milestones}
           currency={project.currency}
           defaultFeeBps={project.defaultFeeBps}
-          defaultHourlyRateMinor={lastRate}
+          defaultHourlyRateMinor={project.hourlyRateMinor ?? lastRate}
+          tasks={tasks.map((task) => ({ id: task.id, title: task.title }))}
         />
       ) : null}
     </WorkSurface>

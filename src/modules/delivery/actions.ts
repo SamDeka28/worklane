@@ -90,13 +90,36 @@ function normalizeTaskLabels(raw: FormDataEntryValue | null): string[] {
   return out;
 }
 
+function parseInstant(raw: FormDataEntryValue | null): Date | null {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** The project's rate per hour from its form; blank clears it. */
+function parseHourlyRate(
+  formData: FormData,
+  currency: IsoCurrency,
+): { minor: string | null } | { error: string } {
+  const raw = String(formData.get("hourly_rate") ?? "").trim();
+  if (!raw) return { minor: null };
+  try {
+    const minor = parseMajorToMinor(raw, currency);
+    if (minor < BigInt(0)) return { error: "Rate per hour cannot be negative" };
+    return { minor: minor.toString() };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Enter a valid rate per hour" };
+  }
+}
+
 async function loadProjectRow(
   ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
   projectId: string,
 ) {
   const { data, error } = await ctx.supabase
     .from("projects")
-    .select("id, client_id, name, billing_mode, default_fee_bps, earn_on")
+    .select("id, client_id, name, billing_mode, default_fee_bps, earn_on, hourly_rate_minor")
     .eq("id", projectId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -216,29 +239,31 @@ export async function createProjectAction(orgSlug: string, formData: FormData) {
       return { error: error instanceof Error ? error.message : "Enter a valid amount" };
     }
   }
+  const rate = parseHourlyRate(formData, currency);
+  if ("error" in rate) return { error: rate.error };
 
-  const { data: project, error } = await ctx.supabase
-    .from("projects")
-    .insert({
-      organization_id: ctx.org.id,
-      client_id: clientId,
-      name,
-      status,
-      billing_mode: billingMode,
-      default_fee_bps: feeBps,
-      earn_on: earnOn,
-      contracted_amount_minor: contractedAmountMinor,
-      scope,
-      scope_doc: scopeDoc,
-      starts_on: startsOn,
-      due_on: dueOn,
-      created_by: ctx.userId,
-    })
-    .select("id")
-    .single();
+  // Reading the row back in the insert fails projects_read: can_access_project can't see it yet.
+  const project = { id: crypto.randomUUID() };
+  const { error } = await ctx.supabase.from("projects").insert({
+    id: project.id,
+    organization_id: ctx.org.id,
+    client_id: clientId,
+    name,
+    status,
+    billing_mode: billingMode,
+    default_fee_bps: feeBps,
+    earn_on: earnOn,
+    contracted_amount_minor: contractedAmountMinor,
+    ...(rate.minor != null ? { hourly_rate_minor: rate.minor } : {}),
+    scope,
+    scope_doc: scopeDoc,
+    starts_on: startsOn,
+    due_on: dueOn,
+    created_by: ctx.userId,
+  });
 
-  if (error || !project) {
-    return { error: error?.message ?? "Could not create project" };
+  if (error) {
+    return { error: error.message };
   }
 
   await ctx.supabase.from("project_members").upsert(
@@ -419,6 +444,8 @@ export async function updateProjectAction(
       return { error: error instanceof Error ? error.message : "Enter a valid amount" };
     }
   }
+  const rate = parseHourlyRate(formData, currency);
+  if ("error" in rate) return { error: rate.error };
 
   const { error } = await ctx.supabase
     .from("projects")
@@ -429,6 +456,7 @@ export async function updateProjectAction(
       default_fee_bps: feeBps,
       earn_on: earnOn,
       contracted_amount_minor: contractedAmountMinor,
+      ...(formData.has("hourly_rate") ? { hourly_rate_minor: rate.minor } : {}),
       scope,
       scope_doc: scopeDoc,
       starts_on: startsOn,
@@ -479,10 +507,32 @@ export async function createWorkLogAction(
 
   const workedOn =
     String(formData.get("worked_on") ?? "") || new Date().toISOString().slice(0, 10);
-  const description = String(formData.get("description") ?? "").trim() || null;
-  const externalUrl = String(formData.get("external_url") ?? "").trim() || null;
+  let description = String(formData.get("description") ?? "").trim() || null;
   const milestoneId = String(formData.get("milestone_id") ?? "").trim() || null;
-  const hoursRaw = String(formData.get("hours") ?? "").trim();
+  const taskId = String(formData.get("task_id") ?? "").trim() || null;
+  const startedAt = parseInstant(formData.get("started_at"));
+  const endedAt = parseInstant(formData.get("ended_at"));
+  if (startedAt && endedAt && endedAt <= startedAt) {
+    return { error: "End time must be after the start time" };
+  }
+  type LogTask = { id: string; title: string; time_stopped_at: string | null };
+  let task: LogTask | null = null;
+  if (taskId) {
+    const { data } = await ctx.supabase
+      .from("tasks")
+      .select("id, title, time_stopped_at")
+      .eq("id", taskId)
+      .eq("project_id", projectId)
+      .eq("organization_id", ctx.org.id)
+      .maybeSingle();
+    if (!data) return { error: "That task isn't on this project" };
+    task = data as LogTask;
+    description ??= task.title;
+  }
+  let hoursRaw = String(formData.get("hours") ?? "").trim();
+  if (!hoursRaw && startedAt && endedAt) {
+    hoursRaw = String(Math.max(0.001, Math.round((endedAt.getTime() - startedAt.getTime()) / 3_600) / 1000));
+  }
   const rateRaw = String(formData.get("hourly_rate") ?? "").trim();
   const fixedRaw = String(formData.get("fixed_amount") ?? "").trim();
 
@@ -502,6 +552,8 @@ export async function createWorkLogAction(
     }
     if (rateRaw) {
       hourlyRateMinor = parseMajorToMinor(rateRaw, currency);
+    } else if (hours != null && !fixedMinor && project.hourly_rate_minor != null) {
+      hourlyRateMinor = BigInt(project.hourly_rate_minor);
     }
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Enter a valid amount" };
@@ -531,7 +583,9 @@ export async function createWorkLogAction(
       hourly_rate_minor: hourlyRateMinor?.toString() ?? null,
       fixed_minor: fixedMinor?.toString() ?? null,
       description,
-      external_url: externalUrl,
+      task_id: taskId,
+      started_at: startedAt?.toISOString() ?? null,
+      ended_at: endedAt?.toISOString() ?? null,
       created_by: ctx.userId,
     })
     .select("id")
@@ -539,6 +593,14 @@ export async function createWorkLogAction(
 
   if (error || !log) {
     return { error: error?.message ?? "Could not save work log" };
+  }
+
+  if (task?.time_stopped_at) {
+    await ctx.supabase
+      .from("tasks")
+      .update({ time_started_at: null, time_stopped_at: null })
+      .eq("id", task.id)
+      .eq("organization_id", ctx.org.id);
   }
 
   if (posted.postsCharge) {
@@ -1537,12 +1599,7 @@ export async function updateTaskStatusAction(
   const ctx = await requireWritableOrg(orgSlug);
   if (!TASK_STATUSES.includes(status)) return { error: "Unknown task status" };
 
-  const { data: task } = await ctx.supabase
-    .from("tasks")
-    .select("id, project_id")
-    .eq("id", taskId)
-    .eq("organization_id", ctx.org.id)
-    .maybeSingle();
+  const task = await loadClockTask(ctx, taskId);
   if (!task) return { error: "Task not found" };
 
   const { data: column } = await ctx.supabase
@@ -1576,10 +1633,11 @@ export async function updateTaskStatusAction(
     .eq("organization_id", ctx.org.id);
 
   if (error) return { error: error.message };
+  const clock = await applyTaskClock(ctx, task, status);
 
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
   revalidatePath(`/${orgSlug}/board`);
-  return { ok: true as const };
+  return { ok: true as const, clock };
 }
 
 export async function deleteTaskAction(orgSlug: string, taskId: string) {
@@ -1691,6 +1749,128 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
   return { ok: true as const };
 }
 
+/** A task's clock that just stopped, ready to log. */
+export type TaskClockStop = {
+  taskId: string;
+  projectId: string;
+  title: string;
+  startedAt: string;
+  stoppedAt: string;
+};
+
+type ClockTask = {
+  id: string;
+  project_id: string;
+  title: string;
+  status: string;
+  time_started_at: string | null;
+  time_stopped_at: string | null;
+};
+
+const CLOCK_TASK_SELECT = "id, project_id, title, status, time_started_at, time_stopped_at";
+
+/**
+ * On hourly projects, moving a card into progress starts its clock and moving it out stops it.
+ * A stopped session waits on the task until it's logged or discarded; a new one won't start over it.
+ */
+async function applyTaskClock(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  task: ClockTask,
+  nextStatus: TaskStatus,
+): Promise<{ started?: boolean; stopped?: TaskClockStop }> {
+  if (task.status === nextStatus) return {};
+  const entering = nextStatus === "doing";
+  const leaving = task.status === "doing";
+  if (!entering && !leaving) return {};
+  const { data: project } = await ctx.supabase
+    .from("projects")
+    .select("billing_mode")
+    .eq("id", task.project_id)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (project?.billing_mode !== "hourly") return {};
+
+  const now = new Date().toISOString();
+  if (entering && !task.time_started_at) {
+    await ctx.supabase
+      .from("tasks")
+      .update({ time_started_at: now, time_stopped_at: null })
+      .eq("id", task.id)
+      .eq("organization_id", ctx.org.id);
+    return { started: true };
+  }
+  if (leaving && task.time_started_at && !task.time_stopped_at) {
+    await ctx.supabase
+      .from("tasks")
+      .update({ time_stopped_at: now })
+      .eq("id", task.id)
+      .eq("organization_id", ctx.org.id);
+    return {
+      stopped: {
+        taskId: task.id,
+        projectId: task.project_id,
+        title: task.title,
+        startedAt: task.time_started_at,
+        stoppedAt: now,
+      },
+    };
+  }
+  return {};
+}
+
+async function loadClockTask(ctx: Awaited<ReturnType<typeof requireWritableOrg>>, taskId: string) {
+  const { data } = await ctx.supabase
+    .from("tasks")
+    .select(CLOCK_TASK_SELECT)
+    .eq("id", taskId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  return (data as ClockTask | null) ?? null;
+}
+
+/** Stops a running clock by hand, so its time can be logged. */
+export async function stopTaskClockAction(orgSlug: string, taskId: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const task = await loadClockTask(ctx, taskId);
+  if (!task) return { error: "Task not found" };
+  if (!task.time_started_at) return { error: "This task's clock isn't running" };
+  const stoppedAt = task.time_stopped_at ?? new Date().toISOString();
+  if (!task.time_stopped_at) {
+    const { error } = await ctx.supabase
+      .from("tasks")
+      .update({ time_stopped_at: stoppedAt })
+      .eq("id", taskId)
+      .eq("organization_id", ctx.org.id);
+    if (error) return { error: error.message };
+  }
+  revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
+  return {
+    ok: true as const,
+    stopped: {
+      taskId,
+      projectId: task.project_id,
+      title: task.title,
+      startedAt: task.time_started_at,
+      stoppedAt,
+    } satisfies TaskClockStop,
+  };
+}
+
+/** Throws away a task's clock without logging it. */
+export async function discardTaskClockAction(orgSlug: string, taskId: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const task = await loadClockTask(ctx, taskId);
+  if (!task) return { error: "Task not found" };
+  const { error } = await ctx.supabase
+    .from("tasks")
+    .update({ time_started_at: null, time_stopped_at: null })
+    .eq("id", taskId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+  revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
+  return { ok: true as const };
+}
+
 export async function moveTaskAction(
   orgSlug: string,
   taskId: string,
@@ -1698,12 +1878,7 @@ export async function moveTaskAction(
   orderedIds: string[],
 ) {
   const ctx = await requireWritableOrg(orgSlug);
-  const { data: task } = await ctx.supabase
-    .from("tasks")
-    .select("id, project_id")
-    .eq("id", taskId)
-    .eq("organization_id", ctx.org.id)
-    .maybeSingle();
+  const task = await loadClockTask(ctx, taskId);
   if (!task) return { error: "Task not found" };
 
   const { data: column } = await ctx.supabase
@@ -1734,10 +1909,11 @@ export async function moveTaskAction(
   );
   const failed = results.find((result) => result.error);
   if (failed?.error) return { error: failed.error.message };
+  const clock = await applyTaskClock(ctx, task, status);
 
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
   revalidatePath(`/${orgSlug}/board`);
-  return { ok: true as const };
+  return { ok: true as const, clock };
 }
 
 export async function addTaskCommentAction(orgSlug: string, taskId: string, formData: FormData) {

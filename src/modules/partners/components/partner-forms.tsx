@@ -10,6 +10,7 @@ import { DangerZone } from "@/components/studio/type-to-confirm";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { NativeSelect } from "@/components/ui/native-select";
 import {
   addProjectMembersAction,
@@ -466,7 +467,13 @@ export function ProjectSplitDialog({
   triggerLabel = "Set split",
 }: {
   orgSlug: string;
-  projects: { id: string; name: string; totalMinor?: string; feeBps?: number }[];
+  projects: {
+    id: string;
+    name: string;
+    totalMinor?: string;
+    feeBps?: number;
+    billingMode?: string;
+  }[];
   partners?: PartnerRecord[];
   partnersByProjectId?: Record<string, PartnerRecord[]>;
   currency?: "USD" | "INR";
@@ -497,6 +504,7 @@ export function ProjectSplitDialog({
   const projectTotalMinor =
     grossMinor > BigInt(0) ? netFromGross(grossMinor, feeBps) : BigInt(0);
   const feeMinor = grossMinor > projectTotalMinor ? grossMinor - projectTotalMinor : BigInt(0);
+  const wholePool = selectedProject?.billingMode === "hourly";
 
   const poolPartners = useMemo(() => {
     if (partnersByProjectId && projectId) {
@@ -546,9 +554,13 @@ export function ProjectSplitDialog({
       poolIds.forEach((id, index) => {
         locked[id] = poolIds.length >= 2 && index < poolIds.length - 1;
       });
+      const suggestedPct = wholePool ? 100 : 60;
       const suggested =
         projectTotalMinor > BigInt(0)
-          ? formatPoolAmountInput((projectTotalMinor * BigInt(60)) / BigInt(100), currency)
+          ? formatPoolAmountInput(
+              (projectTotalMinor * BigInt(suggestedPct)) / BigInt(100),
+              currency,
+            )
           : "";
       return {
         roles: fallbackRoles,
@@ -564,7 +576,9 @@ export function ProjectSplitDialog({
     const poolAmountMinor = BigInt(seed.poolAmountMinor);
     for (const line of seed.lines) {
       roles[line.partnerId] = line.role;
-      if (line.role === "pool") {
+      if (line.role === "pool" && wholePool) {
+        shares[line.partnerId] = formatSharePct(line.shareBps);
+      } else if (line.role === "pool") {
         let poolShare = line.poolShareBps;
         if (poolShare == null && poolAmountMinor > BigInt(0) && projectTotalMinor > BigInt(0)) {
           poolShare = Number((BigInt(line.shareBps) * projectTotalMinor) / poolAmountMinor);
@@ -583,11 +597,11 @@ export function ProjectSplitDialog({
       roles,
       shares,
       locked,
-      poolAmount: formatPoolAmountInput(poolAmountMinor, currency),
+      poolAmount: formatPoolAmountInput(wholePool ? projectTotalMinor : poolAmountMinor, currency),
       label: seed.label ?? "",
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partnerKey, projectId, seedForProject, projectTotalMinor, currency]);
+  }, [partnerKey, projectId, seedForProject, projectTotalMinor, currency, wholePool]);
 
   const [roles, setRoles] = useState(seededDefaults.roles);
   const [shares, setShares] = useState(seededDefaults.shares);
@@ -623,8 +637,15 @@ export function ProjectSplitDialog({
     poolParseError = error instanceof Error ? error.message : "Invalid pool amount";
   }
 
+  const freeShares = remainderIds.length > 0;
+  const poolSumBps = poolIds.reduce((sum, id) => sum + parseShareBps(shares[id]), 0);
+  const unassignedPoolMinor =
+    freeShares && poolSumBps < 10_000
+      ? (poolAmountMinor * BigInt(10_000 - poolSumBps)) / BigInt(10_000)
+      : BigInt(0);
   const remainderMinor =
-    projectTotalMinor > poolAmountMinor ? projectTotalMinor - poolAmountMinor : BigInt(0);
+    (projectTotalMinor > poolAmountMinor ? projectTotalMinor - poolAmountMinor : BigInt(0)) +
+    unassignedPoolMinor;
 
   let compiled: ReturnType<typeof compilePoolRemainderDistribution> | null = null;
   let compileError: string | null = poolParseError;
@@ -654,7 +675,7 @@ export function ProjectSplitDialog({
     const cleaned = value.replace(/[^\d.]/g, "");
     setShares((prev) => {
       const draft = { ...prev, [partnerId]: cleaned };
-      if (cleaned === "" || cleaned === "." || cleaned.endsWith(".")) return draft;
+      if (freeShares || cleaned === "" || cleaned === "." || cleaned.endsWith(".")) return draft;
       const lockMap = Object.fromEntries(poolIds.map((id) => [id, Boolean(locked[id])]));
       if (locked[partnerId]) {
         return rebalanceShares(poolIds, draft, lockMap);
@@ -771,7 +792,9 @@ export function ProjectSplitDialog({
             <span className="font-semibold tabular-nums">
               {projectTotalMinor > BigInt(0)
                 ? moneyLabel(projectTotalMinor, currency)
-                : "Add milestone prices first"}
+                : selectedProject?.billingMode === "hourly"
+                  ? "Log hours first"
+                  : "Add milestone prices first"}
             </span>
           </div>
         </div>
@@ -779,7 +802,11 @@ export function ProjectSplitDialog({
         <Field
           label="Build / target pool"
           htmlFor="pool_amount"
-          hint="Of the distributable amount after fee (e.g. 4800 of ~7742 net)"
+          hint={
+            wholePool
+              ? "Hourly projects split the whole distributable amount, including hours logged later"
+              : "Of the distributable amount after fee (e.g. 4800 of ~7742 net)"
+          }
           required
         >
           <Input
@@ -787,6 +814,8 @@ export function ProjectSplitDialog({
             name="pool_amount"
             inputMode="decimal"
             required
+            readOnly={wholePool}
+            className={wholePool ? "bg-muted/50 text-muted-foreground" : undefined}
             value={poolAmount}
             onChange={(event) => setPoolAmount(event.target.value)}
             placeholder="4800"
@@ -825,13 +854,15 @@ export function ProjectSplitDialog({
         ) : (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground">
-              Mark who is in the pool vs who takes the remainder. Pool %s must total 100% of the
-              pool (e.g. 45 / 55).
+              {freeShares
+                ? "Set each pool partner's % of the pool. Whatever the pool partners don't take goes to the remainder partner."
+                : "Mark who is in the pool vs who takes the remainder. With no remainder partner, pool %s must total 100% of the pool (e.g. 45 / 55)."}
             </p>
             {poolPartners.map((partner) => {
               const role = roles[partner.id] ?? "pool";
               const isPool = role === "pool";
-              const isSoloUnlocked = isPool && unlockedPoolIds.length === 1 && !locked[partner.id];
+              const isSoloUnlocked =
+                !freeShares && isPool && unlockedPoolIds.length === 1 && !locked[partner.id];
               const line = compiled?.find((row) => row.partnerId === partner.id);
               return (
                 <div
@@ -873,7 +904,13 @@ export function ProjectSplitDialog({
                     </div>
                   </div>
                   {isPool ? (
-                    <div className="grid grid-cols-[auto_1fr_5.5rem] items-center gap-2">
+                    <div
+                      className={cn(
+                        "grid items-center gap-2",
+                        freeShares ? "grid-cols-[1fr_5.5rem]" : "grid-cols-[auto_1fr_5.5rem]",
+                      )}
+                    >
+                      {freeShares ? null : (
                       <Button
                         type="button"
                         size="icon-sm"
@@ -892,9 +929,11 @@ export function ProjectSplitDialog({
                           <LockOpen className="size-4" />
                         )}
                       </Button>
+                      )}
                       <span className="text-xs text-muted-foreground">
-                        {locked[partner.id] ? "locked" : isSoloUnlocked ? "auto" : "flex"} · % of
-                        pool
+                        {freeShares
+                          ? "% of pool"
+                          : `${locked[partner.id] ? "locked" : isSoloUnlocked ? "auto" : "flex"} · % of pool`}
                       </span>
                       <Input
                         inputMode="decimal"

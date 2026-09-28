@@ -46,7 +46,9 @@ import {
   renameColumnAction,
   reorderColumnsAction,
   updateTaskStatusAction,
+  type TaskClockStop,
 } from "@/modules/delivery/actions";
+import { LogTimeDialog } from "@/modules/delivery/components/task-time";
 import {
   TaskBoardCard,
   TaskDragHandle,
@@ -187,6 +189,7 @@ export function KanbanBoard({
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const [activeHeight, setActiveHeight] = useState(76);
   const [modal, setModal] = useState<TaskModalState | null>(null);
+  const [logClock, setLogClock] = useState<TaskClockStop | null>(null);
   const sensors = useBoardDndSensors();
   const searchParams = useSearchParams();
   const linkedTaskId = searchParams.get("task");
@@ -381,8 +384,21 @@ export function KanbanBoard({
           ? await updateTaskStatusAction(orgSlug, draggedId, status)
           : null
         : await moveTaskAction(orgSlug, draggedId, overColumn, orderedIds);
-      if (result?.error) toast.error(result.error);
+      handleMoveResult(result);
     });
+  }
+
+  function handleMoveResult(
+    result: Awaited<ReturnType<typeof moveTaskAction>> | null,
+  ) {
+    if (!result) return;
+    if ("error" in result && result.error) {
+      toast.error(result.error);
+      return;
+    }
+    const clock = "clock" in result ? result.clock : undefined;
+    if (clock?.stopped) setLogClock(clock.stopped);
+    else if (clock?.started) toast.success("Clock started. Move the card to Done to log the time.");
   }
 
   function moveTaskTo(taskId: string, toColumn: string) {
@@ -414,7 +430,7 @@ export function KanbanBoard({
             toColumn,
             inserted.map((task) => task.id),
           );
-      if (result?.error) toast.error(result.error);
+      handleMoveResult(result);
     });
   }
 
@@ -768,6 +784,7 @@ export function KanbanBoard({
         showProjectPicker={orgMode}
         onClose={closeModal}
       />
+      <LogTimeDialog orgSlug={orgSlug} clock={logClock} onClose={() => setLogClock(null)} />
     </div>
   );
 }

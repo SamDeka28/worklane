@@ -109,9 +109,22 @@ export function compilePoolRemainderDistribution(
     }
   }
 
-  assertShareSum(poolLines.map((line) => ({ shareBps: line.poolShareBps })));
+  const poolSumBps = poolLines.reduce((sum, line) => sum + line.poolShareBps, 0);
+  if (remainderPartnerIds.length === 0) {
+    assertShareSum(poolLines.map((line) => ({ shareBps: line.poolShareBps })));
+  } else if (poolSumBps <= 0 || poolSumBps > 10_000) {
+    throw new Error(
+      `Pool shares must total between 0% and 100%, got ${(poolSumBps / 100).toFixed(2)}%`,
+    );
+  }
 
-  const remainderAmount = projectTotalMinor - poolAmountMinor;
+  const unassignedPoolBps = remainderPartnerIds.length > 0 ? 10_000 - poolSumBps : 0;
+  const poolSplit = splitByBps(poolAmountMinor, [
+    ...poolLines.map((line) => line.poolShareBps),
+    unassignedPoolBps,
+  ]);
+  const unassignedPoolMinor = poolSplit[poolLines.length] ?? BigInt(0);
+  const remainderAmount = projectTotalMinor - poolAmountMinor + unassignedPoolMinor;
 
   if (remainderPartnerIds.length === 0) {
     if (remainderAmount !== BigInt(0)) {
@@ -131,10 +144,7 @@ export function compilePoolRemainderDistribution(
     );
   }
 
-  const poolParts = splitByBps(
-    poolAmountMinor,
-    poolLines.map((line) => line.poolShareBps),
-  );
+  const poolParts = poolSplit.slice(0, poolLines.length);
   const remParts = splitByBps(remainderAmount, equalBps(remainderPartnerIds.length));
 
   const rows: {

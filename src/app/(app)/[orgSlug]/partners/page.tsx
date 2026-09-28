@@ -89,6 +89,7 @@ export default async function PartnersPage({
     name: row.project.name,
     totalMinor: (row.project.contractedAmountMinor ?? BigInt(0)).toString(),
     feeBps: row.project.defaultFeeBps,
+    billingMode: row.project.billingMode,
   }));
   const projectsByPartnerId: Record<string, { id: string; name: string }[]> = {};
   for (const row of board) {

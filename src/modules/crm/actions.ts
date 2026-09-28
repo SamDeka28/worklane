@@ -632,35 +632,32 @@ export async function convertLeadToClientAction(
     const projectName =
       String(formData?.get("project_name") ?? "").trim() ||
       `${lead.name as string} engagement`;
-    const { data: project, error: projectError } = await ctx.supabase
-      .from("projects")
-      .insert({
-        organization_id: ctx.org.id,
-        client_id: client.id,
-        name: projectName,
-        status: "planning",
-        billing_mode: "milestones",
-        default_fee_bps: 500,
-        earn_on: "charge",
-        contracted_amount_minor: lead.estimated_value_minor,
-        scope: "Created from won lead",
-        created_by: ctx.userId,
-      })
-      .select("id")
-      .single();
+    // Reading the row back in the insert fails projects_read: can_access_project can't see it yet.
+    const newProjectId = crypto.randomUUID();
+    const { error: projectError } = await ctx.supabase.from("projects").insert({
+      id: newProjectId,
+      organization_id: ctx.org.id,
+      client_id: client.id,
+      name: projectName,
+      status: "planning",
+      billing_mode: "milestones",
+      default_fee_bps: 500,
+      earn_on: "charge",
+      contracted_amount_minor: lead.estimated_value_minor,
+      scope: "Created from won lead",
+      created_by: ctx.userId,
+    });
     if (projectError) return { error: projectError.message };
-    projectId = project?.id ?? null;
-    if (projectId) {
-      await ctx.supabase.from("project_members").upsert(
-        {
-          organization_id: ctx.org.id,
-          project_id: projectId,
-          user_id: ctx.userId,
-          role: "lead",
-        },
-        { onConflict: "project_id,user_id" },
-      );
-    }
+    projectId = newProjectId;
+    await ctx.supabase.from("project_members").upsert(
+      {
+        organization_id: ctx.org.id,
+        project_id: projectId,
+        user_id: ctx.userId,
+        role: "lead",
+      },
+      { onConflict: "project_id,user_id" },
+    );
   }
 
   const { data: wonStage } = await ctx.supabase

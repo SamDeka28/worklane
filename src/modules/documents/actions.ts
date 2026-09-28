@@ -386,23 +386,26 @@ export async function createTaggedProjectAction(
     return { error: "Choose or create a client for this project" };
   }
 
-  const { data: project, error } = await ctx.supabase
-    .from("projects")
-    .insert({
-      organization_id: ctx.org.id,
-      client_id: clientId,
-      name: trimmed,
-      status: "planning",
-      billing_mode: "milestones",
-      default_fee_bps: 500,
-      earn_on: "charge",
-      created_by: ctx.userId,
-    })
-    .select("id, name")
-    .single();
-  if (error || !project) return { error: error?.message ?? "Could not create project" };
+  // Reading the row back in the insert fails projects_read: can_access_project can't see it yet.
+  const project = { id: crypto.randomUUID(), name: trimmed };
+  const { error } = await ctx.supabase.from("projects").insert({
+    id: project.id,
+    organization_id: ctx.org.id,
+    client_id: clientId,
+    name: trimmed,
+    status: "planning",
+    billing_mode: "milestones",
+    default_fee_bps: 500,
+    earn_on: "charge",
+    created_by: ctx.userId,
+  });
+  if (error) return { error: error.message };
 
-  await ensureDefaultColumns(ctx, project.id as string);
+  await ctx.supabase.from("project_members").upsert(
+    { organization_id: ctx.org.id, project_id: project.id, user_id: ctx.userId, role: "lead" },
+    { onConflict: "project_id,user_id" },
+  );
+  await ensureDefaultColumns(ctx, project.id);
 
   await ctx.supabase
     .from("documents")
@@ -1179,22 +1182,21 @@ export async function createProjectFromDocumentAction(orgSlug: string, documentI
   const snapshot = (version?.snapshot as { projectName?: string | null } | null) ?? null;
   const name = snapshot?.projectName || document.title;
 
-  const { data: project, error } = await ctx.supabase
-    .from("projects")
-    .insert({
-      organization_id: ctx.org.id,
-      client_id: document.client_id,
-      name,
-      status: "planning",
-      billing_mode: "milestones",
-      default_fee_bps: 500,
-      earn_on: "charge",
-      scope: "Created from signed/accepted document snapshot",
-      created_by: ctx.userId,
-    })
-    .select("id")
-    .single();
-  if (error || !project) return { error: error?.message ?? "Could not create project" };
+  // Reading the row back in the insert fails projects_read: can_access_project can't see it yet.
+  const project = { id: crypto.randomUUID() };
+  const { error } = await ctx.supabase.from("projects").insert({
+    id: project.id,
+    organization_id: ctx.org.id,
+    client_id: document.client_id,
+    name,
+    status: "planning",
+    billing_mode: "milestones",
+    default_fee_bps: 500,
+    earn_on: "charge",
+    scope: "Created from signed/accepted document snapshot",
+    created_by: ctx.userId,
+  });
+  if (error) return { error: error.message };
 
   await ctx.supabase.from("project_members").upsert(
     {

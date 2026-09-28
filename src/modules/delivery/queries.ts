@@ -52,6 +52,7 @@ function mapProject(row: {
   default_fee_bps: number;
   earn_on: string;
   contracted_amount_minor: string | number | null;
+  hourly_rate_minor?: string | number | null;
   scope: string | null;
   scope_doc: Record<string, unknown> | null;
   starts_on: string | null;
@@ -73,6 +74,7 @@ function mapProject(row: {
     earnOn: row.earn_on === "receipt" ? "receipt" : "charge",
     contractedAmountMinor:
       row.contracted_amount_minor == null ? null : asLedgerMinor(row.contracted_amount_minor),
+    hourlyRateMinor: row.hourly_rate_minor == null ? null : asLedgerMinor(row.hourly_rate_minor),
     scope: row.scope,
     scopeDoc: row.scope_doc,
     startsOn: row.starts_on,
@@ -82,7 +84,7 @@ function mapProject(row: {
 }
 
 const PROJECT_SELECT =
-  "id, organization_id, client_id, name, status, billing_mode, default_fee_bps, earn_on, contracted_amount_minor, scope, scope_doc, starts_on, due_on, created_at, clients(name, currency)";
+  "id, organization_id, client_id, name, status, billing_mode, default_fee_bps, earn_on, contracted_amount_minor, hourly_rate_minor, scope, scope_doc, starts_on, due_on, created_at, clients(name, currency)";
 
 export const listProjects = cache(async (orgSlug: string) => {
   const { org, supabase } = await requireOrg(orgSlug);
@@ -281,7 +283,7 @@ export async function listTasks(orgSlug: string, projectId: string) {
   const { org, supabase } = await requireOrg(orgSlug);
   const { data, error } = await supabase
     .from("tasks")
-    .select("id, project_id, milestone_id, column_id, title, description, description_doc, status, priority, kind, labels, due_on, position, assignee_user_id, assignee_user_ids, created_at")
+    .select("id, project_id, milestone_id, column_id, title, description, description_doc, status, priority, kind, labels, due_on, position, assignee_user_id, assignee_user_ids, created_at, time_started_at, time_stopped_at")
     .eq("organization_id", org.id)
     .eq("project_id", projectId)
     .order("position")
@@ -325,6 +327,8 @@ export async function listTasks(orgSlug: string, projectId: string) {
       assigneeUserIds,
       commentCount: counts.get(row.id) ?? 0,
       createdAt: row.created_at,
+      timeStartedAt: (row.time_started_at as string | null) ?? null,
+      timeStoppedAt: (row.time_stopped_at as string | null) ?? null,
     };
   });
 }
@@ -515,7 +519,7 @@ export async function listWorkLogs(orgSlug: string, projectId: string) {
   const { data, error } = await supabase
     .from("work_logs")
     .select(
-      "id, project_id, milestone_id, worked_on, hours_millis, hourly_rate_minor, fixed_minor, description, external_url, charge_id, created_at",
+      "id, project_id, milestone_id, worked_on, hours_millis, hourly_rate_minor, fixed_minor, description, external_url, task_id, started_at, ended_at, charge_id, created_at",
     )
     .eq("organization_id", org.id)
     .eq("project_id", projectId)
@@ -533,6 +537,9 @@ export async function listWorkLogs(orgSlug: string, projectId: string) {
       fixedMinor: row.fixed_minor == null ? null : asLedgerMinor(row.fixed_minor),
       description: row.description,
       externalUrl: row.external_url,
+      taskId: row.task_id,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
       chargeId: row.charge_id,
       createdAt: row.created_at,
     }),

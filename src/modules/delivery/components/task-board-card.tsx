@@ -177,15 +177,13 @@ export function TaskBoardCard({
   const body = (
     <>
       <div className="flex items-start justify-between gap-2">
-        {hasTags ? (
-          <TagRow className="min-w-0 flex-1">
-            {kind !== "task" ? <KindMark kind={kind} /> : null}
-            {projectLabel ? <ProjectChip label={projectLabel} /> : null}
-            {milestoneLabel ? <StatusChip tone="planning">{milestoneLabel}</StatusChip> : null}
-          </TagRow>
-        ) : (
-          <span className="min-w-0 flex-1" />
-        )}
+
+        <TagRow className="min-w-0 flex-1">
+          <KindMark kind={kind} />
+          {projectLabel ? <ProjectChip label={projectLabel} /> : null}
+          {milestoneLabel ? <StatusChip tone="planning">{milestoneLabel}</StatusChip> : null}
+        </TagRow>
+
         <PriorityMark priority={priority} />
       </div>
 
@@ -248,10 +246,10 @@ export function TaskBoardCard({
       className={cn(
         "group/card relative w-full rounded-xl bg-card shadow-sm ring-1 ring-foreground/10 transition-[box-shadow,transform,ring-color,background-color,color] duration-150",
         onOpen &&
-          !selected &&
-          "hover:-translate-y-px hover:shadow-md hover:ring-foreground/16",
+        !selected &&
+        "hover:-translate-y-px hover:shadow-md hover:ring-foreground/16",
         selected &&
-          "bg-primary/10 ring-2 ring-primary/60 dark:bg-primary/15 dark:ring-primary",
+        "bg-primary/10 ring-2 ring-primary/60 dark:bg-primary/15 dark:ring-primary",
         className,
       )}
     >

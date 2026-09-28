@@ -199,7 +199,7 @@ export async function setProjectDistributionAction(
 
   const { data: project } = await ctx.supabase
     .from("projects")
-    .select("id, contracted_amount_minor, client_id, default_fee_bps")
+    .select("id, contracted_amount_minor, client_id, default_fee_bps, billing_mode")
     .eq("id", projectId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -223,14 +223,32 @@ export async function setProjectDistributionAction(
     project.contracted_amount_minor == null
       ? BigInt(0)
       : BigInt(project.contracted_amount_minor);
-  const grossMinor = milestoneTotal > BigInt(0) ? milestoneTotal : contracted;
+  let grossMinor = milestoneTotal > BigInt(0) ? milestoneTotal : contracted;
+  if (grossMinor <= BigInt(0)) {
+    const { data: chargeRows } = await ctx.supabase
+      .from("charges")
+      .select("gross_minor")
+      .eq("organization_id", ctx.org.id)
+      .eq("project_id", projectId)
+      .neq("status", "void");
+    for (const row of chargeRows ?? []) grossMinor += BigInt(row.gross_minor ?? 0);
+  }
+  if (grossMinor <= BigInt(0)) {
+    return {
+      error:
+        project.billing_mode === "hourly"
+          ? "Log some hours first: the split is set against what's been billed so far"
+          : "Add milestone prices (or a contracted total) before setting a split",
+    };
+  }
   const feeBps = Number(project.default_fee_bps ?? 0);
   const projectTotalMinor = netFromGross(grossMinor, Number.isFinite(feeBps) ? feeBps : 0);
 
   const poolRaw = String(formData.get("pool_amount") ?? "").trim();
   let poolAmountMinor: bigint;
   try {
-    poolAmountMinor = parseMajorToMinor(poolRaw, currency);
+    poolAmountMinor =
+      project.billing_mode === "hourly" ? projectTotalMinor : parseMajorToMinor(poolRaw, currency);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Enter a valid pool amount" };
   }

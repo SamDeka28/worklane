@@ -32,6 +32,7 @@ import {
   uploadProjectAttachments,
   type AttachableDocument,
 } from "@/modules/delivery/components/project-docs";
+import { hoursBetween, toLocalInput } from "@/modules/delivery/components/task-time";
 import {
   billMilestoneAction,
   createMilestoneAction,
@@ -93,6 +94,9 @@ export function CreateProjectDialog({
   const open = controlled ? openProp : uncontrolledOpen;
   const [pending, start] = useTransition();
   const selected = defaultClientId ?? clients[0]?.id ?? "";
+  const [clientId, setClientId] = useState(selected);
+  const [billingMode, setBillingMode] = useState<string>("hourly");
+  const clientCurrency = clients.find((client) => client.id === clientId)?.currency ?? "USD";
 
   useEffect(() => {
     if (!controlled) setUncontrolledOpen(defaultOpen);
@@ -150,7 +154,13 @@ export function CreateProjectDialog({
         }}
       >
         <Field label="Client" htmlFor="client_id">
-          <NativeSelect id="client_id" name="client_id" required defaultValue={selected}>
+          <NativeSelect
+            id="client_id"
+            name="client_id"
+            required
+            defaultValue={selected}
+            onChange={(event) => setClientId(event.target.value)}
+          >
             {clients.map((client) => (
               <option key={client.id} value={client.id}>
                 {client.name}
@@ -172,7 +182,12 @@ export function CreateProjectDialog({
             </NativeSelect>
           </Field>
           <Field label="Billing" htmlFor="billing_mode">
-            <NativeSelect id="billing_mode" name="billing_mode" defaultValue="hourly">
+            <NativeSelect
+              id="billing_mode"
+              name="billing_mode"
+              defaultValue="hourly"
+              onChange={(event) => setBillingMode(event.target.value)}
+            >
               <option value="hourly">Hourly (logs post charges)</option>
               <option value="single_charge">Single contracted charge</option>
               <option value="milestones">Milestones</option>
@@ -181,6 +196,7 @@ export function CreateProjectDialog({
             </NativeSelect>
           </Field>
         </div>
+        {billingMode === "hourly" ? <HourlyRateField currency={clientCurrency} /> : null}
         <Field label="Platform fee" htmlFor="default_fee_bps">
           <NativeSelect id="default_fee_bps" name="default_fee_bps" defaultValue="500">
             <option value="0">None (0%)</option>
@@ -226,6 +242,27 @@ export function CreateProjectDialog({
   );
 }
 
+/** An hourly project's default rate; new work logs start from it. */
+function HourlyRateField({ currency, defaultValue }: { currency: string; defaultValue?: string }) {
+  return (
+    <Field
+      label={`Rate per hour (${currency})`}
+      htmlFor="hourly_rate"
+      hint="Prefilled on every work log. Log a fixed amount instead for work priced as a set fee."
+    >
+      <Input
+        id="hourly_rate"
+        name="hourly_rate"
+        type="number"
+        min="0"
+        step="0.01"
+        placeholder="e.g. 45"
+        defaultValue={defaultValue}
+      />
+    </Field>
+  );
+}
+
 export function EditProjectForm({
   orgSlug,
   project,
@@ -235,6 +272,7 @@ export function EditProjectForm({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [billingMode, setBillingMode] = useState<string>(project.billingMode);
 
   return (
     <form
@@ -265,7 +303,12 @@ export function EditProjectForm({
           </NativeSelect>
         </Field>
         <Field label="Billing" htmlFor="billing_mode">
-          <NativeSelect id="billing_mode" name="billing_mode" defaultValue={project.billingMode}>
+          <NativeSelect
+            id="billing_mode"
+            name="billing_mode"
+            defaultValue={project.billingMode}
+            onChange={(event) => setBillingMode(event.target.value)}
+          >
             <option value="hourly">Hourly (logs post charges)</option>
             <option value="single_charge">Single contracted charge</option>
             <option value="milestones">Milestones</option>
@@ -274,6 +317,14 @@ export function EditProjectForm({
           </NativeSelect>
         </Field>
       </div>
+      {billingMode === "hourly" ? (
+        <HourlyRateField
+          currency={project.currency}
+          defaultValue={
+            project.hourlyRateMinor != null ? formatMajorInput(project.hourlyRateMinor, project.currency) : ""
+          }
+        />
+      ) : null}
       <Field label="Platform fee" htmlFor="default_fee_bps">
         <NativeSelect id="default_fee_bps" name="default_fee_bps" defaultValue={String(project.defaultFeeBps)}>
           <option value="0">None (0%)</option>
@@ -406,6 +457,7 @@ export function WorkLogComposer({
   currency = "USD",
   defaultFeeBps = 500,
   defaultHourlyRateMinor = null,
+  tasks = [],
 }: {
   orgSlug: string;
   projectId: string;
@@ -414,24 +466,41 @@ export function WorkLogComposer({
   currency?: IsoCurrency;
   defaultFeeBps?: number;
   defaultHourlyRateMinor?: bigint | null;
+  tasks?: { id: string; title: string }[];
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [pending, start] = useTransition();
+  const [workedOn, setWorkedOn] = useState(() => toLocalInput(new Date()).slice(0, 10));
+  const [startTime, setStartTime] = useState("");
+  const [endTime, setEndTime] = useState("");
   const [hours, setHours] = useState("");
+
+  function syncHours(from: string, to: string) {
+    if (!from || !to) return;
+    const started = new Date(`${workedOn}T${from}`);
+    let ended = new Date(`${workedOn}T${to}`);
+    if (ended <= started) ended = new Date(ended.getTime() + 86_400_000);
+    setHours(hoursBetween(started, ended));
+  }
   const [rate, setRate] = useState(
     defaultHourlyRateMinor != null
       ? formatMajorInput(defaultHourlyRateMinor, currency)
       : "",
   );
   const [fixed, setFixed] = useState("");
+  const [kind, setKind] = useState<"hourly" | "fixed">("hourly");
   const posts = workLogPostsCharge(billingMode);
+  const defaultRateLabel =
+    defaultHourlyRateMinor != null
+      ? `${formatMoney({ amountMinor: defaultHourlyRateMinor, currency })}/hr`
+      : null;
 
   let previewMinor: bigint | null = null;
   if (posts) {
     try {
-      if (fixed.trim()) {
-        previewMinor = parseMajorToMinor(fixed, currency);
+      if (kind === "fixed") {
+        if (fixed.trim()) previewMinor = parseMajorToMinor(fixed, currency);
       } else if (hours.trim() && rate.trim()) {
         const h = Number(hours);
         const rateMinor = parseMajorToMinor(rate, currency);
@@ -455,16 +524,55 @@ export function WorkLogComposer({
             {posts
               ? netPreview != null
                 ? `Posts ~${formatMoney({ amountMinor: netPreview, currency })} net after fee`
-                : "Posts a charge when hours or a fixed amount are set."
+                : kind === "fixed"
+                  ? "Posts the amount you enter, for work priced as a set fee. Hours are optional."
+                  : defaultRateLabel
+                    ? `Hours × ${defaultRateLabel} from project settings. Change the rate for this log if needed.`
+                    : "Enter hours and a rate. Set a default rate per hour in project settings."
               : "Track time without billing."}
           </p>
         </div>
+        {posts ? (
+          <div
+            role="radiogroup"
+            aria-label="How this log is charged"
+            className="inline-flex shrink-0 rounded-xl bg-muted/60 p-0.5 ring-1 ring-border/40"
+          >
+            {(
+              [
+                { value: "hourly", label: "Per hour" },
+                { value: "fixed", label: "Fixed" },
+              ] as const
+            ).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={kind === option.value}
+                onClick={() => setKind(option.value)}
+                className={cn(
+                  "rounded-[10px] px-3 py-1 text-xs font-medium transition-colors",
+                  kind === option.value
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
       <ComposerBar prominent>
         <form
           ref={formRef}
           className="flex min-w-0 flex-1 flex-wrap items-center gap-1"
           action={(formData) => {
+            const started = startTime ? new Date(`${workedOn}T${startTime}`) : null;
+            let ended = endTime ? new Date(`${workedOn}T${endTime}`) : null;
+            if (started && ended && ended <= started) ended = new Date(ended.getTime() + 86_400_000);
+            if (started) formData.set("started_at", started.toISOString());
+            if (ended) formData.set("ended_at", ended.toISOString());
             start(async () => {
               const result = await createWorkLogAction(orgSlug, projectId, formData);
               if (result.error) {
@@ -474,12 +582,15 @@ export function WorkLogComposer({
               toast.success(result.charged ? "Logged and charged" : "Work logged");
               formRef.current?.reset();
               setHours("");
+              setStartTime("");
+              setEndTime("");
               setRate(
                 defaultHourlyRateMinor != null
                   ? formatMajorInput(defaultHourlyRateMinor, currency)
                   : "",
               );
               setFixed("");
+              setKind("hourly");
               router.refresh();
             });
           }}
@@ -487,34 +598,88 @@ export function WorkLogComposer({
           <Input
             name="worked_on"
             type="date"
-            defaultValue={new Date().toISOString().slice(0, 10)}
+            value={workedOn}
+            onChange={(event) => setWorkedOn(event.target.value)}
             className={cn(composerControlClassName, "h-10 w-40")}
             aria-label="Date"
           />
+          {tasks.length > 0 ? (
+            <NativeSelect
+              name="task_id"
+              defaultValue=""
+              aria-label="Task"
+              className={cn(composerControlClassName, "h-10 w-48")}
+            >
+              <option value="">Task (optional)</option>
+              {tasks.map((task) => (
+                <option key={task.id} value={task.id}>
+                  {task.title}
+                </option>
+              ))}
+            </NativeSelect>
+          ) : null}
+          <Input
+            type="time"
+            value={startTime}
+            onChange={(event) => {
+              setStartTime(event.target.value);
+              syncHours(event.target.value, endTime);
+            }}
+            aria-label="Start time"
+            title="Start time"
+            className={cn(composerControlClassName, "h-10 w-28")}
+          />
+          <span className="text-xs text-muted-foreground" aria-hidden>
+            to
+          </span>
+          <Input
+            type="time"
+            value={endTime}
+            onChange={(event) => {
+              setEndTime(event.target.value);
+              syncHours(startTime, event.target.value);
+            }}
+            aria-label="End time"
+            title="End time"
+            className={cn(composerControlClassName, "h-10 w-28")}
+          />
           <Input
             name="hours"
-            inputMode="decimal"
-            placeholder="Hours"
+            type="number"
+            min="0.001"
+            step="0.001"
+            placeholder={kind === "fixed" && posts ? "Hours (opt.)" : "Hours"}
+            aria-label="Hours"
             value={hours}
             onChange={(event) => setHours(event.target.value)}
-            className={cn(composerControlClassName, "h-10 w-24")}
+            className={cn(composerControlClassName, "h-10 w-28")}
           />
-          <Input
-            name="hourly_rate"
-            inputMode="decimal"
-            placeholder="Rate"
-            value={rate}
-            onChange={(event) => setRate(event.target.value)}
-            className={cn(composerControlClassName, "h-10 w-24")}
-          />
-          <Input
-            name="fixed_amount"
-            inputMode="decimal"
-            placeholder="Fixed"
-            value={fixed}
-            onChange={(event) => setFixed(event.target.value)}
-            className={cn(composerControlClassName, "h-10 w-24")}
-          />
+          {posts && kind === "hourly" ? (
+            <Input
+              name="hourly_rate"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Rate / hr"
+              aria-label="Rate per hour"
+              value={rate}
+              onChange={(event) => setRate(event.target.value)}
+              className={cn(composerControlClassName, "h-10 w-28")}
+            />
+          ) : null}
+          {posts && kind === "fixed" ? (
+            <Input
+              name="fixed_amount"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder={`Amount (${currency})`}
+              aria-label="Fixed amount"
+              value={fixed}
+              onChange={(event) => setFixed(event.target.value)}
+              className={cn(composerControlClassName, "h-10 w-32")}
+            />
+          ) : null}
           {milestones.length > 0 ? (
             <NativeSelect
               name="milestone_id"
@@ -533,11 +698,6 @@ export function WorkLogComposer({
             name="description"
             placeholder="What shipped"
             className={cn(composerControlClassName, "h-10 min-w-44 flex-1")}
-          />
-          <Input
-            name="external_url"
-            placeholder="Trello URL"
-            className={cn(composerControlClassName, "h-10 min-w-40 flex-1")}
           />
           <Button type="submit" disabled={pending} className="m-1 h-10 px-4">
             {pending ? "Saving…" : posts ? "Log and charge" : "Log work"}

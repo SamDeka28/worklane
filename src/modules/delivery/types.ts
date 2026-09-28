@@ -48,6 +48,8 @@ export type ProjectRecord = {
   defaultFeeBps: number;
   earnOn: "charge" | "receipt";
   contractedAmountMinor: bigint | null;
+  /** Default rate per hour on hourly projects; logs prefill it. */
+  hourlyRateMinor: bigint | null;
   scope: string | null;
   scopeDoc: Record<string, unknown> | null;
   startsOn: string | null;
@@ -109,6 +111,10 @@ export type TaskRecord = {
   assigneeUserIds: string[];
   commentCount: number;
   createdAt: string;
+  /** Clock on hourly projects: running while started and not stopped. */
+  timeStartedAt?: string | null;
+  /** Set when the clock stopped and the time isn't logged yet. */
+  timeStoppedAt?: string | null;
 };
 
 export type TaskAssigneeOption = {
@@ -148,6 +154,9 @@ export type WorkLogRecord = {
   fixedMinor: bigint | null;
   description: string | null;
   externalUrl: string | null;
+  taskId: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
   chargeId: string | null;
   createdAt: string;
 };

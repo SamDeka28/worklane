@@ -485,12 +485,12 @@ export const MONEY: DocArticle[] = [
       {
         type: "steps",
         items: [
-          { title: "Click Set split", body: "It reads **Edit split** once a split exists. You'll see Client total, Platform fee, and Distributable. Client total is the sum of milestone prices, or the contracted amount if there are none; add prices first if distributable is empty." },
-          { title: "Build / target pool", body: "For a first split, Worklane suggests 60% of distributable. The pool can't exceed distributable, and the remainder updates live." },
+          { title: "Click Set split", body: "It reads **Edit split** once a split exists. You'll see Client total, Platform fee, and Distributable. Client total is the sum of milestone prices, or the contracted amount if there are none, or else what's been charged so far (how hourly projects work). If distributable is empty, add prices, or log hours on an hourly project." },
+          { title: "Build / target pool", body: "For a first split, Worklane suggests 60% of distributable. On hourly projects the pool is always the full distributable and can't be edited, so each partner's % is their share of everything billed, including hours logged later. The pool can't exceed distributable, and the remainder updates live." },
           { title: "Label and Effective on", body: "For example “LMS build pool 4800”, effective today." },
           {
             title: "Assign each partner",
-            body: "Toggle **In pool** or **Remainder** (only one partner can take the remainder). Pool percentages must total 100% — lock a value and the others rebalance. With no remainder partner, the pool must equal distributable.",
+            body: "Toggle **In pool** or **Remainder** (only one partner can take the remainder). With a remainder partner, type each pool partner's % of the pool; whatever the pool partners don't take goes to the remainder partner (a $4,800 pool with Asha at 50% gives Asha $2,400 and the remainder partner the rest). With no remainder partner, pool percentages must total 100% (lock a value and the others rebalance), and the pool must equal distributable.",
           },
           { title: "Save version", body: "When you see “Ready · pool $X · remainder $Y”, click **Save version**. You'll see “Split version saved”." },
         ],

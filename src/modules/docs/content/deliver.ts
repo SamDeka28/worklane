@@ -42,7 +42,7 @@ export const DELIVER: DocArticle[] = [
         head: ["Mode", "Shown as", "How charges are posted"],
         rows: [
           ["Milestones", "Milestones", "You charge each milestone when it's due."],
-          ["Hourly (logs post charges)", "Hourly", "Every work log posts a charge for hours × rate or a fixed amount."],
+          ["Hourly (logs post charges)", "Hourly", "Every work log posts a charge for hours × rate or a fixed amount. Set **Rate per hour** when you create the project or in **Project settings**; logs start from it."],
           ["Single contracted charge", "Contracted", "One charge for the contracted amount via **… → Post contracted charge**."],
           ["Manual", "Manual", "Charge milestones or the contracted amount by hand when you choose."],
           ["None (track only)", "Track only", "No charges — pure delivery tracking."],
@@ -274,15 +274,29 @@ export const DELIVER: DocArticle[] = [
     blocks: [
       {
         type: "p",
-        text: "On projects billed **Hourly**, the Work tab has a **Log** view, and it opens there by default. One row replaces the timesheet spreadsheet: date, hours, rate, and what shipped.",
+        text: "On projects billed **Hourly**, the Work tab has a **Log** view, and it opens there by default. Time comes in two ways: from the board's task clocks, or entered by hand. Both end up as the same log row: date, start and end, hours, rate, the task, and what shipped.",
       },
+      { type: "h2", text: "Track time from the board" },
+      {
+        type: "steps",
+        items: [
+          { title: "Move a card to Doing", body: "Its clock starts, and a message confirms it. Moving it back and forth doesn't restart a clock that's already running." },
+          { title: "Move it to Done (or any other column)", body: "The clock stops and **Log time** opens with **Started**, **Ended**, and the **Hours** worked out between them." },
+          { title: "Adjust and log", body: "Change the start or end if the clock ran while you weren't working, or edit the hours directly. **Rate per hour** starts from the project's rate. Click **Log and charge**, or **Later** to keep the time for later." },
+        ],
+      },
+      {
+        type: "p",
+        text: "The **Clocks** list at the top of the Log view shows every running clock with its elapsed time, and every stopped clock that hasn't been logged yet. Use **Stop** to end a running clock, **Log time** to log a stopped one, or **Discard** to drop it.",
+      },
+      { type: "h2", text: "Log time by hand" },
       {
         type: "steps",
         items: [
           { title: "Open the project → Work → Log", body: "Or use the next-step button **Log work**, or ⌘K → “Log work”." },
-          { title: "Date and hours", body: "Date defaults to today. Hours accept up to three decimals — 1.5 or 1,5 both work." },
-          { title: "Rate or fixed amount", body: "Rate is prefilled with the last rate used on the project. Enter a **Fixed** amount instead to bill a flat figure." },
-          { title: "Milestone and notes", body: "Optionally tag a milestone (shown once the project has milestones), describe **What shipped**, and paste a Trello URL." },
+          { title: "Date, task, and times", body: "Date defaults to today. Pick a **Task** from the board (optional; its title fills **What shipped** if you leave that blank). Enter a start and end time and **Hours** fills in; an end before the start counts as past midnight. You can also skip the times and type hours, with up to three decimals." },
+          { title: "Per hour or Fixed", body: "**Per hour** is the default: **Rate / hr** is prefilled with the project's **Rate per hour** (or the last rate logged if none is set), and you can change it for one log. Switch to **Fixed** for work the client agreed as a set fee, and enter the **Amount**; hours are optional there, for tracking." },
+          { title: "Milestone and notes", body: "Optionally tag a milestone (shown once the project has milestones) and describe **What shipped**." },
           { title: "Check the preview and save", body: "The line “Posts ~$X net after fee” shows what will land. Click **Log and charge**." },
         ],
       },
@@ -292,13 +306,14 @@ export const DELIVER: DocArticle[] = [
         items: [
           "An open charge is posted to the client, dated on the work date, with gross, platform fee, and net.",
           "If the project splits earnings **When charged**, partners earn their share immediately.",
-          "Each row shows **Charged** (or **No charge**) and hours × rate (or the fixed amount).",
+          "Each row shows **Charged** (or **No charge**), the start and end times, the task, and hours × rate (or the fixed amount).",
+          "Logging a task's stopped clock clears it from **Clocks**.",
         ],
       },
       {
         type: "callout",
         tone: "note",
-        text: "A fixed amount overrides hours × rate. You need either hours and a rate, or a fixed amount.",
+        text: "A fixed amount is charged as entered, whatever the hours. A per-hour log needs hours and a rate; leave the rate blank and the project's rate per hour is used.",
       },
     ],
   },
