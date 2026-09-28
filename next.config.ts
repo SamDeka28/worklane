@@ -6,6 +6,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
+  experimental: {
+    // Revisiting a tab within 30s reuses the rendered page; actions still refresh it.
+    staleTimes: { dynamic: 30 },
+  },
 };
 
 export default nextConfig;

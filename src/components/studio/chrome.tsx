@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export { SoftTab, FilterChip } from "@/components/studio/nav-links";
+export { SoftTab, FilterChip, TabNav, TabPanel } from "@/components/studio/nav-links";
 export { AvatarMark } from "@/components/studio/avatar-mark";
 export { ProjectChip, TagRow } from "@/components/studio/project-chip";
 

@@ -89,12 +89,15 @@ function NavLink({
   href,
   label,
   active,
+  current,
   Icon,
   onNavigate,
 }: {
   href: string;
   label: string;
   active: boolean;
+  /** Already on this exact page (not a child route); clicking is a no-op. */
+  current: boolean;
   Icon: typeof LayoutDashboard;
   onNavigate?: () => void;
 }) {
@@ -111,7 +114,7 @@ function NavLink({
       onFocus={() => router.prefetch(href)}
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        if (optimisticActive) {
+        if (current) {
           event.preventDefault();
           onNavigate?.();
           return;
@@ -255,6 +258,7 @@ export function AppSidebar({
                     href={href}
                     label={item.label}
                     active={active}
+                    current={pathname === href}
                     Icon={item.icon}
                     onNavigate={onNavigate}
                   />

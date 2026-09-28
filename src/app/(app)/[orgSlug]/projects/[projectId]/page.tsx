@@ -11,6 +11,8 @@ import {
   HubSection,
   NextStepCard,
   SoftTab,
+  TabNav,
+  TabPanel,
   WorkSurface,
 } from "@/components/studio/chrome";
 import { StatusChip } from "@/components/studio/status-chip";
@@ -557,6 +559,7 @@ export default async function ProjectDetailPage({
         }
       />
 
+      <TabNav>
       <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border/30 px-3 py-2 [-ms-overflow-style:none] [scrollbar-width:none] sm:px-5 [&::-webkit-scrollbar]:hidden">
         {canAccessProjectTab(ctx.permissions, "overview") ? (
           <SoftTab href={tabHref("overview")} active={tab === "overview"}>
@@ -612,6 +615,7 @@ export default async function ProjectDetailPage({
         ) : null}
       </div>
 
+      <TabPanel>
       <HubBody className="gap-4">
         {tab === "overview" ? (
           <div
@@ -1302,6 +1306,8 @@ export default async function ProjectDetailPage({
           tasks={tasks.map((task) => ({ id: task.id, title: task.title }))}
         />
       ) : null}
+      </TabPanel>
+      </TabNav>
     </WorkSurface>
   );
 }
