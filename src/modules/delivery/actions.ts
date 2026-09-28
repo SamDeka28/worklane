@@ -922,26 +922,21 @@ export async function updateMilestoneAction(
 
 export async function createTaskFromMilestoneAction(orgSlug: string, milestoneId: string) {
   const ctx = await requireWritableOrg(orgSlug);
-  const { data: milestone } = await ctx.supabase
+  const { data: milestone, error: milestoneError } = await ctx.supabase
     .from("milestones")
-    .select("id, project_id, name, due_on, description, description_doc, deliverables, deliverables_doc, status")
+    .select("id, project_id, name, due_on, description, description_doc, status")
     .eq("id", milestoneId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
 
+  if (milestoneError) return { error: milestoneError.message };
   if (!milestone) return { error: "Milestone not found" };
   if (milestone.status === "cancelled") {
     return { error: "Cancelled milestones can’t become tasks" };
   }
 
-  const description =
-    (milestone as { description?: string | null }).description ??
-    (milestone as { deliverables?: string | null }).deliverables ??
-    null;
-  const descriptionDoc =
-    (milestone as { description_doc?: unknown }).description_doc ??
-    (milestone as { deliverables_doc?: unknown }).deliverables_doc ??
-    null;
+  const description = milestone.description ?? null;
+  const descriptionDoc = milestone.description_doc ?? null;
 
   const { data: existingTask } = await ctx.supabase
     .from("tasks")

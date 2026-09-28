@@ -377,43 +377,22 @@ export function EditProjectForm({
 export function ProjectSettingsSheet({
   orgSlug,
   project,
-  defaultOpen = false,
-  hideTrigger = false,
-  returnHref,
+  open,
+  onOpenChange,
   canDelete = false,
 }: {
   orgSlug: string;
   project: ProjectRecord;
-  defaultOpen?: boolean;
-  hideTrigger?: boolean;
-  returnHref?: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   canDelete?: boolean;
 }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(defaultOpen);
-
-  useEffect(() => {
-    setOpen(defaultOpen);
-  }, [defaultOpen]);
-
-  function close() {
-    setOpen(false);
-    if (defaultOpen) {
-      router.replace(returnHref ?? `/${orgSlug}/projects/${project.id}`);
-    }
-  }
-
   return (
     <ActionSheet
       title="Project settings"
-      triggerLabel="Settings"
-      triggerVariant="ghost"
-      hideTrigger={hideTrigger}
+      hideTrigger
       open={open}
-      onOpenChange={(next) => {
-        if (!next) close();
-        else setOpen(true);
-      }}
+      onOpenChange={onOpenChange}
     >
       <EditProjectForm orgSlug={orgSlug} project={project} />
       {canDelete ? <ProjectDangerZone orgSlug={orgSlug} project={project} /> : null}
@@ -1023,22 +1002,36 @@ export function TaskForm({
 
 export function ProjectOverflow({
   orgSlug,
-  projectId,
-  clientId,
-  billingMode,
-  settingsHref,
+  project,
+  canDelete = false,
+  settingsOpenInitially = false,
+  returnHref,
 }: {
   orgSlug: string;
-  projectId: string;
-  clientId: string;
-  billingMode: BillingMode;
-  settingsHref: string;
+  project: ProjectRecord;
+  canDelete?: boolean;
+  /** Opened from a `?settings=1` link; closing drops the param. */
+  settingsOpenInitially?: boolean;
+  returnHref?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const canContracted = allowsContractedProjectCharge(billingMode);
+  const [settingsOpen, setSettingsOpen] = useState(settingsOpenInitially);
+  const projectId = project.id;
+  const canContracted = allowsContractedProjectCharge(project.billingMode);
 
   return (
+    <>
+    <ProjectSettingsSheet
+      orgSlug={orgSlug}
+      project={project}
+      canDelete={canDelete}
+      open={settingsOpen}
+      onOpenChange={(next) => {
+        setSettingsOpen(next);
+        if (!next && settingsOpenInitially && returnHref) router.replace(returnHref, { scroll: false });
+      }}
+    />
     <DropdownMenu>
       <DropdownMenuTrigger
         render={<Button variant="ghost" size="icon" aria-label="More" />}
@@ -1047,7 +1040,7 @@ export function ProjectOverflow({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem
-          onClick={() => router.push(`/${orgSlug}/finance?client=${clientId}`)}
+          onClick={() => router.push(`/${orgSlug}/finance?client=${project.clientId}`)}
         >
           Collect
         </DropdownMenuItem>
@@ -1069,11 +1062,12 @@ export function ProjectOverflow({
             Post contracted charge
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem onClick={() => router.push(settingsHref)}>
+        <DropdownMenuItem onClick={() => setSettingsOpen(true)}>
           Project settings
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    </>
   );
 }
 

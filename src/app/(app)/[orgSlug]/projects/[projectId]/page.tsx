@@ -19,7 +19,7 @@ import { BILLING_MODE_LABEL, isOpenBoardColumn, projectMoneyStats } from "@/modu
 import {
   MilestoneForm,
   ProjectOverflow,
-  ProjectSettingsSheet,
+  PostContractedChargeButton,
   WorkLogComposer,
 } from "@/modules/delivery/components/delivery-forms";
 import { KanbanBoard } from "@/modules/delivery/components/kanban-board";
@@ -27,7 +27,7 @@ import { MilestoneStudioList } from "@/modules/delivery/components/milestone-stu
 import { ProjectDocumentsHub } from "@/modules/delivery/components/project-docs";
 import { ProjectOverviewRail } from "@/modules/delivery/components/project-overview-rail";
 import { LogTimeRange, TaskClocks } from "@/modules/delivery/components/task-time";
-import { formatHoursMillis } from "@/modules/delivery/ledger";
+import { allowsContractedProjectCharge, formatHoursMillis } from "@/modules/delivery/ledger";
 import {
   chargeByMilestoneId,
   milestoneBillingLabel,
@@ -144,20 +144,15 @@ export default async function ProjectDetailPage({
   const ctx = await requireOrg(orgSlug);
   requireModuleAccess(ctx, "delivery");
   const seeMoney = canSeeMoney(ctx.permissions);
-  const project = await getProject(orgSlug, projectId);
-  if (!project) notFound();
 
-  const isHourly = project.billingMode === "hourly";
-  let tab = resolveProjectTab(query);
+  const tab = resolveProjectTab(query);
   if (!canAccessProjectTab(ctx.permissions, tab as ProjectTabKey)) {
     const allowed = firstAllowedProjectTab(ctx.permissions);
     redirect(`/${orgSlug}/projects/${projectId}?tab=${allowed}`);
   }
-  const panel =
-    query.panel === "log" ? "log" : query.panel === "board" ? "board" : isHourly ? "log" : "board";
   const selectedChargeId = typeof query.charge === "string" ? query.charge : undefined;
   const billId = typeof query.bill === "string" ? query.bill : undefined;
-  const base = `/${orgSlug}/projects/${project.id}`;
+  const base = `/${orgSlug}/projects/${projectId}`;
   const tabHref = (next: ProjectTab, extra = "") => {
     const params = new URLSearchParams();
     params.set("tab", next);
@@ -188,6 +183,7 @@ export default async function ProjectDetailPage({
   const needComments = tab === "work";
   const needCredentials = tab === "credentials";
 
+  const projectPromise = getProject(orgSlug, projectId);
   const [
     milestones,
     milestoneItemsById,
@@ -269,6 +265,11 @@ export default async function ProjectDetailPage({
           ReturnType<typeof listCredentialPeople>
         >),
   ]);
+  const project = await projectPromise;
+  if (!project) notFound();
+  const isHourly = project.billingMode === "hourly";
+  const panel =
+    query.panel === "log" ? "log" : query.panel === "board" ? "board" : isHourly ? "log" : "board";
   const clientDocs = documents.filter((doc) => doc.clientId === project.clientId);
   const projectDocs = projectSurfaceDocs;
   const attachableDocs = clientDocs.filter((doc) => !doc.projectId);
@@ -353,6 +354,21 @@ export default async function ProjectDetailPage({
         })),
       }
     : null;
+  const chargeAction = !ctx.canWrite ? null : isHourly ? (
+    <Button size="sm" nativeButton={false} render={<Link href={tabHref("work", "panel=log")} />}>
+      Log work
+    </Button>
+  ) : allowsContractedProjectCharge(project.billingMode) ? (
+    <PostContractedChargeButton
+      orgSlug={orgSlug}
+      projectId={project.id}
+      billingMode={project.billingMode}
+    />
+  ) : (
+    <Button size="sm" nativeButton={false} render={<Link href={tabHref("milestones")} />}>
+      Charge a milestone
+    </Button>
+  );
   const splitProjects = [
     {
       id: project.id,
@@ -531,19 +547,10 @@ export default async function ProjectDetailPage({
               {primaryCta}
               <ProjectOverflow
                 orgSlug={orgSlug}
-                projectId={project.id}
-                clientId={project.clientId}
-                billingMode={project.billingMode}
-                settingsHref={`${base}?tab=${tab}&settings=1`}
-              />
-              <ProjectSettingsSheet
-                key={String(query.settings)}
-                orgSlug={orgSlug}
                 project={project}
-                hideTrigger
-                defaultOpen={query.settings === "1"}
-                returnHref={tabHref(tab)}
                 canDelete={canDeleteModule(ctx, "delivery")}
+                settingsOpenInitially={query.settings === "1"}
+                returnHref={tabHref(tab)}
               />
             </div>
           ) : null
@@ -940,15 +947,22 @@ export default async function ProjectDetailPage({
         ) : null}
 
         {tab === "charges" ? (
-          <HubSection id="charges" title="Charges">
+          <HubSection
+            id="charges"
+            title="Charges"
+            action={finance.charges.length > 0 ? chargeAction : undefined}
+          >
             {finance.charges.length === 0 ? (
               <EmptyState icon={Coins}
                 title="No charges yet"
                 body={
-                  project.billingMode === "milestones"
-                    ? "Charge a milestone to post the first amount on the ledger."
-                    : "Log work or charge a milestone to post the first amount."
+                  isHourly
+                    ? "Every work log posts a charge. Log hours to post the first amount."
+                    : allowsContractedProjectCharge(project.billingMode)
+                      ? "Post the contracted amount, or charge a milestone, to post the first amount."
+                      : "Charge a milestone to post the first amount on the ledger."
                 }
+                action={chargeAction}
               />
             ) : (
               <>
