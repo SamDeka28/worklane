@@ -6,6 +6,7 @@ import {
   sendEmail,
   type SendEmailInput,
 } from "@/shared/email";
+import { sendTrackedApplicationEmail } from "@/modules/emails/application-send";
 import {
   emailEnabled,
   type NotificationCategory,
@@ -129,13 +130,20 @@ export async function notify(input: NotifyInput): Promise<void> {
           actionLabel: input.actionLabel,
           orgName: input.orgName ?? null,
         };
-        const result = await sendEmail({
+        const emailInput = {
           to: email,
           subject: delivery.title,
           html: notificationEmailHtml(mail),
           text: notificationEmailText(mail),
+          body: delivery.body,
           attachments: input.attachments,
-        });
+        };
+        const result = input.organizationId
+          ? await sendTrackedApplicationEmail(admin, {
+              organizationId: input.organizationId,
+              userId: input.actorId ?? delivery.userId,
+            }, emailInput)
+          : await sendEmail(emailInput);
         if (!result.ok) {
           console.error(`notify email to ${email} failed: ${result.error}`);
           return;

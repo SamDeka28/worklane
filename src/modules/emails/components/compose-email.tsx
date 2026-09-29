@@ -17,9 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { sendTrackedEmailAction } from "@/modules/emails/actions";
-import type { EmailContact } from "@/modules/emails/types";
+import type { EmailAttachmentPayload, EmailContact } from "@/modules/emails/types";
 import { ComposerSignature } from "@/modules/email-signatures/components/signature-forms";
 import type { RenderedSignature } from "@/modules/email-signatures/types";
+import { EmailAttachments } from "@/modules/emails/components/email-attachments";
 
 const EMPTY = { to: "", cc: "", subject: "", body: "" };
 
@@ -30,6 +31,15 @@ export function ComposeEmailButton({
   replyTo,
   fromAddress,
   signature,
+  triggerLabel = "Compose",
+  title = "New email",
+  description,
+  initialDraft,
+  sendAction,
+  successMessage,
+  sendLabel,
+  triggerVariant = "default",
+  disabled = false,
 }: {
   orgSlug: string;
   contacts: EmailContact[];
@@ -39,6 +49,15 @@ export function ComposeEmailButton({
   fromAddress: string | null;
   /** Filled-in signature added below the message, or null for none. */
   signature: RenderedSignature | null;
+  triggerLabel?: string;
+  title?: string;
+  description?: string;
+  initialDraft?: Partial<typeof EMPTY>;
+  sendAction?: (input: typeof EMPTY & { includeSignature: boolean; attachments: EmailAttachmentPayload[] }) => Promise<{ ok: true; id?: string } | { error: string }>;
+  successMessage?: string;
+  sendLabel?: string;
+  triggerVariant?: "default" | "outline";
+  disabled?: boolean;
 }) {
   const router = useRouter();
   const listId = useId();
@@ -47,6 +66,7 @@ export function ComposeEmailButton({
   const [draft, setDraft] = useState(EMPTY);
   const [sending, setSending] = useState(false);
   const [withSignature, setWithSignature] = useState(true);
+  const [attachments, setAttachments] = useState<EmailAttachmentPayload[]>([]);
 
   const contact = contacts.find((item) => item.email === draft.to.trim().toLowerCase());
   const canSend =
@@ -62,19 +82,22 @@ export function ComposeEmailButton({
     setOpen(false);
     const toastId = toast.loading(`Sending to ${draft.to.trim()}…`);
     try {
-      const result = await sendTrackedEmailAction(orgSlug, {
+      const payload = {
         ...draft,
         includeSignature: withSignature && Boolean(signature),
-      });
+        attachments,
+      };
+      const result = sendAction ? await sendAction(payload) : await sendTrackedEmailAction(orgSlug, payload);
       if ("error" in result) {
         toast.error(result.error, { id: toastId });
         setOpen(true);
         return;
       }
-      toast.success("Sent. You’ll see here when it’s opened.", { id: toastId });
+      toast.success(successMessage ?? "Sent. You’ll see here when it’s opened.", { id: toastId });
       setDraft(EMPTY);
+      setAttachments([]);
       setShowCc(false);
-      router.replace(`/${orgSlug}/emails?email=${result.id}`, { scroll: false });
+      if (result.id) router.replace(`/${orgSlug}/emails?email=${result.id}`, { scroll: false });
     } catch {
       toast.error("Couldn’t send the email. Try again.", { id: toastId });
       setOpen(true);
@@ -87,8 +110,9 @@ export function ComposeEmailButton({
     <>
       <Button
         type="button"
-        onClick={() => setOpen(true)}
-        disabled={!configured}
+        variant={triggerVariant}
+        onClick={() => { setDraft({ ...EMPTY, ...initialDraft }); setAttachments([]); setOpen(true); }}
+        disabled={!configured || disabled}
         title={
           configured
             ? undefined
@@ -96,15 +120,14 @@ export function ComposeEmailButton({
         }
       >
         <PenLine />
-        Compose
+        {triggerLabel}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>New email</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
-              Sent from {fromAddress ?? "your studio’s address"} with open tracking built in.
-              {replyTo ? ` Replies go to ${replyTo}.` : ""}
+              {description ?? <>Sent from {fromAddress ?? "your studio’s address"} with open tracking built in.{replyTo ? ` Replies go to ${replyTo}.` : ""}</>}
             </DialogDescription>
           </DialogHeader>
           <form
@@ -202,6 +225,7 @@ export function ComposeEmailButton({
                 </div>
               ) : null}
             </div>
+            <EmailAttachments value={attachments} onChange={setAttachments} disabled={sending} />
           </form>
           <DialogFooter className="items-center sm:justify-between">
             <p className="hidden text-xs text-muted-foreground sm:block">
@@ -209,7 +233,7 @@ export function ComposeEmailButton({
             </p>
             <Button type="submit" form="compose-email-form" disabled={!canSend}>
               <Send />
-              Send
+              {sendLabel ?? "Send"}
             </Button>
           </DialogFooter>
         </DialogContent>

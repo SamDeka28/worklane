@@ -17,7 +17,7 @@ import {
 } from "@/components/studio/chrome";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
-import { listClients } from "@/modules/clients/queries";
+import { listClients, listContacts } from "@/modules/clients/queries";
 import type { ClientRecord } from "@/modules/clients/types";
 import { BILLING_MODE_LABEL, isOpenBoardColumn, projectMoneyStats } from "@/modules/delivery/board";
 import {
@@ -59,6 +59,7 @@ import { CollectComposer } from "@/modules/finance/components/finance-forms";
 import { ChargeRows } from "@/modules/finance/components/charge-board";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { collectTargets, chargeTitle, formatDay } from "@/modules/finance/presentation";
+import { grossFromHours } from "@/shared/money";
 import { loadProjectFinance } from "@/modules/finance/queries";
 import { listFilesForEntity } from "@/modules/files/queries";
 import { requireOrg, listOrgMembers, requireModuleAccess } from "@/modules/identity/org";
@@ -275,6 +276,9 @@ export default async function ProjectDetailPage({
   const project = await projectPromise;
   if (!project) notFound();
   const settingsClients = ctx.canWrite ? await listClients(orgSlug) : [];
+  const timesheetContacts = tab === "work" && ctx.canWrite
+    ? await listContacts(orgSlug, project.clientId)
+    : [];
   const isHourly = project.billingMode === "hourly";
   const panel =
     query.panel === "log" ? "log" : query.panel === "board" ? "board" : isHourly ? "log" : "board";
@@ -879,6 +883,8 @@ export default async function ProjectDetailPage({
                   projectName={project.name}
                   clientName={project.clientName}
                   currency={project.currency}
+                  canEmail={ctx.canWrite}
+                  contacts={timesheetContacts}
                   entries={logs.map((log) => ({
                     workedOn: log.workedOn,
                     task: log.taskId ? tasks.find((task) => task.id === log.taskId)?.title ?? "" : "",
@@ -940,39 +946,36 @@ export default async function ProjectDetailPage({
               <ol className="space-y-2">
                 {logs.map((log) => {
                   const logTask = log.taskId ? tasks.find((task) => task.id === log.taskId) : null;
+                  const amount = log.fixedMinor != null
+                    ? log.fixedMinor
+                    : log.hoursMillis != null && log.hourlyRateMinor != null
+                      ? grossFromHours(log.hoursMillis / 1000, log.hourlyRateMinor)
+                      : null;
                   return (
                   <li
                     key={log.id}
-                    className="rounded-3xl bg-muted/40 px-4 py-3 ring-1 ring-border/30"
+                    className="grid gap-3 rounded-2xl bg-muted/30 px-4 py-3 ring-1 ring-border/40 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:gap-6"
                   >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <p className="text-sm font-semibold">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="text-sm font-semibold">
                         {formatDay(log.workedOn)}
                         {log.startedAt && log.endedAt ? (
                           <LogTimeRange startedAt={log.startedAt} endedAt={log.endedAt} />
                         ) : null}
-                      </p>
-                      <StatusChip tone={log.chargeId ? "paid" : "due"}>
-                        {log.chargeId ? "Charged" : "No charge"}
-                      </StatusChip>
+                        </p>
+                        {logTask ? <span className="truncate text-xs text-muted-foreground">Task · {logTask.title}</span> : null}
+                      </div>
+                      <p className="mt-1 truncate text-sm">{log.description || "Work logged"}</p>
                     </div>
-                    {logTask ? (
-                      <p className="mt-1 text-xs font-medium text-muted-foreground">
-                        Task · {logTask.title}
-                      </p>
-                    ) : null}
-                    <p className="mt-1 text-sm">{log.description || "Work logged"}</p>
-                    <p className="mt-1 text-sm tabular-nums text-muted-foreground">
-                      {log.fixedMinor != null && log.fixedMinor > BigInt(0)
-                        ? moneyLabel(log.fixedMinor, project.currency)
-                        : log.hoursMillis != null
-                          ? `${formatHoursMillis(log.hoursMillis)}h${
-                              log.hourlyRateMinor
-                                ? ` × ${moneyLabel(log.hourlyRateMinor, project.currency)}`
-                                : ""
-                            }`
-                          : "-"}
-                    </p>
+                    <div className="flex items-center gap-2 text-xs tabular-nums text-muted-foreground sm:justify-end">
+                      <span className="font-medium text-foreground">{log.fixedMinor != null ? "Fixed" : `${log.hoursMillis != null ? formatHoursMillis(log.hoursMillis) : "—"} h`}</span>
+                      {log.hourlyRateMinor != null ? <span>× {moneyLabel(log.hourlyRateMinor, project.currency)}/h</span> : null}
+                    </div>
+                    <div className="flex items-center justify-between gap-4 sm:min-w-36 sm:justify-end">
+                      <span className="text-sm font-semibold tabular-nums">{amount == null ? "—" : moneyLabel(amount, project.currency)}</span>
+                      <StatusChip tone={log.chargeId ? "paid" : "due"}>{log.chargeId ? "Charged" : "Unbilled"}</StatusChip>
+                    </div>
                   </li>
                   );
                 })}

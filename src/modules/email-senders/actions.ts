@@ -12,7 +12,8 @@ import {
 import type { SmtpScope, SmtpSenderInput } from "@/modules/email-senders/types";
 import { sealSecret } from "@/shared/crypto/secrets";
 import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
-import { personalEmailHtml, sendEmail, verifySmtpAccount, type SmtpAccount } from "@/shared/email";
+import { personalEmailHtml, verifySmtpAccount, type SmtpAccount } from "@/shared/email";
+import { sendTrackedApplicationEmail } from "@/modules/emails/application-send";
 
 const EMAIL_PATTERN = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
 const HOST_PATTERN = /^[a-z0-9.-]+$/i;
@@ -169,11 +170,15 @@ export async function sendSmtpTestAction(
   if (!smtp) return { error: "Connect the mailbox first" };
 
   const body = `This is a test from Worklane.\n\nEmails sent through this mailbox go out as ${smtp.fromEmail}.`;
-  const result = await sendEmail({
+  const result = await sendTrackedApplicationEmail(ctx.supabase, {
+    organizationId: ctx.org.id,
+    userId: ctx.userId,
+  }, {
     to,
     subject: `Worklane test email · ${ctx.org.name}`,
     html: personalEmailHtml({ body, pixelUrl: null }),
     text: body,
+    body,
     smtp,
   });
   if (!result.ok) return { error: result.error };

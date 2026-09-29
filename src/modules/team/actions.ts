@@ -17,8 +17,16 @@ import {
   inviteEmailHtml,
   inviteEmailText,
   roleLabel,
-  sendEmail,
 } from "@/shared/email";
+import { sendTrackedApplicationEmail } from "@/modules/emails/application-send";
+
+function sendTrackedTeamEmail(
+  db: Awaited<ReturnType<typeof requireOrg>>["supabase"],
+  ctx: Awaited<ReturnType<typeof requireOrg>>,
+  input: Parameters<typeof sendTrackedApplicationEmail>[2],
+) {
+  return sendTrackedApplicationEmail(db, { organizationId: ctx.org.id, userId: ctx.userId }, input);
+}
 
 export type { OrgInvitation };
 
@@ -302,7 +310,7 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
     acceptUrl,
     projectName,
   };
-  const mailed = await sendEmail({
+  const mailed = await sendTrackedTeamEmail(db, ctx, {
     to: email,
     subject: projectName
       ? `Join ${projectName} on ${ctx.org.name}`
@@ -598,7 +606,7 @@ export async function resendInvitationAction(orgSlug: string, invitationId: stri
     acceptUrl,
     projectName,
   };
-  const mailed = await sendEmail({
+  const mailed = await sendTrackedTeamEmail(db, ctx, {
     to: email,
     subject: projectName
       ? `Join ${projectName} on ${ctx.org.name}`

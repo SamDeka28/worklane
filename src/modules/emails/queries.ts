@@ -3,7 +3,7 @@ import type { EmailContact, TrackedEmail, TrackedEmailScope } from "@/modules/em
 import { mailPixelUrl } from "@/shared/email/pixel";
 
 export const TRACKED_EMAIL_COLUMNS =
-  "id, token, claim, subject, recipient, lead_id, created_by, created_at, open_count, first_opened_at, last_opened_at, sent_at, body, cc, leads ( name )";
+  "id, token, claim, subject, recipient, lead_id, created_by, created_at, open_count, first_opened_at, last_opened_at, sent_at, body, cc, attachments, leads ( name )";
 
 type PixelRow = {
   id: string;
@@ -20,6 +20,7 @@ type PixelRow = {
   sent_at: string | null;
   body: string | null;
   cc: string[] | null;
+  attachments: { filename: string; contentType: string; sizeBytes: number }[] | null;
   leads: { name: string | null } | { name: string | null }[] | null;
 };
 
@@ -37,6 +38,7 @@ export function mapTrackedEmail(
   const pixelUrl = mailPixelUrl(row.token);
   return {
     id: row.id,
+    source: row.sent_at ? "app" : "pixel",
     subject: row.subject,
     recipient: row.recipient,
     leadId: row.lead_id,
@@ -53,6 +55,7 @@ export function mapTrackedEmail(
     sentAt: row.sent_at,
     body: row.body,
     cc: row.cc ?? [],
+    attachments: row.attachments ?? [],
   };
 }
 
@@ -115,7 +118,45 @@ export async function listTrackedEmails(
       member.displayName?.trim() || member.email?.split("@")[0] || null,
     ]),
   );
-  return ((data ?? []) as unknown as PixelRow[]).map((row) =>
+  const pixelEmails = ((data ?? []) as unknown as PixelRow[]).map((row) =>
     mapTrackedEmail(row, ctx.userId, names.get(row.created_by) ?? null),
   );
+  if (!ctx.org.modules.crm) return pixelEmails;
+  let leadQuery = ctx.supabase
+    .from("lead_emails")
+    .select("id, lead_id, sent_by, to_email, to_name, cc, subject, body, attachments, sent_at, open_count, first_opened_at, last_opened_at, leads ( name )")
+    .eq("organization_id", ctx.org.id)
+    .order("sent_at", { ascending: false })
+    .limit(300);
+  if (!everyone) leadQuery = leadQuery.eq("sent_by", ctx.userId);
+  const { data: leadRows, error: leadError } = await leadQuery;
+  if (leadError) throw new Error(leadError.message);
+  const leadEmails: TrackedEmail[] = (leadRows ?? []).map((row) => {
+    const lead = Array.isArray(row.leads) ? row.leads[0] : row.leads;
+    const createdBy = String(row.sent_by ?? "");
+    return {
+      id: `lead:${String(row.id)}`,
+      source: "lead",
+      subject: row.subject as string,
+      recipient: row.to_email as string,
+      leadId: String(row.lead_id),
+      leadName: (lead?.name as string | null) ?? (row.to_name as string | null),
+      createdBy,
+      creatorName: names.get(createdBy) ?? null,
+      createdAt: String(row.sent_at),
+      openCount: Number(row.open_count ?? 0),
+      firstOpenedAt: (row.first_opened_at as string | null) ?? null,
+      lastOpenedAt: (row.last_opened_at as string | null) ?? null,
+      pixelUrl: "",
+      claimUrl: null,
+      mine: createdBy === ctx.userId,
+      sentAt: String(row.sent_at),
+      body: row.body as string,
+      cc: (row.cc as string[] | null) ?? [],
+      attachments: (row.attachments as TrackedEmail["attachments"] | null) ?? [],
+    };
+  });
+  return [...pixelEmails, ...leadEmails]
+    .sort((a, b) => new Date(b.sentAt ?? b.createdAt).getTime() - new Date(a.sentAt ?? a.createdAt).getTime())
+    .slice(0, 500);
 }

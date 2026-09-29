@@ -11,6 +11,9 @@ import { senderSignature } from "@/modules/email-signatures/server";
 import type { RenderedSignature } from "@/modules/email-signatures/types";
 import { personalEmailHtml, personalEmailText, sendEmail } from "@/shared/email";
 import { mailPixelUrl } from "@/shared/email/pixel";
+import { parseEmailAttachments } from "@/shared/email/attachments";
+import type { EmailAttachmentPayload } from "@/modules/emails/types";
+import { removeEmailAttachments, storeEmailAttachments } from "@/modules/emails/storage";
 
 const EMAIL_PATTERN = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]+$/;
 const MAX_CC = 5;
@@ -31,6 +34,7 @@ export type SendLeadEmailInput = {
   replyToId: string | null;
   followUp: { text: string; on: string } | null;
   moveToStage: string | null;
+  attachments?: EmailAttachmentPayload[];
 };
 
 export type StartLeadEmailInput = Omit<SendLeadEmailInput, "replyToId"> & {
@@ -126,10 +130,19 @@ async function deliverLeadEmail(
     parent: { id: string; message_id: string | null } | null;
     followUp: { text: string; on: string } | null;
     stageTo: string | null;
+    attachments: { filename: string; content: Buffer; contentType: string }[];
   },
 ) {
   const token = generateShareToken();
   const emailId = crypto.randomUUID();
+  const savedAttachments = await storeEmailAttachments(
+    ctx.supabase,
+    ctx.org.id,
+    ctx.userId,
+    emailId,
+    options.attachments,
+  );
+  if ("error" in savedAttachments) return { error: savedAttachments.error };
   const { error: insertError } = await ctx.supabase.from("lead_emails").insert({
     id: emailId,
     organization_id: ctx.org.id,
@@ -140,12 +153,16 @@ async function deliverLeadEmail(
     cc: email.cc,
     subject: email.subject,
     body: email.body,
+    attachments: savedAttachments.attachments,
     template_id: options.templateId?.slice(0, 40) || null,
     in_reply_to: options.parent?.id ?? null,
     token_hash: hashShareToken(token),
     track_opens: options.trackOpens,
   });
-  if (insertError) return { error: insertError.message };
+  if (insertError) {
+    await removeEmailAttachments(ctx.supabase, savedAttachments.attachments);
+    return { error: insertError.message };
+  }
 
   const senderName = ctx.user.displayName?.trim();
   const result = await sendEmail({
@@ -168,9 +185,11 @@ async function deliverLeadEmail(
     text: personalEmailText({ body: email.body, signature: options.signature }),
     inReplyTo: options.parent?.message_id ?? undefined,
     references: options.parent?.message_id ? [options.parent.message_id] : undefined,
+    attachments: options.attachments,
   });
   if (!result.ok) {
     await ctx.supabase.from("lead_emails").delete().eq("id", emailId);
+    await removeEmailAttachments(ctx.supabase, savedAttachments.attachments);
     return { error: result.error };
   }
 
@@ -217,6 +236,8 @@ export async function sendLeadEmailAction(
   if ("error" in allowed) return { error: allowed.error };
   const parsed = parseEmail(input);
   if ("error" in parsed) return { error: parsed.error };
+  const attachments = parseEmailAttachments(input.attachments);
+  if ("error" in attachments) return attachments;
 
   const [{ data: lead }, { data: parentRow }, stageTo] = await Promise.all([
     ctx.supabase
@@ -257,6 +278,7 @@ export async function sendLeadEmailAction(
         : null,
       followUp: parseFollowUp(input.followUp, parsed.email.subject),
       stageTo,
+      attachments: attachments.attachments,
     },
   );
   if ("error" in sent) return { error: sent.error };
@@ -273,6 +295,8 @@ export async function startLeadWithEmailAction(orgSlug: string, input: StartLead
   if ("error" in allowed) return { error: allowed.error };
   const parsed = parseEmail(input);
   if ("error" in parsed) return { error: parsed.error };
+  const attachments = parseEmailAttachments(input.attachments);
+  if ("error" in attachments) return attachments;
 
   const contactName = input.contactName.trim().slice(0, 120) || null;
   const company = input.company.trim().slice(0, 120) || companyFromEmail(parsed.email.to) || null;
@@ -320,6 +344,7 @@ export async function startLeadWithEmailAction(orgSlug: string, input: StartLead
       parent: null,
       followUp: parseFollowUp(input.followUp, parsed.email.subject),
       stageTo: null,
+      attachments: attachments.attachments,
     },
   );
   if ("error" in sent) {

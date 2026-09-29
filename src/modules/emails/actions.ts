@@ -9,6 +9,8 @@ import { resolveSender } from "@/modules/email-senders/server";
 import { senderSignature } from "@/modules/email-signatures/server";
 import { personalEmailHtml, personalEmailText, sendEmail } from "@/shared/email";
 import { mailPixelUrl } from "@/shared/email/pixel";
+import { parseEmailAttachments } from "@/shared/email/attachments";
+import { removeEmailAttachments, storeEmailAttachments } from "@/modules/emails/storage";
 
 const CREATE_LIMIT = 200;
 const CREATE_WINDOW_MS = 60 * 60_000;
@@ -121,6 +123,61 @@ export async function listTrackedEmailOpensAction(
   }));
 }
 
+/** Return short-lived preview URLs only when a user opens an email detail sheet. */
+export async function getEmailAttachmentPreviewsAction(orgSlug: string, emailId: string) {
+  const ctx = await requireOrg(orgSlug);
+  const isLeadEmail = emailId.startsWith("lead:");
+  const rowId = isLeadEmail ? emailId.slice("lead:".length) : emailId;
+  if (!/^[0-9a-f-]{36}$/i.test(rowId)) return { error: "Email not found" } as const;
+
+  const { data, error } = isLeadEmail
+    ? await ctx.supabase
+        .from("lead_emails")
+        .select("attachments, sent_by")
+        .eq("id", rowId)
+        .eq("organization_id", ctx.org.id)
+        .maybeSingle()
+    : await ctx.supabase
+        .from("mail_pixels")
+        .select("attachments, created_by")
+        .eq("id", rowId)
+        .eq("organization_id", ctx.org.id)
+        .maybeSingle();
+  if (error || !data) return { error: "Email not found" } as const;
+  const senderId = String(
+    isLeadEmail
+      ? ("sent_by" in data ? data.sent_by : "")
+      : ("created_by" in data ? data.created_by : ""),
+  );
+
+  const attachments = Array.isArray(data.attachments) ? data.attachments : [];
+  const previews = await Promise.all(attachments.map(async (value) => {
+    if (!value || typeof value !== "object") return null;
+    const attachment = value as {
+      filename?: unknown;
+      contentType?: unknown;
+      sizeBytes?: unknown;
+      storagePath?: unknown;
+    };
+    if (
+      typeof attachment.filename !== "string" ||
+      typeof attachment.contentType !== "string" ||
+      typeof attachment.storagePath !== "string" ||
+      !attachment.storagePath.startsWith(`${ctx.org.id}/email-attachments/${senderId}/${rowId}/`)
+    ) return null;
+    const { data: signed } = await ctx.supabase.storage
+      .from("org-files")
+      .createSignedUrl(attachment.storagePath, 60 * 60);
+    return {
+      filename: attachment.filename,
+      contentType: attachment.contentType,
+      sizeBytes: Number(attachment.sizeBytes) || 0,
+      url: signed?.signedUrl ?? null,
+    };
+  }));
+  return { attachments: previews.filter((item): item is NonNullable<typeof item> => item !== null) } as const;
+}
+
 const MAX_CC = 5;
 const SEND_LIMIT = 40;
 const SEND_WINDOW_MS = 10 * 60_000;
@@ -149,6 +206,7 @@ export async function sendTrackedEmailAction(
   ].filter((value) => value !== to);
   const subject = input.subject.trim().replace(/\s+/g, " ").slice(0, 200);
   const body = input.body.trim().slice(0, 20_000);
+  const parsedAttachments = parseEmailAttachments(input.attachments);
 
   if (!EMAIL_PATTERN.test(to)) return { error: "Enter a valid recipient email" };
   if (cc.length > MAX_CC) return { error: `Add at most ${MAX_CC} CC addresses` };
@@ -156,6 +214,7 @@ export async function sendTrackedEmailAction(
   if (badCc) return { error: `"${badCc}" isn't a valid email` };
   if (!subject) return { error: "Add a subject" };
   if (!body) return { error: "Write the email first" };
+  if ("error" in parsedAttachments) return parsedAttachments;
 
   const [{ count: recent }, leadId, signature] = await Promise.all([
     ctx.supabase
@@ -172,6 +231,14 @@ export async function sendTrackedEmailAction(
 
   const id = crypto.randomUUID();
   const token = generateShareToken();
+  const savedAttachments = await storeEmailAttachments(
+    ctx.supabase,
+    ctx.org.id,
+    ctx.userId,
+    id,
+    parsedAttachments.attachments,
+  );
+  if ("error" in savedAttachments) return { error: savedAttachments.error };
   const { error: insertError } = await ctx.supabase.from("mail_pixels").insert({
     id,
     organization_id: ctx.org.id,
@@ -183,9 +250,13 @@ export async function sendTrackedEmailAction(
     lead_id: leadId,
     body,
     cc,
+    attachments: savedAttachments.attachments,
     sent_at: new Date().toISOString(),
   });
-  if (insertError) return { error: insertError.message };
+  if (insertError) {
+    await removeEmailAttachments(ctx.supabase, savedAttachments.attachments);
+    return { error: insertError.message };
+  }
 
   const senderName = ctx.user.displayName?.trim();
   const result = await sendEmail({
@@ -197,9 +268,11 @@ export async function sendTrackedEmailAction(
     html: personalEmailHtml({ body, signature, pixelUrl: mailPixelUrl(token) }),
     text: personalEmailText({ body, signature }),
     smtp: sender.smtp,
+    attachments: parsedAttachments.attachments,
   });
   if (!result.ok) {
     await ctx.supabase.from("mail_pixels").delete().eq("id", id);
+    await removeEmailAttachments(ctx.supabase, savedAttachments.attachments);
     return { error: result.error };
   }
 

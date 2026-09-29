@@ -35,6 +35,7 @@ import {
   lineTotalMinor,
 } from "@/modules/invoices/totals";
 import { netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
+import { sendTrackedApplicationEmail } from "@/modules/emails/application-send";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
   return value === "INR" || value === "USD" ? value : fallback;
@@ -1124,7 +1125,7 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
   const { buffer, clientName, brand, paidMinor } = await renderInvoicePdf(orgSlug, invoice);
   const balance = invoiceSubtotalMinor(invoice.lines) - paidMinor;
 
-  const { invoiceEmailHtml, invoiceEmailText, sendEmail } = await import("@/shared/email");
+  const { invoiceEmailHtml, invoiceEmailText } = await import("@/shared/email");
   const emailInput = {
     orgName: brand.business.legalName || ctx.org.name,
     clientName: invoice.billTo?.contactName || invoice.billTo?.name || clientName,
@@ -1136,13 +1137,17 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
     paymentInstructions: invoice.paymentInstructions,
     reminder,
   };
-  const mailed = await sendEmail({
+  const mailed = await sendTrackedApplicationEmail(ctx.supabase, {
+    organizationId: ctx.org.id,
+    userId: ctx.userId,
+  }, {
     to,
     subject: reminder
       ? `Reminder: invoice ${invoice.number} from ${emailInput.orgName} – ${emailInput.amountLabel} due`
       : `Invoice ${invoice.number} from ${emailInput.orgName} – ${emailInput.amountLabel}`,
     html: invoiceEmailHtml(emailInput),
     text: invoiceEmailText(emailInput),
+    body: emailInput.memo ?? `Invoice ${invoice.number} · ${emailInput.amountLabel}`,
     replyTo: brand.business.email || undefined,
     attachments: [
       { filename: `${invoice.number}.pdf`, content: buffer, contentType: "application/pdf" },

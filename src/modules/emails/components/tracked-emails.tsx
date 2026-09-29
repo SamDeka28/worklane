@@ -24,6 +24,7 @@ import {
   createTrackedEmailAction,
   deleteTrackedEmailAction,
   dismissTrackedEmailOpenAction,
+  getEmailAttachmentPreviewsAction,
   listTrackedEmailOpensAction,
   markTrackedEmailCopiedAction,
   updateTrackedEmailAction,
@@ -36,6 +37,7 @@ import {
 } from "@/modules/emails/types";
 import { relativeTime } from "@/modules/notifications/components/notification-item";
 import { MailAppSteps } from "./pixel-guide";
+import { FileAttachmentPreview, type ViewableFile } from "@/modules/files/components/file-viewer";
 
 /**
  * Copies the pixel as rich HTML so it pastes as an image, not as a link. Must run
@@ -72,6 +74,12 @@ function copyPixel(pixelUrl: string): boolean {
 function randomToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 bytes";
+  if (bytes < 1024) return `${bytes} bytes`;
+  return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
 }
 
 /** A contenteditable box that reports whether a paste arrived as an image or as a link. */
@@ -380,7 +388,7 @@ export function TrackedEmailList({
                         : "bg-muted text-muted-foreground",
                     )}
                   >
-                    {email.sentAt ? "Sent" : "Pixel"}
+                    {email.source === "lead" ? "Lead email" : email.sentAt ? "Sent" : "Pixel"}
                   </span>
                 </p>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
@@ -437,9 +445,14 @@ function TrackedEmailSheet({
   const [subject, setSubject] = useState(email.subject ?? "");
   const [recipient, setRecipient] = useState(email.recipient ?? "");
   const [opens, setOpens] = useState<TrackedEmailOpen[] | null>(null);
+  const [attachmentFiles, setAttachmentFiles] = useState<ViewableFile[]>([]);
   const dirty = subject !== (email.subject ?? "") || recipient !== (email.recipient ?? "");
 
   useEffect(() => {
+    if (email.source === "lead") {
+      setOpens([]);
+      return;
+    }
     let cancelled = false;
     listTrackedEmailOpensAction(orgSlug, email.id)
       .then((rows) => {
@@ -451,7 +464,32 @@ function TrackedEmailSheet({
     return () => {
       cancelled = true;
     };
-  }, [orgSlug, email.id, email.openCount]);
+  }, [orgSlug, email.id, email.openCount, email.source]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (email.attachments.length === 0) {
+      setAttachmentFiles([]);
+      return;
+    }
+    getEmailAttachmentPreviewsAction(orgSlug, email.id)
+      .then((result) => {
+        if (cancelled || "error" in result) return;
+        setAttachmentFiles((result.attachments ?? []).map((attachment, index) => ({
+          id: `${email.id}:${index}`,
+          name: attachment.filename,
+          mime: attachment.contentType,
+          sizeBytes: attachment.sizeBytes,
+          url: attachment.url,
+        })));
+      })
+      .catch(() => {
+        if (!cancelled) setAttachmentFiles([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgSlug, email.id, email.attachments.length]);
 
   function save() {
     start(async () => {
@@ -515,24 +553,26 @@ function TrackedEmailSheet({
         if (!next) onClose();
       }}
       footer={
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={remove}
-            disabled={pending}
-          >
-            <Trash2 />
-            Delete
-          </Button>
-          <span className="flex-1" />
-          {email.mine && !email.sentAt ? (
-            <Button type="button" onClick={save} disabled={pending || !dirty}>
-              {pending ? "Saving…" : "Save changes"}
+        email.source === "lead" ? null : (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={remove}
+              disabled={pending}
+            >
+              <Trash2 />
+              Delete
             </Button>
-          ) : null}
-        </div>
+            <span className="flex-1" />
+            {email.mine && !email.sentAt ? (
+              <Button type="button" onClick={save} disabled={pending || !dirty}>
+                {pending ? "Saving…" : "Save changes"}
+              </Button>
+            ) : null}
+          </div>
+        )
       }
     >
       <div className="grid gap-6">
@@ -558,7 +598,7 @@ function TrackedEmailSheet({
           ))}
         </div>
 
-        {email.leadId ? (
+        {email.leadId && email.source !== "lead" ? (
           <Link
             href={`/${orgSlug}/crm?lead=${email.leadId}`}
             className="text-sm font-medium text-primary hover:underline"
@@ -590,6 +630,26 @@ function TrackedEmailSheet({
             {email.body ? (
               <div className="max-h-80 overflow-y-auto rounded-xl bg-muted/40 p-4 text-sm leading-relaxed whitespace-pre-wrap">
                 {email.body}
+              </div>
+            ) : null}
+            {email.attachments.length > 0 ? (
+              <div className="grid gap-2">
+                <h4 className="text-xs font-semibold text-muted-foreground">Attachments</h4>
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {email.attachments.map((attachment, index) => {
+                    const file = attachmentFiles[index];
+                    return file?.url ? (
+                      <FileAttachmentPreview key={`${attachment.filename}-${index}`} file={file} />
+                    ) : (
+                      <li key={`${attachment.filename}-${index}`} className="min-w-0 rounded-lg border bg-muted/30 px-3 py-2">
+                        <p className="truncate text-sm font-medium" title={attachment.filename}>{attachment.filename}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {attachment.contentType} · {formatBytes(attachment.sizeBytes)}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             ) : null}
           </section>
@@ -636,7 +696,7 @@ function TrackedEmailSheet({
           </p>
         )}
 
-        <section className="grid gap-3">
+        {email.source !== "lead" ? <section className="grid gap-3">
           <h3 className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
             Opens
           </h3>
@@ -686,7 +746,7 @@ function TrackedEmailSheet({
               ))}
             </ul>
           )}
-        </section>
+        </section> : null}
       </div>
     </ActionSheet>
   );

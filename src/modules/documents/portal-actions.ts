@@ -13,8 +13,8 @@ import {
   documentUpdateEmailText,
   getAppUrl,
   isEmailConfigured,
-  sendEmail,
 } from "@/shared/email";
+import { sendTrackedApplicationEmail } from "@/modules/emails/application-send";
 
 const CLIENT_KINDS = ["comment", "suggestion", "changes_requested"] as const;
 type ClientKind = (typeof CLIENT_KINDS)[number];
@@ -243,13 +243,17 @@ export async function signPortalDocumentAction(token: string, formData: FormData
         { label: "Document fingerprint", value: `${contentHash.slice(0, 16)}…` },
       ],
     };
-    await sendEmail({
+    if (shared.sentBy) await sendTrackedApplicationEmail(admin, {
+      organizationId: shared.organizationId,
+      userId: shared.sentBy,
+    }, {
       to: shared.recipientEmail,
       subject: `Signed: ${shared.title}`,
       fromName: shared.orgName,
       html: documentUpdateEmailHtml(input),
       text: documentUpdateEmailText(input),
       attachments,
+      body: input.message,
     });
   }
 

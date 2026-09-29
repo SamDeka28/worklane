@@ -1,5 +1,6 @@
 export type TrackedEmail = {
   id: string;
+  source: "pixel" | "app" | "lead";
   subject: string | null;
   recipient: string | null;
   leadId: string | null;
@@ -22,9 +23,11 @@ export type TrackedEmail = {
   sentAt: string | null;
   body: string | null;
   cc: string[];
+  attachments: { filename: string; contentType: string; sizeBytes: number }[];
 };
 
 export type EmailContact = { name: string; email: string; kind: "lead" | "contact" };
+export type EmailAttachmentPayload = { filename: string; contentBase64: string; contentType: string };
 
 export type ComposeEmailInput = {
   to: string;
@@ -32,6 +35,7 @@ export type ComposeEmailInput = {
   subject: string;
   body: string;
   includeSignature: boolean;
+  attachments?: EmailAttachmentPayload[];
 };
 
 export type TrackedEmailOpen = { id: number; at: string; client: string | null };

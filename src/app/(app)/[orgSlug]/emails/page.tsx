@@ -1,4 +1,4 @@
-import { MailCheck, SearchX } from "lucide-react";
+import { MailCheck, Search, SearchX } from "lucide-react";
 import { FilterChip, FilterChips, StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import { EmptyState } from "@/components/studio/empty-state";
 import { IndexBody, SummaryStat, SummaryStrip } from "@/components/studio/index-layout";
@@ -13,6 +13,8 @@ import { mailPixelUrl } from "@/shared/email/pixel";
 import type { TrackedEmailScope, TrackedEmailStatus } from "@/modules/emails/types";
 import { requireOrg } from "@/modules/identity/org";
 import { JOURNEY } from "@/shared/journey-copy";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export default async function EmailsPage({ params, searchParams }: PageProps<"/[orgSlug]/emails">) {
   const { orgSlug } = await params;
@@ -22,6 +24,8 @@ export default async function EmailsPage({ params, searchParams }: PageProps<"/[
   const scope: TrackedEmailScope = canSeeAll && query.scope === "all" ? "all" : "mine";
   const status: TrackedEmailStatus =
     query.status === "opened" ? "opened" : query.status === "waiting" ? "waiting" : "all";
+  const source = query.source === "sent" || query.source === "pixel" ? query.source : "all";
+  const search = typeof query.q === "string" ? query.q.trim().slice(0, 160) : "";
 
   const [emails, contacts, sender, signatureState] = await Promise.all([
     listTrackedEmails(orgSlug, scope),
@@ -41,7 +45,9 @@ export default async function EmailsPage({ params, searchParams }: PageProps<"/[
     />
   ) : null;
   const filtered = emails.filter((email) =>
-    status === "opened" ? email.openCount > 0 : status === "waiting" ? email.openCount === 0 : true,
+    (status === "opened" ? email.openCount > 0 : status === "waiting" ? email.openCount === 0 : true) &&
+    (source === "sent" ? Boolean(email.sentAt) : source === "pixel" ? !email.sentAt : true) &&
+    (!search || [email.subject, email.recipient, email.leadName, email.body].some((value) => value?.toLowerCase().includes(search.toLowerCase()))),
   );
   const now = new Date().getTime();
   const opened = emails.filter((email) => email.openCount > 0).length;
@@ -49,12 +55,15 @@ export default async function EmailsPage({ params, searchParams }: PageProps<"/[
     (email) => email.lastOpenedAt && now - new Date(email.lastOpenedAt).getTime() < 7 * 86_400_000,
   ).length;
   const base = `/${orgSlug}/emails`;
-  const href = (next: { scope?: TrackedEmailScope; status?: TrackedEmailStatus }) => {
+  const href = (next: { scope?: TrackedEmailScope; status?: TrackedEmailStatus; source?: typeof source }) => {
     const params = new URLSearchParams();
     const s = next.scope ?? scope;
     const st = next.status ?? status;
+    const src = next.source ?? source;
     if (s === "all") params.set("scope", "all");
     if (st !== "all") params.set("status", st);
+    if (src !== "all") params.set("source", src);
+    if (search) params.set("q", search);
     const rest = params.toString();
     return rest ? `${base}?${rest}` : base;
   };
@@ -95,6 +104,10 @@ export default async function EmailsPage({ params, searchParams }: PageProps<"/[
         <FilterChip href={href({ status: "waiting" })} active={status === "waiting"}>
           Not opened
         </FilterChip>
+        <span aria-hidden className="mx-1 h-4 w-px self-center bg-border" />
+        <FilterChip href={href({ source: "all" })} active={source === "all"}>All sources</FilterChip>
+        <FilterChip href={href({ source: "sent" })} active={source === "sent"}>Sent from Worklane</FilterChip>
+        <FilterChip href={href({ source: "pixel" })} active={source === "pixel"}>Tracked pixels</FilterChip>
         {canSeeAll ? (
           <>
             <span aria-hidden className="mx-1 h-4 w-px self-center bg-border" />
@@ -107,6 +120,16 @@ export default async function EmailsPage({ params, searchParams }: PageProps<"/[
           </>
         ) : null}
       </FilterChips>
+      <form action={base} method="get" className="flex flex-wrap items-center gap-2 border-b border-border/40 px-5 py-3">
+        {scope === "all" ? <input type="hidden" name="scope" value="all" /> : null}
+        {status !== "all" ? <input type="hidden" name="status" value={status} /> : null}
+        {source !== "all" ? <input type="hidden" name="source" value={source} /> : null}
+        <div className="relative w-full max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input type="search" name="q" defaultValue={search} placeholder="Search subject, recipient, or message" className="pl-9" />
+        </div>
+        <Button type="submit" variant="outline" size="sm">Search</Button>
+      </form>
       <IndexBody>
         {emails.length > 0 ? (
           <SummaryStrip>
@@ -159,7 +182,7 @@ export default async function EmailsPage({ params, searchParams }: PageProps<"/[
             icon={SearchX}
             fill
             title={status === "opened" ? "Nothing opened yet" : "Everything’s been opened"}
-            body="Try another filter."
+            body={search ? `No emails match “${search}”. Try another search or filter.` : "Try another filter."}
           />
         ) : (
           <TrackedEmailList

@@ -38,6 +38,8 @@ import {
   type LeadStageRecord,
 } from "@/modules/crm/types";
 import { ComposerSignature } from "@/modules/email-signatures/components/signature-forms";
+import { EmailAttachments } from "@/modules/emails/components/email-attachments";
+import type { EmailAttachmentPayload } from "@/modules/emails/types";
 
 /** Fields inside the composer box: the box draws the frame, so the themed well is switched off. */
 export const BARE_FIELD =
@@ -283,6 +285,7 @@ function LeadEmailComposer({
   const [showCc, setShowCc] = useState(false);
   const [track, setTrack] = useState(true);
   const [withSignature, setWithSignature] = useState(true);
+  const [attachments, setAttachments] = useState<EmailAttachmentPayload[]>([]);
   const [followUp, setFollowUp] = useState(true);
   const [followDays, setFollowDays] = useState(3);
 
@@ -387,6 +390,7 @@ function LeadEmailComposer({
           ? { text: `Follow up on “${subject.replace(/^re:\s*/i, "")}”`, on: followUpOn }
           : null,
         moveToStage: movedTo?.slug ?? null,
+        attachments,
       });
       if (result.error) {
         toast.error(result.error, { id: toastId });
@@ -547,6 +551,7 @@ function LeadEmailComposer({
                 />
               </div>
               <VariableChips values={values} target={lastField} fallback={bodyRef} onInsert={insert} />
+              <EmailAttachments value={attachments} onChange={setAttachments} disabled={sending.current} />
             </div>
 
             {missing.length > 0 ? (

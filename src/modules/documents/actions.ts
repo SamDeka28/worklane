@@ -26,9 +26,16 @@ import {
   documentUpdateEmailText,
   getAppUrl,
   isEmailConfigured,
-  sendEmail,
 } from "@/shared/email";
 import { mailPixelUrl } from "@/shared/email/pixel";
+import { sendTrackedApplicationEmail } from "@/modules/emails/application-send";
+
+function sendDocumentTrackedEmail(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  input: Parameters<typeof sendTrackedApplicationEmail>[2],
+) {
+  return sendTrackedApplicationEmail(ctx.supabase, { organizationId: ctx.org.id, userId: ctx.userId }, input);
+}
 
 function asKind(value: string): DocumentKind {
   return asDocumentKind(value);
@@ -829,7 +836,7 @@ export async function countersignDocumentVersionAction(
         { label: "Signed at", value: new Date(signedAt).toUTCString() },
       ],
     };
-    await sendEmail({
+    await sendDocumentTrackedEmail(ctx, {
       to: signedSend.recipient_email,
       subject: `Fully signed: ${title}`,
       fromName: ctx.org.name,
@@ -929,7 +936,7 @@ export async function emailSignedCopyAction(orgSlug: string, versionId: string, 
       })),
     ],
   };
-  const result = await sendEmail({
+  const result = await sendDocumentTrackedEmail(ctx, {
     to,
     cc: cc.filter((value) => value !== to),
     subject: built.complete ? `Signed copy: ${title}` : `Signed by client: ${title}`,
@@ -1321,7 +1328,7 @@ export async function sendDocumentEmailAction(
     viewUrl: `${appUrl}${documentViewPath(token)}`,
     pixelUrl: trackOpens ? mailPixelUrl(token) : null,
   };
-  const result = await sendEmail({
+  const result = await sendDocumentTrackedEmail(ctx, {
     to,
     cc,
     subject,
@@ -1429,7 +1436,7 @@ export async function replyDocumentFeedbackAction(
       viewUrl: `${getAppUrl()}${documentViewPath(documentSendToken(send.id as string))}`,
       buttonLabel: "Open and respond",
     };
-    const result = await sendEmail({
+    const result = await sendDocumentTrackedEmail(ctx, {
       to: send.recipient_email as string,
       subject: `Re: ${send.title}`,
       fromName: `${ctx.user.displayName ? `${ctx.user.displayName} at ` : ""}${ctx.org.name}`,
@@ -1629,7 +1636,7 @@ export async function publishDocumentRevisionAction(
         viewUrl: `${appUrl}${documentViewPath(token)}`,
         pixelUrl: row.info.track ? mailPixelUrl(token) : null,
       };
-      const result = await sendEmail({
+      const result = await sendDocumentTrackedEmail(ctx, {
         to: row.email,
         cc: row.info.cc,
         subject,

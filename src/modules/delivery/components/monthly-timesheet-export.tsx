@@ -5,8 +5,12 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { NativeSelect } from "@/components/ui/native-select";
+import { sendProjectTimesheetEmailAction } from "@/modules/delivery/timesheet-actions";
 import { formatHoursMillis } from "@/modules/delivery/ledger";
+import type { ContactRecord } from "@/modules/clients/types";
 import { formatMajorInput, grossFromHours } from "@/shared/money";
+import { ComposeEmailButton } from "@/modules/emails/components/compose-email";
+import type { EmailAttachmentPayload } from "@/modules/emails/types";
 
 type TimesheetEntry = {
   workedOn: string;
@@ -35,6 +39,8 @@ export function MonthlyTimesheetExport({
   projectName,
   clientName,
   currency,
+  canEmail,
+  contacts,
   entries,
 }: {
   orgSlug: string;
@@ -42,6 +48,8 @@ export function MonthlyTimesheetExport({
   projectName: string;
   clientName: string;
   currency: "USD" | "INR";
+  canEmail: boolean;
+  contacts: Pick<ContactRecord, "name" | "email" | "isPrimary">[];
   entries: TimesheetEntry[];
 }) {
   const currentMonth = new Date().toISOString().slice(0, 7);
@@ -51,12 +59,14 @@ export function MonthlyTimesheetExport({
   );
   const [month, setMonth] = useState(currentMonth);
   const [format, setFormat] = useState<"csv" | "pdf">("pdf");
-  const [pending, setPending] = useState(false);
+  const [exportPending, setExportPending] = useState(false);
+  const [sending, setSending] = useState(false);
+  const defaultContact = contacts.find((contact) => contact.isPrimary && contact.email) ?? contacts.find((contact) => contact.email);
   const monthEntries = entries.filter((entry) => entry.workedOn.slice(0, 7) === month);
 
   async function download() {
-    if (pending) return;
-    setPending(true);
+    if (exportPending || sending) return;
+    setExportPending(true);
     const toastId = toast.loading(format === "pdf" ? "Preparing PDF…" : "Preparing CSV…");
     try {
       if (format === "pdf") {
@@ -115,8 +125,25 @@ export function MonthlyTimesheetExport({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Export failed. Please try again.", { id: toastId });
     } finally {
-      setPending(false);
+      setExportPending(false);
     }
+  }
+
+  const timesheetContacts = contacts.filter((contact) => contact.email).map((contact) => ({
+    name: contact.name || contact.email!, email: contact.email!, kind: "contact" as const,
+  }));
+  const initialDraft = {
+    to: defaultContact?.email ?? "",
+    subject: `${projectName} timesheet · ${monthLabel(month)}`,
+    body: `Hi ${defaultContact?.name || clientName},\n\nPlease find attached the timesheet for ${monthLabel(month)} for ${projectName}.\n\nPlease let me know if you have any questions.`,
+  };
+  async function sendTimesheet(input: { to: string; cc: string; subject: string; body: string; includeSignature: boolean; attachments: EmailAttachmentPayload[] }) {
+    setSending(true);
+    try {
+      const result = await sendProjectTimesheetEmailAction(orgSlug, projectId, month, input);
+      return "error" in result ? { error: result.error } : { ok: true as const };
+    }
+    finally { setSending(false); }
   }
 
   return (
@@ -138,10 +165,27 @@ export function MonthlyTimesheetExport({
         <option value="pdf">PDF</option>
         <option value="csv">CSV</option>
       </NativeSelect>
-      <Button type="button" variant="outline" size="sm" onClick={download} disabled={pending}>
+      <Button type="button" variant="outline" size="sm" onClick={download} disabled={exportPending || sending}>
         <Download data-icon="inline-start" />
-        {pending ? "Preparing…" : "Export"}
+        {exportPending ? "Preparing…" : "Export"}
       </Button>
+      {canEmail ? <ComposeEmailButton
+        orgSlug={orgSlug}
+        contacts={timesheetContacts}
+        configured
+        replyTo={null}
+        fromAddress={null}
+        signature={null}
+        triggerLabel="Email timesheet"
+        triggerVariant="outline"
+        disabled={exportPending || sending || monthEntries.length === 0}
+        sendLabel="Send timesheet"
+        title="Email timesheet"
+        description={`Send the ${monthLabel(month)} timesheet for ${projectName} as a PDF attachment.`}
+        initialDraft={initialDraft}
+        successMessage="Timesheet sent"
+        sendAction={sendTimesheet}
+      /> : null}
     </div>
   );
 }
