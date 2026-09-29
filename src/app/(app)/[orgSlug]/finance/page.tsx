@@ -8,6 +8,8 @@ import {
   SoftCard,
   Stat,
   StudioToolbar,
+  TabNav,
+  TabPanel,
   WorkSurface,
   moneyFill,
   type StatTone,
@@ -15,7 +17,7 @@ import {
 import { DotStackChart } from "@/components/studio/charts";
 import { MoneyDonut, MONEY_COLORS } from "@/components/studio/money-donut";
 import { EmptyState } from "@/components/studio/empty-state";
-import { CalendarClock, HandCoins, Receipt } from "lucide-react";
+import { CalendarClock, ChevronDown, HandCoins, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
 import { listClients } from "@/modules/clients/queries";
@@ -46,12 +48,15 @@ import type { PartnerSharesChargeDetail } from "@/modules/finance/components/fin
 import { formatSplitVisualLines } from "@/modules/finance/components/partner-split-hint";
 import {
   loadFinancePartnerFlow,
+  loadMonthlyPartnerRegister,
   listPartners,
   type FinancePartnerShare,
 } from "@/modules/partners/queries";
 import { JOURNEY } from "@/shared/journey-copy";
 import { formatMoney } from "@/shared/money";
+import type { IsoCurrency } from "@/shared/money";
 import { cn } from "@/lib/utils";
+import type { MonthlyRegisterRow } from "@/modules/partners/types";
 
 function partnerShareChargeDetailsFrom(
   charges: ChargeView[],
@@ -71,6 +76,107 @@ function partnerShareChargeDetailsFrom(
       },
     ];
   });
+}
+
+function PartnerEarningsCard({
+  orgSlug,
+  month,
+  monthLabel,
+  rows,
+}: {
+  orgSlug: string;
+  month: string;
+  monthLabel: string;
+  rows: MonthlyRegisterRow[];
+}) {
+  const money = (amountMinor: bigint, currency: IsoCurrency) => moneyLabel(amountMinor, currency);
+
+  return (
+    <SoftCard className="shrink-0 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/20 px-4 py-4 sm:px-5">
+        <div>
+          <h3 className="font-heading text-base font-semibold tracking-tight">Who earned what</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Gross share less fee shows each partner’s net earnings for {monthLabel}. Expand a row to see its sources.</p>
+        </div>
+        <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/${orgSlug}/partners?view=month&month=${month}`} />}>
+          Partner register
+        </Button>
+      </div>
+      {rows.length === 0 ? (
+        <p className="px-5 py-8 text-sm text-muted-foreground">No partner earnings or settlements recorded this month.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <div className="min-w-[68rem]">
+            <div className="grid grid-cols-[minmax(14rem,1.5fr)_repeat(5,minmax(7rem,1fr))] border-b border-border/20 px-4 py-3 text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase sm:px-5">
+              <span>Partner</span>
+              <span className="text-right">Gross share</span>
+              <span className="text-right">Fee deducted</span>
+              <span className="text-right">Net earned</span>
+              <span className="text-right">Settled this month</span>
+              <span className="text-right">Unsettled</span>
+            </div>
+            {rows.map((row) => (
+              <details key={`${row.partnerId}-${row.currency}`} className="group border-b border-border/15 last:border-0">
+                <summary className="grid cursor-pointer list-none grid-cols-[minmax(14rem,1.5fr)_repeat(5,minmax(7rem,1fr))] items-center gap-2 px-4 py-3.5 text-sm hover:bg-muted/20 sm:px-5 [&::-webkit-details-marker]:hidden">
+                  <span className="flex min-w-0 items-center gap-3 font-medium">
+                    <AvatarMark name={row.partnerName} src={row.partnerAvatarUrl} size="sm" />
+                    <span className="truncate">{row.partnerName}</span>
+                    <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden="true" />
+                  </span>
+                  <span className="text-right tabular-nums">{money(row.grossMinor, row.currency)}</span>
+                  <span className="text-right tabular-nums text-muted-foreground">
+                    {row.deductionMinor > BigInt(0) ? `−${money(row.deductionMinor, row.currency)}` : money(BigInt(0), row.currency)}
+                  </span>
+                  <span className="text-right font-medium tabular-nums">{money(row.earnedMinor, row.currency)}</span>
+                  <span className="text-right tabular-nums">{money(row.settledMinor, row.currency)}</span>
+                  <span className="text-right font-semibold tabular-nums">{money(row.pendingMinor, row.currency)}</span>
+                </summary>
+                <div className="space-y-5 border-t border-border/15 bg-muted/10 px-4 py-4 sm:px-5">
+                  <section>
+                    <h4 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Earned from</h4>
+                    {row.sources.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No earnings recorded in {monthLabel}.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="hidden px-3 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase sm:grid sm:grid-cols-[minmax(18rem,1.5fr)_repeat(4,minmax(7rem,1fr))]">
+                          <span>Charge</span><span className="text-right">Charge logged</span><span className="text-right">Gross share</span><span className="text-right">Fee deducted</span><span className="text-right">Net earned</span>
+                        </div>
+                        {row.sources.map((source) => (
+                          <div key={source.id} className="grid gap-2 rounded-xl bg-card/70 px-3 py-3 sm:grid-cols-[minmax(18rem,1.5fr)_repeat(4,minmax(7rem,1fr))] sm:items-center">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{source.projectName} · {source.chargeName}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{source.dateLabel} {formatDay(source.date)}</p>
+                            </div>
+                            <p className="text-sm tabular-nums sm:text-right"><span className="mr-2 text-xs text-muted-foreground sm:hidden">Charge logged</span>{money(source.chargeGrossMinor, source.currency)}</p>
+                            <p className="text-sm tabular-nums sm:text-right"><span className="mr-2 text-xs text-muted-foreground sm:hidden">Gross</span>{money(source.grossMinor, source.currency)}</p>
+                            <p className="text-sm tabular-nums text-muted-foreground sm:text-right"><span className="mr-2 text-xs sm:hidden">Fee</span>{source.deductionMinor > BigInt(0) ? `−${money(source.deductionMinor, source.currency)}` : money(BigInt(0), source.currency)}</p>
+                            <p className="text-sm font-medium tabular-nums sm:text-right"><span className="mr-2 text-xs text-muted-foreground sm:hidden">Net earned</span>{money(source.earnedMinor, source.currency)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </section>
+                  {row.settlements.length > 0 ? (
+                    <section>
+                      <h4 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">Settlements</h4>
+                      <div className="space-y-2">
+                        {row.settlements.map((settlement) => (
+                          <div key={settlement.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-card/70 px-3 py-3 text-sm">
+                            <span>{formatDay(settlement.settledOn)} · {settlement.method}{settlement.memo ? ` · ${settlement.memo}` : ""}</span>
+                            <span className="font-medium tabular-nums">{money(settlement.amountMinor, settlement.currency)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+                </div>
+              </details>
+            ))}
+          </div>
+        </div>
+      )}
+    </SoftCard>
+  );
 }
 
 function monthKeys(count: number) {
@@ -99,11 +205,28 @@ function inMonth(isoDay: string, month: string) {
   return isoDay.slice(0, 7) === month;
 }
 
+function moneyTotals(
+  entries: { amountMinor: bigint; currency: IsoCurrency }[],
+  fallback: IsoCurrency,
+) {
+  const totals = new Map<IsoCurrency, bigint>();
+  for (const entry of entries) {
+    totals.set(entry.currency, (totals.get(entry.currency) ?? BigInt(0)) + entry.amountMinor);
+  }
+  if (totals.size === 0) return moneyLabel(BigInt(0), fallback);
+  return [...totals.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([currency, amountMinor]) => moneyLabel(amountMinor, currency))
+    .join(" · ");
+}
+
 function resolveFinanceView(
   raw: string | undefined,
-): "ledger" | "receipts" | "month" | "upcoming" {
+): "overview" | "ledger" | "receipts" | "month" | "upcoming" {
+  if (raw === "overview") return "overview";
   if (raw === "receipts" || raw === "month" || raw === "upcoming") return raw;
-  return "ledger";
+  if (raw === "ledger") return "ledger";
+  return "overview";
 }
 
 function FinanceHero({
@@ -190,17 +313,21 @@ export default async function FinancePage({
       ? query.month
       : new Date().toISOString().slice(0, 7);
   const trendMonths = monthKeys(6);
-  const upcomingMonth = nextMonthKey();
+  const expectedBaseMonth = view === "month" || view === "overview" ? month : new Date().toISOString().slice(0, 7);
+  const upcomingMonth = nextMonthKey(new Date(`${expectedBaseMonth}-01T00:00:00Z`));
+  const expectedEndMonth = nextMonthKey(new Date(`${upcomingMonth}-01T00:00:00Z`));
   const needBoard = view === "ledger";
   const needTrends = view === "ledger";
-  const needStatement = view === "month";
+  const needStatement = view === "month" || view === "overview";
   /** Ledger insight + upcoming table + month wrap “ready to bill”. Not receipts. */
-  const needExpected = view === "ledger" || view === "upcoming" || view === "month";
+  const needExpected = view === "ledger" || view === "upcoming" || view === "month" || view === "overview";
   const needPartners =
     Boolean(ctx.org.modules.partners) &&
-    (view === "ledger" || view === "month" || view === "receipts");
+    (view === "ledger" || view === "month" || view === "receipts" || view === "overview");
+  const needPartnerRegister =
+    needPartners && (view === "overview" || view === "month" || view === "receipts");
 
-  const [clients, finance, board, expectedBillings, trendStatements, statement] =
+  const [clients, finance, board, expectedBillings, trendStatements, statement, partnerMonthRows] =
     await Promise.all([
       listClients(orgSlug),
       loadOrgFinance(orgSlug),
@@ -208,7 +335,11 @@ export default async function FinancePage({
         ? listProjectBoard(orgSlug)
         : Promise.resolve([] as Awaited<ReturnType<typeof listProjectBoard>>),
       needExpected
-        ? listExpectedBillings(orgSlug).catch(() => [])
+        ? listExpectedBillings(
+            orgSlug,
+            `${expectedBaseMonth}-01`,
+            `${expectedEndMonth}-01`,
+          ).catch(() => [])
         : Promise.resolve([] as Awaited<ReturnType<typeof listExpectedBillings>>),
       needTrends
         ? loadMonthlyStatements(orgSlug, trendMonths)
@@ -218,6 +349,9 @@ export default async function FinancePage({
       needStatement
         ? loadMonthlyStatement(orgSlug, month)
         : Promise.resolve(null),
+      needPartnerRegister
+        ? loadMonthlyPartnerRegister(orgSlug, month).catch(() => [])
+        : Promise.resolve([] as Awaited<ReturnType<typeof loadMonthlyPartnerRegister>>),
     ]);
 
   const clientName = new Map(clients.map((client) => [client.id, client.name]));
@@ -289,9 +423,40 @@ export default async function FinancePage({
   const monthCharges = liveCharges
     .filter((charge) => inMonth(charge.chargedOn, month))
     .sort((a, b) => b.chargedOn.localeCompare(a.chargedOn));
+  const recordedMonthCharges = liveCharges
+    .filter((charge) => inMonth(charge.createdAt.slice(0, 10), month))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const monthPayments = postedPayments
     .filter((payment) => inMonth(payment.paidOn, month))
     .sort((a, b) => b.paidOn.localeCompare(a.paidOn));
+  const monthChargeTotal = moneyTotals(
+    recordedMonthCharges.map((charge) => ({ amountMinor: charge.grossMinor, currency: charge.currency })),
+    ctx.org.defaultCurrency,
+  );
+  const monthDistributableTotal = moneyTotals(
+    recordedMonthCharges.map((charge) => ({ amountMinor: charge.netMinor, currency: charge.currency })),
+    ctx.org.defaultCurrency,
+  );
+  const monthFeeTotal = moneyTotals(
+    recordedMonthCharges.map((charge) => ({
+      amountMinor: charge.grossMinor - charge.netMinor,
+      currency: charge.currency,
+    })),
+    ctx.org.defaultCurrency,
+  );
+  const monthCollectionTotal = moneyTotals(
+    monthPayments.map((payment) => ({
+      amountMinor: payment.kind === "refund" ? -payment.amountMinor : payment.amountMinor,
+      currency: payment.currency,
+    })),
+    ctx.org.defaultCurrency,
+  );
+  const currentOutstandingTotal = moneyTotals(
+    liveCharges
+      .filter((charge) => charge.outstandingMinor > BigInt(0))
+      .map((charge) => ({ amountMinor: charge.outstandingMinor, currency: charge.currency })),
+    ctx.org.defaultCurrency,
+  );
 
   const expectedThisMonth = expectedBillings.filter((row) => inMonth(row.dueOn, month));
   const expectedNextMonth = expectedBillings.filter((row) =>
@@ -323,23 +488,18 @@ export default async function FinancePage({
   const upcomingMonthLabel = monthShort(upcomingMonth);
 
   const tabs = [
-    { id: "ledger", href: `/${orgSlug}/finance`, label: "Collect", active: view === "ledger" },
+    { id: "overview", href: `/${orgSlug}/finance?view=overview&month=${month}`, label: "Overview", active: view === "overview" },
+    { id: "ledger", href: `/${orgSlug}/finance?view=ledger`, label: "Collect", active: view === "ledger" },
     {
       id: "upcoming",
       href: `/${orgSlug}/finance?view=upcoming`,
-      label: "To bill",
+      label: "Billable",
       active: view === "upcoming",
-    },
-    {
-      id: "receipts",
-      href: `/${orgSlug}/finance?view=receipts`,
-      label: "Money in",
-      active: view === "receipts",
     },
     {
       id: "month",
       href: `/${orgSlug}/finance?view=month&month=${month}`,
-      label: "Month wrap",
+      label: "History",
       active: view === "month",
     },
   ] as const;
@@ -363,11 +523,26 @@ export default async function FinancePage({
               ? (view === "month" ? monthPayments : postedPayments).map((payment) => payment.id)
               : [],
           month: view === "month" ? month : undefined,
-          includePayables: true,
+          includePayables: view !== "overview",
         }).catch(() => emptyPartnerFlow),
-        listPartners(orgSlug).catch(() => []),
+        view === "overview"
+          ? Promise.resolve([] as Awaited<ReturnType<typeof listPartners>>)
+          : listPartners(orgSlug).catch(() => []),
       ])
     : [emptyPartnerFlow, [] as Awaited<ReturnType<typeof listPartners>>];
+
+  const partnerEarnedTotal = moneyTotals(
+    partnerMonthRows.map((row) => ({ amountMinor: row.earnedMinor, currency: row.currency })),
+    ctx.org.defaultCurrency,
+  );
+  const partnerGrossTotal = moneyTotals(
+    partnerMonthRows.map((row) => ({ amountMinor: row.grossMinor, currency: row.currency })),
+    ctx.org.defaultCurrency,
+  );
+  const partnerDeductionTotal = moneyTotals(
+    partnerMonthRows.map((row) => ({ amountMinor: row.deductionMinor, currency: row.currency })),
+    ctx.org.defaultCurrency,
+  );
 
   const partnerShareChargeDetails = partnerShareChargeDetailsFrom(
     view === "month" ? monthCharges : liveCharges,
@@ -472,31 +647,6 @@ export default async function FinancePage({
     return null;
   })();
 
-  const receiptsDoNext =
-    finance.snapshot.unallocatedMinor > BigInt(0) ? (
-      <NextStepCard
-        title={`Apply leftover · ${moneyLabel(finance.snapshot.unallocatedMinor, currency)}`}
-        body="Payment not applied. Assign it against open charges on Collect."
-        action={
-          <Button size="sm" nativeButton={false} render={<Link href={`/${orgSlug}/finance`} />}>
-            <HandCoins />
-            Collect
-          </Button>
-        }
-      />
-    ) : dueMinor > BigInt(0) ? (
-      <NextStepCard
-        title={`Collect · ${moneyLabel(dueMinor, currency)}`}
-        body="Open charges still need a payment."
-        action={
-          <Button size="sm" nativeButton={false} render={<Link href={`/${orgSlug}/finance`} />}>
-            <HandCoins />
-            Collect
-          </Button>
-        }
-      />
-    ) : null;
-
   const insightBand = (
     <div className="grid shrink-0 gap-4 lg:grid-cols-2">
       <SoftCard className="p-5">
@@ -590,32 +740,102 @@ export default async function FinancePage({
         }
       />
 
-      <FilterChips className="border-b border-border/40">
-        {tabs.map((item) => (
-          <FilterChip key={item.id} href={item.href} active={item.active}>
-            {item.label}
-          </FilterChip>
-        ))}
-      </FilterChips>
+      <TabNav>
+        <FilterChips className="border-b border-border/40">
+          {tabs.map((item) => (
+            <FilterChip key={item.id} href={item.href} active={item.active}>
+              {item.label}
+            </FilterChip>
+          ))}
+        </FilterChips>
 
-      <p className="shrink-0 border-b border-border/30 px-5 py-2.5 text-xs text-muted-foreground">
-        <Link href={`/${orgSlug}/finance?view=upcoming`} className="hover:text-foreground hover:underline">
-          Bill work
-        </Link>
-        {" → "}
-        <Link href={`/${orgSlug}/finance`} className="hover:text-foreground hover:underline">
-          Record payment
-        </Link>
-        {ctx.org.modules.partners ? (
-          <>
-            {" → "}
-            <Link href={`/${orgSlug}/partners`} className="hover:text-foreground hover:underline">
-              Partners share
-            </Link>
-          </>
-        ) : null}
-        {" → Done"}
-      </p>
+      <TabPanel>
+
+      {view === "overview" && statement ? (
+        <PageShell className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:gap-5 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-xl font-semibold tracking-tight">Finance overview</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {monthLabel} · charges, client payments, and partner earnings
+              </p>
+            </div>
+            <FinanceMonthPicker orgSlug={orgSlug} value={month} view="overview" />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <Stat label="Charges recorded this month" value={monthChargeTotal} hint={`${recordedMonthCharges.length} charges`} variant="strip" />
+            <Stat label="Collected this month" value={monthCollectionTotal} hint={`${monthPayments.length} payments`} tone="emerald" variant="strip" />
+            <Stat label="Clients still owe" value={currentOutstandingTotal} hint="Current open balance" tone="amber" variant="strip" />
+            <Stat label="Distributable after fees" value={monthDistributableTotal} hint={`${monthChargeTotal} total · ${monthFeeTotal} fees`} tone="sky" variant="strip" />
+            <Stat label="Partners earned after fees" value={partnerEarnedTotal} hint={`${partnerGrossTotal} gross · ${partnerDeductionTotal} fees`} tone="violet" variant="strip" />
+          </div>
+
+          <PartnerEarningsCard orgSlug={orgSlug} month={month} monthLabel={monthLabel} rows={partnerMonthRows} />
+
+          <SoftCard className="shrink-0 overflow-hidden">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/20 px-4 py-3.5 sm:px-5">
+              <div>
+                <h3 className="font-heading text-base font-semibold tracking-tight">Ready to bill this month</h3>
+                <p className="mt-1 text-xs text-muted-foreground">Unbilled milestones due in {monthLabel}</p>
+              </div>
+              <p className="text-sm font-semibold tabular-nums">{moneyLabel(expectedThisMonthMinor, currency)}</p>
+            </div>
+            {expectedThisMonth.length === 0 ? (
+              <p className="px-5 py-5 text-sm text-muted-foreground">No unbilled milestones due this month.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[40rem] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
+                      <th className="px-4 py-2.5 font-semibold sm:px-5">Due</th>
+                      <th className="px-4 py-2.5 font-semibold sm:px-5">Client</th>
+                      <th className="px-4 py-2.5 font-semibold sm:px-5">Milestone</th>
+                      <th className="px-4 py-2.5 text-right font-semibold sm:px-5">Amount</th>
+                      {ctx.canWrite ? <th className="px-4 py-2.5 text-right font-semibold sm:px-5" /> : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {expectedThisMonth.slice(0, 8).map((row) => (
+                      <tr key={row.milestoneId} className="border-b border-border/15 last:border-0">
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground sm:px-5">{formatDay(row.dueOn)}</td>
+                        <td className="px-4 py-3 text-muted-foreground sm:px-5">{row.clientName}</td>
+                        <td className="px-4 py-3 font-medium sm:px-5">{row.name}<span className="ml-1 text-xs text-muted-foreground">· {row.projectName}</span></td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums sm:px-5">{moneyLabel(row.amountMinor, row.currency)}</td>
+                        {ctx.canWrite ? (
+                          <td className="px-4 py-3 text-right sm:px-5">
+                            <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/${orgSlug}/projects/${row.projectId}?tab=milestones&bill=${row.milestoneId}`} />}>Bill</Button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {expectedThisMonth.length > 8 ? <Link className="block px-5 py-3 text-sm text-primary hover:underline" href={`/${orgSlug}/finance?view=upcoming`}>See all {expectedThisMonth.length} billable milestones</Link> : null}
+              </div>
+            )}
+          </SoftCard>
+
+          <div className="grid shrink-0 gap-4 xl:grid-cols-2">
+            <SoftCard className="overflow-hidden">
+              <div className="border-b border-border/20 px-4 py-3.5 sm:px-5">
+                <h3 className="font-heading text-base font-semibold tracking-tight">Charges recorded this month</h3>
+                <p className="mt-1 text-xs text-muted-foreground">Grouped by when the charge was recorded. Charged date may be backdated.</p>
+              </div>
+              <ChargeSheet orgSlug={orgSlug} charges={recordedMonthCharges.slice(0, 8)} canWrite={ctx.canWrite} clientName={(id) => clientName.get(id) ?? "Client"} showRecorded />
+              {recordedMonthCharges.length > 8 ? <Link className="block px-5 pb-4 text-sm text-primary hover:underline" href={`/${orgSlug}/finance?view=ledger`}>See all charges</Link> : null}
+            </SoftCard>
+            <SoftCard className="overflow-hidden">
+              <div className="flex items-center justify-between gap-2 border-b border-border/20 px-4 py-3.5 sm:px-5">
+                <h3 className="font-heading text-base font-semibold tracking-tight">Payments this month</h3>
+                <Link className="text-xs text-primary hover:underline" href={`/${orgSlug}/finance?view=receipts&month=${month}`}>All payments</Link>
+              </div>
+              <PaymentSheet orgSlug={orgSlug} payments={monthPayments.slice(0, 8)} names={clientName} canWrite={ctx.canWrite} allocations={finance.allocations} charges={finance.charges} />
+              {monthPayments.length > 8 ? <Link className="block px-5 pb-4 text-sm text-primary hover:underline" href={`/${orgSlug}/finance?view=month&month=${month}`}>See all {monthPayments.length} payments</Link> : null}
+            </SoftCard>
+          </div>
+        </PageShell>
+      ) : null}
 
       {view === "ledger" ? (
         <PageShell className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
@@ -803,14 +1023,22 @@ export default async function FinancePage({
 
       {view === "receipts" ? (
         <PageShell className="flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
-          <FinanceHero
-            label="Paid to you"
-            value={moneyLabel(finance.snapshot.collectedMinor, currency)}
-            hint="Payments applied to charges"
-            doNext={receiptsDoNext}
-          />
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-heading text-xl font-semibold tracking-tight">Money in</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Receipts, refunds, and unapplied client credit</p>
+            </div>
+            <FinanceMonthPicker orgSlug={orgSlug} value={month} view="receipts" />
+          </div>
           <FinanceSecondary
             items={[
+              {
+                label: "Paid to you",
+                value: moneyLabel(finance.snapshot.collectedMinor, currency),
+                hint: "Payments applied to charges",
+                tone: "emerald",
+                fill: moneyFill(finance.snapshot.collectedMinor, finance.snapshot.billedMinor),
+              },
               {
                 label: "Payment not applied",
                 value: moneyLabel(finance.snapshot.unallocatedMinor, currency),
@@ -823,6 +1051,9 @@ export default async function FinancePage({
               },
             ]}
           />
+          {ctx.org.modules.partners ? (
+            <PartnerEarningsCard orgSlug={orgSlug} month={month} monthLabel={monthLabel} rows={partnerMonthRows} />
+          ) : null}
           <SoftCard className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="shrink-0 border-b border-border/20 px-5 py-3.5">
               <p className="font-heading text-lg font-semibold tracking-tight">Money in</p>
@@ -1165,6 +1396,8 @@ export default async function FinancePage({
           </div>
         </PageShell>
       ) : null}
+      </TabPanel>
+      </TabNav>
     </WorkSurface>
   );
 }

@@ -456,20 +456,46 @@ function useProjectUpload(orgSlug: string, projectId: string) {
       );
     }
     if (accepted.length === 0) return;
+    const toastId = toast.loading(
+      accepted.length === 1
+        ? `Uploading ${accepted[0].name}…`
+        : `Uploading 1 of ${accepted.length} · ${accepted[0].name}`,
+    );
     start(async () => {
-      for (const file of accepted) {
-        const fd = new FormData();
-        fd.set("file", file);
-        fd.set("entity_type", "project");
-        fd.set("entity_id", projectId);
-        const result = await uploadFileAction(orgSlug, fd);
-        if (result.error) {
-          toast.error(result.error);
-          return;
+      try {
+        for (const [index, file] of accepted.entries()) {
+          toast.loading(
+            accepted.length === 1
+              ? `Uploading ${file.name}…`
+              : `Uploading ${index + 1} of ${accepted.length} · ${file.name}`,
+            { id: toastId },
+          );
+          const fd = new FormData();
+          fd.set("file", file);
+          fd.set("entity_type", "project");
+          fd.set("entity_id", projectId);
+          const result = await uploadFileAction(orgSlug, fd);
+          if (result.error) {
+            toast.error(`${file.name}: ${result.error}`, { id: toastId });
+            return;
+          }
+          toast.loading(
+            accepted.length === 1
+              ? `Uploaded ${file.name}`
+              : `Uploaded ${index + 1} of ${accepted.length} · ${file.name}`,
+            { id: toastId },
+          );
         }
+        toast.success(accepted.length === 1 ? "File uploaded" : `${accepted.length} files uploaded`, {
+          id: toastId,
+        });
+        router.refresh();
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "Upload failed. Please try again.",
+          { id: toastId },
+        );
       }
-      toast.success(accepted.length === 1 ? "File uploaded" : "Files uploaded");
-      router.refresh();
     });
   }
 

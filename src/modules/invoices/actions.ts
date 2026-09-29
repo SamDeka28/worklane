@@ -543,6 +543,7 @@ export async function recordInvoicePaymentAction(
     try {
       await allocatePartnersForReceipt(ctx, {
         paymentId,
+        paidOn,
         allocations: (allocations ?? []).map((allocation) => ({
           id: allocation.id as string,
           chargeId: allocation.charge_id as string,

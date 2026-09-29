@@ -288,6 +288,9 @@ function PaymentFields({
 }) {
   const preferred =
     targets.find((target) => target.id === defaultChargeId)?.amount ?? defaultAmount ?? "";
+  const [selectedChargeId, setSelectedChargeId] = useState(defaultChargeId ?? "");
+  const [amount, setAmount] = useState(preferred);
+  const selectedTarget = targets.find((target) => target.id === selectedChargeId);
   return (
     <form
       className={compact ? "flex flex-wrap items-end gap-2" : "grid gap-4"}
@@ -360,7 +363,17 @@ function PaymentFields({
             </NativeSelect>
           </Field>
           <Field label="Apply to" htmlFor="charge_id">
-            <NativeSelect id="charge_id" name="charge_id" defaultValue={defaultChargeId ?? ""}>
+            <NativeSelect
+              id="charge_id"
+              name="charge_id"
+              value={selectedChargeId}
+              onChange={(event) => {
+                const next = event.target.value;
+                setSelectedChargeId(next);
+                const target = targets.find((item) => item.id === next);
+                setAmount(target?.amount ?? "");
+              }}
+            >
               <option value="">Oldest unpaid first</option>
               {targets.map((target) => (
                 <option key={target.id} value={target.id}>
@@ -369,6 +382,29 @@ function PaymentFields({
               ))}
             </NativeSelect>
           </Field>
+          {selectedTarget ? (
+            <div className="rounded-2xl bg-muted/40 px-4 py-3 ring-1 ring-border/40">
+              <p className="truncate text-sm font-semibold">{selectedTarget.title}</p>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+                {[
+                  ["Total price", selectedTarget.totalPrice],
+                  ["Fee deducted", selectedTarget.feeDeducted],
+                  ["Distributable", selectedTarget.distributable],
+                  ["Already collected", selectedTarget.collected],
+                  ["Remaining", selectedTarget.remaining],
+                ].map(([label, value]) => (
+                  <div key={label}>
+                    <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+                    <p className="mt-0.5 text-xs font-medium tabular-nums">{value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="rounded-xl bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+              Payment will be applied to the oldest unpaid charges first.
+            </p>
+          )}
           <Field label="Amount" htmlFor="amount">
             <Input
               id="amount"
@@ -376,7 +412,8 @@ function PaymentFields({
               required
               inputMode="decimal"
               placeholder="300.00"
-              defaultValue={preferred}
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
             />
           </Field>
           <Field label="Method" htmlFor="method">

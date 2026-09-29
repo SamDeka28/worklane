@@ -31,7 +31,7 @@ import { loadMonthlyStatements, loadOrgDashboard, loadOrgFinance } from "@/modul
 import { requireOrg } from "@/modules/identity/org";
 import { canAccessModule, canSeeMoney } from "@/modules/identity/permissions";
 import { loadOpsQueue } from "@/modules/ops/queries";
-import { loadPartnerBalances } from "@/modules/partners/queries";
+import { loadPartnerBalances, loadUserPartnerEarnings } from "@/modules/partners/queries";
 import { JOURNEY } from "@/shared/journey-copy";
 import { formatMoney } from "@/shared/money";
 
@@ -95,6 +95,16 @@ function monthShort(yearMonth: string) {
   );
 }
 
+function earningsLabel(
+  totals: { currency: "USD" | "INR"; amountMinor: bigint }[],
+  fallback: "USD" | "INR",
+) {
+  if (totals.length === 0) return moneyLabel(BigInt(0), fallback);
+  return totals
+    .map((row) => moneyLabel(row.amountMinor, row.currency))
+    .join(" · ");
+}
+
 export default async function DashboardPage({
   params,
 }: PageProps<"/[orgSlug]">) {
@@ -104,6 +114,7 @@ export default async function DashboardPage({
   const seePartners = canAccessModule(ctx.permissions, "partners");
   const seeCrm = ctx.org.modules.crm && canAccessModule(ctx.permissions, "crm");
   const months = monthKeys(6);
+  const currentMonth = months[months.length - 1] ?? new Date().toISOString().slice(0, 7);
 
   const [
     dashLoaded,
@@ -116,6 +127,7 @@ export default async function DashboardPage({
     opsQueueRaw,
     statements,
     activityRows,
+    myEarnings,
   ] = await Promise.all([
     seeMoney ? loadOrgDashboard(orgSlug) : Promise.resolve(null),
     seeMoney ? loadOrgFinance(orgSlug) : Promise.resolve(null),
@@ -129,6 +141,9 @@ export default async function DashboardPage({
     loadOpsQueue(orgSlug).catch(() => []),
     seeMoney ? loadMonthlyStatements(orgSlug, months) : Promise.resolve([]),
     seeMoney ? Promise.resolve([]) : listOrgActivity(orgSlug, 30).catch(() => []),
+    seeMoney && seePartners
+      ? loadUserPartnerEarnings(orgSlug, ctx.userId, currentMonth).catch(() => ({ total: [], thisMonth: [] }))
+      : Promise.resolve({ total: [], thisMonth: [] }),
   ]);
 
   const names = new Map(clients.map((client) => [client.id, client.name]));
@@ -303,7 +318,7 @@ export default async function DashboardPage({
             />
           ) : null}
           {seeMoney ? (
-            <div className="lane-stagger grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+            <div className={`lane-stagger grid grid-cols-2 gap-2 sm:gap-3 ${seePartners ? "xl:grid-cols-6" : "xl:grid-cols-4"}`}>
               <Link href={`/${orgSlug}/finance`} className="block">
                 <SoftStatCard
                   label="Outstanding"
@@ -341,6 +356,26 @@ export default async function DashboardPage({
                   fill={moneyFill(monthDueMinor, dash.outstandingMinor)}
                 />
               </Link>
+              {seePartners ? (
+                <Link href={`/${orgSlug}/partners`} className="block">
+                  <SoftStatCard
+                    label="My total earned"
+                    value={earningsLabel(myEarnings.total, currency)}
+                    hint="Partner earnings, all time"
+                    tone="emerald"
+                  />
+                </Link>
+              ) : null}
+              {seePartners ? (
+                <Link href={`/${orgSlug}/partners`} className="block">
+                  <SoftStatCard
+                    label="My earned this month"
+                    value={earningsLabel(myEarnings.thisMonth, currency)}
+                    hint={monthShort(currentMonth)}
+                    tone="violet"
+                  />
+                </Link>
+              ) : null}
             </div>
           ) : null}
 

@@ -45,7 +45,7 @@ import type {
 } from "@/modules/delivery/types";
 import { formatDay } from "@/modules/finance/presentation";
 import { moneyLabel, type ChargeView } from "@/modules/finance/ledger";
-import { formatMajorInput } from "@/shared/money";
+import { formatMajorInput, netFromGross } from "@/shared/money";
 
 const STATUS_OPTIONS: MilestoneStatus[] = [
   "planned",
@@ -396,6 +396,7 @@ function MilestoneRow({
   orgSlug,
   projectId,
   billingMode,
+  feeBps,
   currency,
   item,
   items,
@@ -414,6 +415,7 @@ function MilestoneRow({
   orgSlug: string;
   projectId: string;
   billingMode: BillingMode;
+  feeBps: number;
   currency: "USD" | "INR";
   item: MilestoneRecord;
   items: MilestoneItemRecord[];
@@ -435,11 +437,29 @@ function MilestoneRow({
   const due = charge?.outstandingMinor ?? BigInt(0);
   const description = item.description ?? item.deliverables;
   const [editOpen, setEditOpen] = useState(false);
+  const [chargeOpen, setChargeOpen] = useState(false);
+  const [chargeDate, setChargeDate] = useState(() => new Date().toISOString().slice(0, 10));
   const taskedCount = items.filter((row) => row.taskId).length;
 
   function openEditor() {
     if (!canWrite) return;
     setEditOpen(true);
+  }
+
+  function postMilestoneCharge() {
+    start(async () => {
+      const result = await billMilestoneAction(orgSlug, item.id, chargeDate);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setChargeOpen(false);
+      toast.success("Charge posted: collect when paid");
+      if (result.chargeId) {
+        router.push(`/${orgSlug}/projects/${projectId}?tab=charges&collect=1&charge=${result.chargeId}`);
+      }
+      router.refresh();
+    });
   }
 
   const metaBits = [
@@ -621,22 +641,7 @@ function MilestoneRow({
                 {showMoney && billing === "unbilled" && canBill ? (
                   <DropdownMenuItem
                     disabled={pending || item.amountMinor == null || item.status === "cancelled"}
-                    onClick={() => {
-                      start(async () => {
-                        const result = await billMilestoneAction(orgSlug, item.id);
-                        if (result.error) {
-                          toast.error(result.error);
-                          return;
-                        }
-                        toast.success("Charge posted: collect when paid");
-                        if (result.chargeId) {
-                          router.push(
-                            `/${orgSlug}/projects/${projectId}?tab=charges&collect=1&charge=${result.chargeId}`,
-                          );
-                        }
-                        router.refresh();
-                      });
-                    }}
+                    onClick={() => setChargeOpen(true)}
                   >
                     Charge
                   </DropdownMenuItem>
@@ -667,6 +672,78 @@ function MilestoneRow({
                 ) : null}
               </DropdownMenuContent>
             </DropdownMenu>
+            <ActionSheet
+              title="Charge milestone"
+              description="Choose the date this milestone was billed. This can be backdated for work billed before the project was added."
+              hideTrigger
+              open={chargeOpen}
+              onOpenChange={setChargeOpen}
+            >
+              <form
+                className="grid gap-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  postMilestoneCharge();
+                }}
+            >
+              <div className="grid gap-4">
+                <div className="rounded-2xl bg-muted/35 p-4 ring-1 ring-border/50">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Selected milestone · {code}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold">{item.name}</p>
+                      {description ? (
+                        <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+                          {description}
+                        </p>
+                      ) : null}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[10px] text-muted-foreground">
+                      {MILESTONE_STATUS_LABEL[item.status]}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total price</p>
+                      <p className="mt-1 text-sm font-medium tabular-nums">
+                        {item.amountMinor != null ? moneyLabel(item.amountMinor, currency) : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Fee deducted</p>
+                      <p className="mt-1 text-sm font-medium tabular-nums">
+                        {item.amountMinor != null
+                          ? `−${moneyLabel(item.amountMinor - netFromGross(item.amountMinor, feeBps), currency)}`
+                          : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Distributable</p>
+                      <p className="mt-1 text-sm font-medium tabular-nums">
+                        {item.amountMinor != null
+                          ? moneyLabel(netFromGross(item.amountMinor, feeBps), currency)
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <Field label="Charged on" htmlFor={`milestone-charged-on-${item.id}`}>
+                  <Input
+                    id={`milestone-charged-on-${item.id}`}
+                    type="date"
+                    required
+                    value={chargeDate}
+                    onChange={(event) => setChargeDate(event.target.value)}
+                  />
+                </Field>
+                <Button type="submit" size="lg" disabled={pending || !chargeDate}>
+                  {pending ? "Posting charge…" : "Post charge"}
+                </Button>
+              </div>
+              </form>
+            </ActionSheet>
           </>
         ) : null}
           </div>
@@ -680,6 +757,7 @@ export function MilestoneStudioList({
   orgSlug,
   projectId,
   billingMode,
+  feeBps,
   currency,
   milestones,
   itemsByMilestone,
@@ -694,6 +772,7 @@ export function MilestoneStudioList({
   orgSlug: string;
   projectId: string;
   billingMode: BillingMode;
+  feeBps: number;
   currency: "USD" | "INR";
   milestones: MilestoneRecord[];
   itemsByMilestone: Record<string, MilestoneItemRecord[]>;
@@ -716,6 +795,7 @@ export function MilestoneStudioList({
           orgSlug={orgSlug}
           projectId={projectId}
           billingMode={billingMode}
+          feeBps={feeBps}
           currency={currency}
           item={item}
           items={itemsByMilestone[item.id] ?? []}

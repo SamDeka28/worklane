@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useTransition, type ReactNode } from "rea
 import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";
+import { AvatarMark } from "@/components/studio/avatar-mark";
 import { DangerZone } from "@/components/studio/type-to-confirm";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import {
   addProjectMembersAction,
   addProjectPartnersAction,
+  addSelfAsProjectPartnerAction,
   createPartnerAction,
   deletePartnerAction,
   recordPartnerSettlementAction,
@@ -998,6 +1000,7 @@ export function ManageProjectPartnersDialog({
   projectId,
   assigned,
   available,
+  currentUserId,
   triggerVariant = "outline",
   triggerLabel = "Add partners",
 }: {
@@ -1005,6 +1008,7 @@ export function ManageProjectPartnersDialog({
   projectId: string;
   assigned: PartnerRecord[];
   available: PartnerRecord[];
+  currentUserId?: string;
   triggerVariant?: "default" | "outline" | "ghost";
   triggerLabel?: string;
 }) {
@@ -1014,6 +1018,7 @@ export function ManageProjectPartnersDialog({
   const candidates = available.filter(
     (partner) => partner.active && !assigned.some((row) => row.id === partner.id),
   );
+  const alreadyOnProject = assigned.some((partner) => partner.userId === currentUserId);
 
   return (
     <ActionSheet
@@ -1025,6 +1030,27 @@ export function ManageProjectPartnersDialog({
       onOpenChange={setOpen}
     >
       <div className="grid gap-5">
+        {currentUserId && !alreadyOnProject ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => {
+              start(async () => {
+                const result = await addSelfAsProjectPartnerAction(orgSlug, projectId);
+                if (result.error) {
+                  toast.error(result.error);
+                  return;
+                }
+                toast.success("You were added as a project partner");
+                setOpen(false);
+                router.refresh();
+              });
+            }}
+          >
+            Add me as partner
+          </Button>
+        ) : null}
         {assigned.length > 0 ? (
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">On this project</p>
@@ -1034,7 +1060,10 @@ export function ManageProjectPartnersDialog({
                   key={partner.id}
                   className="flex items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm ring-1 ring-border/40"
                 >
-                  <span>{partner.name}</span>
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <AvatarMark name={partner.name} src={partner.avatarUrl} size="sm" />
+                    <span className="truncate">{partner.name}</span>
+                  </span>
                   <Button
                     type="button"
                     size="sm"
@@ -1090,7 +1119,8 @@ export function ManageProjectPartnersDialog({
                   className="flex items-center gap-3 rounded-2xl px-3 py-2 text-sm ring-1 ring-border/40"
                 >
                   <input type="checkbox" name="partner_id" value={partner.id} className="size-4" />
-                  <span>{partner.name}</span>
+                  <AvatarMark name={partner.name} src={partner.avatarUrl} size="sm" />
+                  <span className="truncate">{partner.name}</span>
                 </label>
               ))}
             </div>
@@ -1280,4 +1310,3 @@ export function ManageProjectTeamDialog({
     </ActionSheet>
   );
 }
-

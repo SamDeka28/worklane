@@ -1235,8 +1235,20 @@ export async function unlinkMilestoneItemTaskAction(orgSlug: string, itemId: str
   return { ok: true as const };
 }
 
-export async function billMilestoneAction(orgSlug: string, milestoneId: string) {
+export async function billMilestoneAction(
+  orgSlug: string,
+  milestoneId: string,
+  chargedOn = new Date().toISOString().slice(0, 10),
+) {
   const ctx = await requireWritableOrg(orgSlug);
+  const parsedChargedOn = new Date(`${chargedOn}T00:00:00.000Z`);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(chargedOn) ||
+    Number.isNaN(parsedChargedOn.getTime()) ||
+    parsedChargedOn.toISOString().slice(0, 10) !== chargedOn
+  ) {
+    return { error: "Choose a valid charge date" };
+  }
   const { data: milestone } = await ctx.supabase
     .from("milestones")
     .select("id, project_id, name, amount_minor, charge_id, status")
@@ -1277,7 +1289,7 @@ export async function billMilestoneAction(orgSlug: string, milestoneId: string) 
       fee_bps: project.default_fee_bps,
       net_minor: netMinor.toString(),
       currency,
-      charged_on: new Date().toISOString().slice(0, 10),
+      charged_on: chargedOn,
       source: "milestone",
       status: "open",
       memo: milestone.name,
@@ -1307,7 +1319,7 @@ export async function billMilestoneAction(orgSlug: string, milestoneId: string) 
       projectId: project.id,
       netMinor: netMinor,
       currency,
-      earnedOn: new Date().toISOString().slice(0, 10),
+      earnedOn: chargedOn,
       earnOn: project.earn_on === "receipt" ? "receipt" : "charge",
     });
   } catch (allocError) {

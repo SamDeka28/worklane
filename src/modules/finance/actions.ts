@@ -84,6 +84,8 @@ export async function createChargeAction(orgSlug: string, formData: FormData) {
   });
 
   revalidatePath(`/${orgSlug}`);
+  revalidatePath(`/${orgSlug}/finance`);
+  revalidatePath(`/${orgSlug}/clients/${clientId}`);
   return { id: charge.id as string };
 }
 
@@ -211,6 +213,7 @@ export async function recordPaymentAction(orgSlug: string, formData: FormData) {
     try {
       await allocatePartnersForReceipt(ctx, {
         paymentId,
+        paidOn,
         allocations: (allocations ?? []).map((row) => ({
           id: row.id as string,
           chargeId: row.charge_id as string,

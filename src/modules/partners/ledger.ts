@@ -2,6 +2,8 @@ import { splitByBps } from "@/shared/money";
 import type {
   DistributionLine,
   DistributionLineRole,
+  PartnerEarningSource,
+  PartnerSettlementSource,
 } from "@/modules/partners/types";
 
 /** F5/F12: split net (or receipt slice) across partner share_bps. */
@@ -211,47 +213,58 @@ export function resolveDistribution(input: {
   return null;
 }
 
-export function monthlyRegisterBucket(
-  rows: {
-    partnerId: string;
-    partnerName: string;
-    currency: string;
-    earnedMinor: bigint;
-    settledMinor: bigint;
-  }[],
-): {
+type MonthlyRegisterBucketInput = {
   partnerId: string;
   partnerName: string;
+  partnerAvatarUrl?: string | null;
   currency: string;
+  grossMinor?: bigint;
+  deductionMinor?: bigint;
   earnedMinor: bigint;
   settledMinor: bigint;
-  pendingMinor: bigint;
-}[] {
-  const map = new Map<
-    string,
-    {
-      partnerId: string;
-      partnerName: string;
-      currency: string;
-      earnedMinor: bigint;
-      settledMinor: bigint;
-    }
-  >();
+  sources?: PartnerEarningSource[];
+  settlements?: PartnerSettlementSource[];
+};
+
+export function monthlyRegisterBucket(
+  rows: MonthlyRegisterBucketInput[],
+): (MonthlyRegisterBucketInput & { pendingMinor: bigint })[] {
+  const map = new Map<string, MonthlyRegisterBucketInput>();
 
   for (const row of rows) {
     const key = `${row.partnerId}:${row.currency}`;
     const existing = map.get(key);
     if (existing) {
+      if (row.grossMinor != null) {
+        existing.grossMinor = (existing.grossMinor ?? BigInt(0)) + row.grossMinor;
+      }
+      if (row.deductionMinor != null) {
+        existing.deductionMinor = (existing.deductionMinor ?? BigInt(0)) + row.deductionMinor;
+      }
       existing.earnedMinor += row.earnedMinor;
       existing.settledMinor += row.settledMinor;
+      if (row.sources) existing.sources = [...(existing.sources ?? []), ...row.sources];
+      if (row.settlements) {
+        existing.settlements = [...(existing.settlements ?? []), ...row.settlements];
+      }
     } else {
-      map.set(key, { ...row });
+      map.set(key, {
+        ...row,
+        ...(row.sources ? { sources: [...row.sources] } : {}),
+        ...(row.settlements ? { settlements: [...row.settlements] } : {}),
+      });
     }
   }
 
   return [...map.values()]
     .map((row) => ({
       ...row,
+      ...(row.sources
+        ? { sources: row.sources.sort((a, b) => b.date.localeCompare(a.date)) }
+        : {}),
+      ...(row.settlements
+        ? { settlements: row.settlements.sort((a, b) => b.settledOn.localeCompare(a.settledOn)) }
+        : {}),
       pendingMinor: partnerPayable(row.earnedMinor, row.settledMinor),
     }))
     .sort((a, b) => a.partnerName.localeCompare(b.partnerName));

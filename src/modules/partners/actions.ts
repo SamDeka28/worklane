@@ -5,6 +5,10 @@ import { requireModuleWrite, requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
 import { notify, notifyOwners, userLabel } from "@/modules/notifications/service";
 import {
+  backfillProjectChargeEarnings,
+  backfillProjectReceiptEarnings,
+} from "@/modules/partners/allocate";
+import {
   assertShareSum,
   compilePoolRemainderDistribution,
 } from "@/modules/partners/ledger";
@@ -199,7 +203,7 @@ export async function setProjectDistributionAction(
 
   const { data: project } = await ctx.supabase
     .from("projects")
-    .select("id, contracted_amount_minor, client_id, default_fee_bps, billing_mode")
+    .select("id, contracted_amount_minor, client_id, default_fee_bps, billing_mode, earn_on")
     .eq("id", projectId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -337,6 +341,21 @@ export async function setProjectDistributionAction(
   );
   if (linesError) return { error: linesError.message };
 
+  let backfillError: string | null = null;
+  if (project.earn_on === "receipt" || project.earn_on === "charge") {
+    try {
+      if (project.earn_on === "receipt") {
+        await backfillProjectReceiptEarnings(ctx, projectId, chargeId);
+      } else {
+        await backfillProjectChargeEarnings(ctx, projectId, chargeId);
+      }
+    } catch (backfillFailure) {
+      backfillError = backfillFailure instanceof Error
+        ? backfillFailure.message
+        : "Could not post partner earnings for existing charges or receipts";
+    }
+  }
+
   await ctx.supabase.from("activities").insert({
     organization_id: ctx.org.id,
     actor_id: ctx.userId,
@@ -352,6 +371,10 @@ export async function setProjectDistributionAction(
 
   revalidatePath(`/${orgSlug}/partners`);
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  revalidatePath(`/${orgSlug}/finance`);
+  if (backfillError) {
+    return { error: `Split saved, but existing receipt earnings were not fully posted: ${backfillError}` };
+  }
   return { id: version.id as string };
 }
 
@@ -394,6 +417,78 @@ export async function addProjectPartnersAction(
   );
   if (error) return { error: error.message };
 
+  revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  revalidatePath(`/${orgSlug}/partners`);
+  return { ok: true as const };
+}
+
+/** Add the signed-in studio member as a partner, creating their linked record if needed. */
+export async function addSelfAsProjectPartnerAction(
+  orgSlug: string,
+  projectId: string,
+) {
+  const ctx = await requireModuleWrite(orgSlug, "partners");
+  const { data: project } = await ctx.supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!project) return { error: "Project not found" };
+
+  let { data: partner } = await ctx.supabase
+    .from("partners")
+    .select("id, active")
+    .eq("organization_id", ctx.org.id)
+    .eq("user_id", ctx.userId)
+    .maybeSingle();
+  if (!partner && ctx.user.email) {
+    const { data: emailMatch } = await ctx.supabase
+      .from("partners")
+      .select("id, active")
+      .eq("organization_id", ctx.org.id)
+      .ilike("email", ctx.user.email)
+      .maybeSingle();
+    if (emailMatch) {
+      const { error } = await ctx.supabase
+        .from("partners")
+        .update({ user_id: ctx.userId })
+        .eq("id", emailMatch.id)
+        .eq("organization_id", ctx.org.id);
+      if (error) return { error: error.message };
+      partner = emailMatch;
+    }
+  }
+  if (partner && !partner.active) {
+    return { error: "Your partner record is inactive. Activate it under Partners first." };
+  }
+  if (!partner) {
+    const name = ctx.user.displayName?.trim() || ctx.user.email?.split("@")[0] || "You";
+    const { data, error } = await ctx.supabase
+      .from("partners")
+      .insert({
+        organization_id: ctx.org.id,
+        name,
+        email: ctx.user.email,
+        user_id: ctx.userId,
+        kind: "participant",
+        active: true,
+      })
+      .select("id, active")
+      .single();
+    if (error || !data) return { error: error?.message ?? "Could not create your partner record" };
+    partner = data;
+  }
+
+  const { error } = await ctx.supabase.from("project_partners").upsert(
+    {
+      organization_id: ctx.org.id,
+      project_id: projectId,
+      partner_id: partner.id,
+    },
+    { onConflict: "project_id,partner_id", ignoreDuplicates: true },
+  );
+  if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
   revalidatePath(`/${orgSlug}/partners`);
   return { ok: true as const };

@@ -5,7 +5,13 @@ import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { voidChargeAction } from "@/modules/finance/actions";
 import { LedgerMenu } from "@/modules/finance/components/ledger-menu";
-import { moneyLabel, type ChargeView } from "@/modules/finance/ledger";
+import { ChargeCollectButton } from "@/modules/finance/components/charge-collect-button";
+import {
+  moneyLabel,
+  type AllocationRow,
+  type ChargeView,
+  type PaymentRow,
+} from "@/modules/finance/ledger";
 import {
   CANCEL_CHARGE_COPY,
   canCancelCharge,
@@ -21,15 +27,17 @@ export function ChargeRows({
   charges,
   canWrite,
   showCancelled = false,
-  collectHref,
   activeChargeId,
+  allocations = [],
+  payments = [],
 }: {
   orgSlug: string;
   charges: ChargeView[];
   canWrite: boolean;
   showCancelled?: boolean;
-  collectHref?: (chargeId: string) => string;
   activeChargeId?: string;
+  allocations?: AllocationRow[];
+  payments?: PaymentRow[];
 }) {
   const visible = showCancelled
     ? charges
@@ -37,12 +45,22 @@ export function ChargeRows({
   if (visible.length === 0) {
     return <p className="px-4 py-8 text-sm text-muted-foreground">No open charges.</p>;
   }
+  const paymentById = new Map(payments.map((payment) => [payment.id, payment]));
+  const datesByCharge = new Map<string, Set<string>>();
+  for (const allocation of allocations) {
+    const payment = paymentById.get(allocation.paymentId);
+    if (!payment || payment.status !== "posted" || payment.kind !== "receipt") continue;
+    const dates = datesByCharge.get(allocation.chargeId) ?? new Set<string>();
+    dates.add(payment.paidOn);
+    datesByCharge.set(allocation.chargeId, dates);
+  }
 
   return (
     <ul className="space-y-1 p-2">
       {visible.map((charge) => {
         const life = chargeLife(charge);
         const stillDue = charge.outstandingMinor > BigInt(0);
+        const paymentDates = [...(datesByCharge.get(charge.id) ?? [])].sort();
         return (
           <li
             key={charge.id}
@@ -61,9 +79,12 @@ export function ChargeRows({
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {formatDay(charge.chargedOn)}
+                  Charged {formatDay(charge.chargedOn)}
                   {charge.dueOn ? ` · due ${formatDay(charge.dueOn)}` : ""}
                   {charge.source !== "manual" ? ` · ${charge.source.replaceAll("_", " ")}` : ""}
+                  {paymentDates.length > 0
+                    ? ` · paid ${paymentDates.map(formatDay).join(", ")}`
+                    : ""}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -74,15 +95,19 @@ export function ChargeRows({
                       ? moneyLabel(charge.outstandingMinor, charge.currency)
                       : "Paid"}
                 </span>
-                {canWrite && stillDue && collectHref ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    nativeButton={false}
-                    render={<Link href={collectHref(charge.id)} />}
-                  >
-                    Collect
-                  </Button>
+                {canWrite && stillDue ? (
+                  <ChargeCollectButton
+                    orgSlug={orgSlug}
+                    clientId={charge.clientId}
+                    chargeId={charge.id}
+                    amountMinor={charge.outstandingMinor}
+                    currency={charge.currency}
+                    memo={charge.memo || "Untitled charge"}
+                    chargedOn={charge.chargedOn}
+                    grossMinor={charge.grossMinor}
+                    netMinor={charge.netMinor}
+                    collectedMinor={charge.allocatedMinor}
+                  />
                 ) : null}
                 {canWrite && canCancelCharge(charge) ? (
                   <LedgerMenu
@@ -98,6 +123,22 @@ export function ChargeRows({
                 value={paidRatio(charge)}
                 tone={life === "overdue" ? "overdue" : life === "paid" ? "paid" : "default"}
               />
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-5">
+              {[
+                ["Total price", charge.grossMinor],
+                ["Fee deducted", charge.grossMinor - charge.netMinor],
+                ["Distributable", charge.netMinor],
+                ["Collected", charge.allocatedMinor],
+                ["Remaining", charge.outstandingMinor],
+              ].map(([label, amount]) => (
+                <div key={String(label)} className="min-w-0">
+                  <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+                  <p className="mt-0.5 truncate text-xs font-medium tabular-nums">
+                    {moneyLabel(amount as bigint, charge.currency)}
+                  </p>
+                </div>
+              ))}
             </div>
           </li>
         );
@@ -115,6 +156,7 @@ export function ChargeSheet({
   collectHref,
   activeChargeId,
   clientName,
+  showRecorded = false,
 }: {
   orgSlug: string;
   charges: ChargeView[];
@@ -123,6 +165,7 @@ export function ChargeSheet({
   collectHref?: (chargeId: string) => string;
   activeChargeId?: string;
   clientName?: (clientId: string) => string;
+  showRecorded?: boolean;
 }) {
   const visible = showCancelled
     ? charges
@@ -134,14 +177,17 @@ export function ChargeSheet({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[42rem] border-collapse text-sm">
+      <table className="w-full min-w-[58rem] border-collapse text-sm">
         <thead>
           <tr className="border-b border-border/20 text-left text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
             {clientName ? <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Client</th> : null}
             <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Charge</th>
+            {showRecorded ? <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Recorded</th> : null}
             <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Charged</th>
             <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Due</th>
             <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Gross</th>
+            <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Fee deducted</th>
+            <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Distributable</th>
             <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Paid</th>
             <th className="whitespace-nowrap px-4 py-4 text-right font-semibold sm:px-5">Left</th>
             <th className="whitespace-nowrap px-4 py-4 font-semibold sm:px-5">Status</th>
@@ -177,6 +223,11 @@ export function ChargeSheet({
                 <td className="whitespace-nowrap px-4 py-4 font-medium sm:px-5 sm:py-5">
                   {charge.memo || "Untitled charge"}
                 </td>
+                {showRecorded ? (
+                  <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
+                    {formatDay(charge.createdAt.slice(0, 10))}
+                  </td>
+                ) : null}
                 <td className="whitespace-nowrap px-4 py-4 text-muted-foreground sm:px-5 sm:py-5">
                   {formatDay(charge.chargedOn)}
                 </td>
@@ -185,6 +236,12 @@ export function ChargeSheet({
                 </td>
                 <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums text-muted-foreground sm:px-5 sm:py-5">
                   {moneyLabel(charge.grossMinor, charge.currency)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums text-muted-foreground sm:px-5 sm:py-5">
+                  {moneyLabel(charge.grossMinor - charge.netMinor, charge.currency)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums sm:px-5 sm:py-5">
+                  {moneyLabel(charge.netMinor, charge.currency)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums text-muted-foreground sm:px-5 sm:py-5">
                   {moneyLabel(charge.allocatedMinor, charge.currency)}

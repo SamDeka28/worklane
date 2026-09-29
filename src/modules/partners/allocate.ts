@@ -99,10 +99,29 @@ export async function allocatePartnersForReceipt(
   ctx: Ctx,
   input: {
     paymentId: string;
+    paidOn: string;
     allocations: { id: string; chargeId: string; amountMinor: bigint }[];
   },
 ) {
+  const allocationIds = input.allocations.map((allocation) => allocation.id);
+  if (allocationIds.length === 0) return;
+
+  const { data: existingAllocations, error: existingError } = await ctx.supabase
+    .from("partner_allocations")
+    .select("payment_allocation_id")
+    .eq("organization_id", ctx.org.id)
+    .eq("status", "posted")
+    .in("payment_allocation_id", allocationIds);
+  if (existingError) throw new Error(existingError.message);
+  const alreadyAllocated = new Set(
+    (existingAllocations ?? []).flatMap((row) =>
+      row.payment_allocation_id ? [row.payment_allocation_id as string] : [],
+    ),
+  );
+
   for (const allocation of input.allocations) {
+    if (alreadyAllocated.has(allocation.id)) continue;
+
     const { data: charge, error } = await ctx.supabase
       .from("charges")
       .select("id, project_id, gross_minor, net_minor, currency, charged_on, projects(earn_on)")
@@ -142,11 +161,118 @@ export async function allocatePartnersForReceipt(
         payment_allocation_id: allocation.id,
         earned_minor: row.earnedMinor.toString(),
         currency: charge.currency,
-        earned_on: charge.charged_on,
+        earned_on: input.paidOn,
         status: "posted",
       })),
     );
     if (insertError) throw new Error(insertError.message);
+  }
+}
+
+/** Apply the current receipt-based split to posted receipts that were collected before it was configured. */
+export async function backfillProjectReceiptEarnings(
+  ctx: Ctx,
+  projectId: string,
+  chargeId?: string | null,
+) {
+  let chargeQuery = ctx.supabase
+    .from("charges")
+    .select("id")
+    .eq("organization_id", ctx.org.id)
+    .eq("project_id", projectId)
+    .neq("status", "void");
+  if (chargeId) chargeQuery = chargeQuery.eq("id", chargeId);
+
+  const { data: charges, error: chargeError } = await chargeQuery;
+  if (chargeError) throw new Error(chargeError.message);
+  const chargeIds = (charges ?? []).map((charge) => charge.id as string);
+  if (chargeIds.length === 0) return;
+
+  const { data: paymentAllocations, error: allocationError } = await ctx.supabase
+    .from("payment_allocations")
+    .select("id, payment_id, charge_id, amount_minor")
+    .eq("organization_id", ctx.org.id)
+    .in("charge_id", chargeIds);
+  if (allocationError) throw new Error(allocationError.message);
+  if (!paymentAllocations?.length) return;
+
+  const paymentIds = [...new Set(paymentAllocations.map((row) => row.payment_id as string))];
+  const { data: postedPayments, error: paymentError } = await ctx.supabase
+    .from("payments")
+    .select("id, paid_on")
+    .eq("organization_id", ctx.org.id)
+    .eq("status", "posted")
+    .eq("kind", "receipt")
+    .in("id", paymentIds);
+  if (paymentError) throw new Error(paymentError.message);
+  const postedPaymentDates = new Map(
+    (postedPayments ?? []).map((payment) => [payment.id as string, payment.paid_on as string]),
+  );
+
+  const allocationsByPayment = new Map<
+    string,
+    { id: string; chargeId: string; amountMinor: bigint }[]
+  >();
+  for (const allocation of paymentAllocations) {
+    const paymentId = allocation.payment_id as string;
+    if (!postedPaymentDates.has(paymentId)) continue;
+    const rows = allocationsByPayment.get(paymentId) ?? [];
+    rows.push({
+      id: allocation.id as string,
+      chargeId: allocation.charge_id as string,
+      amountMinor: BigInt(allocation.amount_minor),
+    });
+    allocationsByPayment.set(paymentId, rows);
+  }
+
+  for (const [paymentId, allocations] of allocationsByPayment) {
+    await allocatePartnersForReceipt(ctx, {
+      paymentId,
+      paidOn: postedPaymentDates.get(paymentId)!,
+      allocations,
+    });
+  }
+}
+
+/** Apply the current charge-based split to charges logged before a split was configured. */
+export async function backfillProjectChargeEarnings(
+  ctx: Ctx,
+  projectId: string,
+  chargeId?: string | null,
+) {
+  let chargeQuery = ctx.supabase
+    .from("charges")
+    .select("id, project_id, net_minor, currency, charged_on")
+    .eq("organization_id", ctx.org.id)
+    .eq("project_id", projectId)
+    .neq("status", "void");
+  if (chargeId) chargeQuery = chargeQuery.eq("id", chargeId);
+
+  const { data: charges, error } = await chargeQuery;
+  if (error) throw new Error(error.message);
+  if (!charges?.length) return;
+
+  const chargeIds = charges.map((charge) => charge.id as string);
+  const { data: existingRows, error: existingError } = await ctx.supabase
+    .from("partner_allocations")
+    .select("charge_id")
+    .eq("organization_id", ctx.org.id)
+    .eq("status", "posted")
+    .is("payment_allocation_id", null)
+    .in("charge_id", chargeIds);
+  if (existingError) throw new Error(existingError.message);
+  const alreadyAllocated = new Set((existingRows ?? []).map((row) => row.charge_id as string));
+
+  for (const charge of charges) {
+    if (alreadyAllocated.has(charge.id as string)) continue;
+    await allocatePartnersForCharge(ctx, {
+      chargeId: charge.id as string,
+      projectId: charge.project_id as string | null,
+      netMinor: BigInt(charge.net_minor),
+      currency: charge.currency as string,
+      earnedOn: charge.charged_on as string,
+      earnOn: "charge",
+    });
   }
 }
 

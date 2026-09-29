@@ -129,6 +129,12 @@ export type CollectTarget = {
   id: string;
   label: string;
   amount: string;
+  title: string;
+  totalPrice: string;
+  feeDeducted: string;
+  distributable: string;
+  collected: string;
+  remaining: string;
 };
 
 export function collectTargets(charges: ChargeView[]): CollectTarget[] {
@@ -143,6 +149,12 @@ export function collectTargets(charges: ChargeView[]): CollectTarget[] {
       id: charge.id,
       label: `${chargeTitle(charge)} · ${moneyLabel(charge.outstandingMinor, charge.currency)} due`,
       amount: formatMajorInput(charge.outstandingMinor, charge.currency),
+      title: chargeTitle(charge),
+      totalPrice: moneyLabel(charge.grossMinor, charge.currency),
+      feeDeducted: moneyLabel(charge.grossMinor - charge.netMinor, charge.currency),
+      distributable: moneyLabel(charge.netMinor, charge.currency),
+      collected: moneyLabel(charge.allocatedMinor, charge.currency),
+      remaining: moneyLabel(charge.outstandingMinor, charge.currency),
     }));
 }
 

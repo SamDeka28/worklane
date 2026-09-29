@@ -1186,7 +1186,7 @@ export function LeadDetailSheet({
           stages={stages}
           defaultCurrency={lead.currency}
           showMoney={showMoney}
-          disabled={!canWrite}
+              disabled={!canWrite}
           settings={settings}
           members={members}
           currentUserId={currentUserId}

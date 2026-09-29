@@ -8,6 +8,7 @@ export type PartnerRecord = {
   kind: PartnerKind;
   email: string | null;
   userId: string | null;
+  avatarUrl?: string | null;
   notes: string | null;
   active: boolean;
   createdAt: string;
@@ -77,11 +78,39 @@ export type PartnerBalance = {
   payableMinor: bigint;
 };
 
+export type PartnerEarningSource = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  chargeName: string;
+  date: string;
+  dateLabel: "Collected" | "Earned";
+  currency: IsoCurrency;
+  chargeGrossMinor: bigint;
+  grossMinor: bigint;
+  deductionMinor: bigint;
+  earnedMinor: bigint;
+};
+
+export type PartnerSettlementSource = {
+  id: string;
+  settledOn: string;
+  amountMinor: bigint;
+  currency: IsoCurrency;
+  method: string;
+  memo: string | null;
+};
+
 export type MonthlyRegisterRow = {
   partnerId: string;
   partnerName: string;
+  partnerAvatarUrl?: string | null;
   currency: IsoCurrency;
+  grossMinor: bigint;
+  deductionMinor: bigint;
   earnedMinor: bigint;
   settledMinor: bigint;
   pendingMinor: bigint;
+  sources: PartnerEarningSource[];
+  settlements: PartnerSettlementSource[];
 };

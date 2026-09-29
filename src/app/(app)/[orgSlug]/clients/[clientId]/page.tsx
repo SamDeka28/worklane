@@ -395,9 +395,6 @@ export default async function ClientProfilePage({
                       charges={owing}
                       canWrite={canCollect}
                       activeChargeId={selectedChargeId}
-                      collectHref={(chargeId) =>
-                        `${base}?collect=1&charge=${chargeId}#collect`
-                      }
                     />
                   </div>
                 ) : (

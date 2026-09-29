@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Camera } from "lucide-react";
@@ -39,12 +39,13 @@ export function ProfileSettingsForm({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [currentAvatarUrl, setCurrentAvatarUrl] = useState(avatarUrl);
   const fileRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[17rem_minmax(0,1fr)] lg:gap-10">
       <aside className="flex flex-col items-center gap-4 rounded-2xl bg-muted/40 p-6 text-center ring-1 ring-foreground/5">
-        <AvatarMark name={displayName} src={avatarUrl} size="lg" className="size-20 text-2xl" />
+        <AvatarMark name={displayName} src={currentAvatarUrl} size="lg" className="size-20 text-2xl" />
         <div className="min-w-0 max-w-full">
           <p className="truncate text-base font-semibold tracking-tight">{displayName}</p>
           {email ? <p className="truncate text-xs text-muted-foreground">{email}</p> : null}
@@ -62,9 +63,9 @@ export function ProfileSettingsForm({
               onClick={() => fileRef.current?.click()}
             >
               <Camera className="size-3.5" />
-              {avatarUrl ? "Change photo" : "Upload photo"}
+              {currentAvatarUrl ? "Change photo" : "Upload photo"}
             </Button>
-            {avatarUrl ? (
+            {currentAvatarUrl ? (
               <Button
                 type="button"
                 size="sm"
@@ -78,6 +79,7 @@ export function ProfileSettingsForm({
                       return;
                     }
                     toast.success("Photo removed");
+                    setCurrentAvatarUrl(null);
                     router.refresh();
                   });
                 }}
@@ -107,6 +109,7 @@ export function ProfileSettingsForm({
                   return;
                 }
                 toast.success("Photo updated");
+                setCurrentAvatarUrl(result.avatarUrl ?? null);
                 router.refresh();
               });
             }}

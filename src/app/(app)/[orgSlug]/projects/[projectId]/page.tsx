@@ -123,6 +123,8 @@ function resolveProjectTab(query: {
 
 const emptyFinance = {
   charges: [],
+  allocations: [],
+  payments: [],
   snapshot: {
     currency: "USD" as const,
     contractedMinor: BigInt(0),
@@ -405,7 +407,7 @@ export default async function ProjectDetailPage({
   const chargesByPartnerId = (() => {
     const grouped = new Map<
       string,
-      Map<string, { chargeId: string; earnedMinor: bigint; earnedOn: string }>
+      Map<string, { chargeId: string; earnedMinor: bigint; grossMinor: bigint; earnedOn: string }>
     >();
     for (const detail of partnerEarnings.details) {
       let byCharge = grouped.get(detail.partnerId);
@@ -416,11 +418,13 @@ export default async function ProjectDetailPage({
       const existing = byCharge.get(detail.chargeId);
       if (existing) {
         existing.earnedMinor += detail.earnedMinor;
+        existing.grossMinor += detail.grossMinor;
         if (detail.earnedOn > existing.earnedOn) existing.earnedOn = detail.earnedOn;
       } else {
         byCharge.set(detail.chargeId, {
           chargeId: detail.chargeId,
           earnedMinor: detail.earnedMinor,
+          grossMinor: detail.grossMinor,
           earnedOn: detail.earnedOn,
         });
       }
@@ -463,7 +467,8 @@ export default async function ProjectDetailPage({
             chargeId: item.chargeId,
             label,
             dateLabel: formatDay(item.earnedOn),
-            amountLabel: moneyLabel(item.earnedMinor, project.currency),
+            grossAmountLabel: moneyLabel(item.grossMinor, project.currency),
+            netAmountLabel: moneyLabel(item.earnedMinor, project.currency),
             href: tabHref("charges", `charge=${item.chargeId}`),
           };
         });
@@ -473,6 +478,10 @@ export default async function ProjectDetailPage({
         shareLabel,
         effectiveLabel,
         targetLabel: moneyLabel(targetMinor, project.currency),
+        grossEarnedLabel: moneyLabel(
+          partnerEarnings.rows.find((row) => row.partnerId === partnerId)?.grossMinor ?? BigInt(0),
+          project.currency,
+        ),
         earnedLabel: moneyLabel(earnedMinor, project.currency),
         stillLabel: moneyLabel(stillMinor, project.currency),
         progress:
@@ -683,6 +692,7 @@ export default async function ProjectDetailPage({
                       projectId={project.id}
                       assigned={projectPartners}
                       available={partners}
+                      currentUserId={ctx.userId}
                       triggerLabel="Add"
                       triggerVariant="outline"
                     />
@@ -826,6 +836,7 @@ export default async function ProjectDetailPage({
                 orgSlug={orgSlug}
                 projectId={project.id}
                 billingMode={project.billingMode}
+                feeBps={project.defaultFeeBps}
                 currency={project.currency}
                 milestones={milestones}
                 itemsByMilestone={Object.fromEntries(milestoneItemsById)}
@@ -975,42 +986,13 @@ export default async function ProjectDetailPage({
                   charges={finance.charges}
                   canWrite={ctx.canWrite}
                   activeChargeId={selectedChargeId}
-                  collectHref={(chargeId) => tabHref("charges", `collect=1&charge=${chargeId}`)}
+                  allocations={finance.allocations}
+                  payments={finance.payments}
                 />
-                {milestones.some((item) => item.chargeId) ? (
-                  <ul className="mt-4 space-y-2 rounded-[1.75rem] bg-muted/40 p-4 ring-1 ring-border/30">
-                    {milestones
-                      .filter((item) => item.chargeId)
-                      .map((item) => {
-                        const charge = chargesByMilestone.get(item.id);
-                        const life = milestoneBillingLife(item, charge);
-                        return (
-                          <li
-                            key={item.id}
-                            className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                          >
-                            <span className="font-medium">{item.name}</span>
-                            <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <StatusChip tone={life === "paid" ? "paid" : "due"}>
-                                {milestoneBillingLabel(life)}
-                              </StatusChip>
-                              {charge && charge.outstandingMinor > BigInt(0) ? (
-                                <Link
-                                  className="font-medium underline underline-offset-2"
-                                  href={tabHref("charges", `collect=1&charge=${charge.id}`)}
-                                >
-                                  Collect
-                                </Link>
-                              ) : null}
-                            </span>
-                          </li>
-                        );
-                      })}
-                  </ul>
-                ) : null}
                 {ctx.canWrite && money.outstandingMinor > BigInt(0) ? (
                   <div className="mt-4">
                     <CollectComposer
+                      key={`${project.clientId}-${selectedChargeId ?? ""}`}
                       orgSlug={orgSlug}
                       clientId={project.clientId}
                       targets={collectTargets(finance.charges)}
@@ -1050,6 +1032,7 @@ export default async function ProjectDetailPage({
                       projectId={project.id}
                       assigned={projectPartners}
                       available={partners}
+                      currentUserId={ctx.userId}
                       triggerLabel="Partners"
                       triggerVariant="outline"
                     />
@@ -1173,6 +1156,7 @@ export default async function ProjectDetailPage({
                           projectId={project.id}
                           assigned={projectPartners}
                           available={partners}
+                          currentUserId={ctx.userId}
                           triggerLabel="Add partners"
                         />
                       ) : (
@@ -1193,7 +1177,7 @@ export default async function ProjectDetailPage({
                 <>
                   <SplitPartnerTable rows={splitPartnerRows} />
                   <p className="mt-3 text-xs text-muted-foreground">
-                    Target is of distributable after platform fee. Earned is posted from{" "}
+                    Gross earned is before the platform fee; net earned and target are after fees. Earned is posted from{" "}
                     {project.earnOn === "receipt"
                       ? "collections (earn on receipt)"
                       : "charges (earn on charge)"}

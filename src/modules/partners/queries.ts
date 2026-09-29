@@ -9,7 +9,7 @@ import type {
   PartnerSettlement,
   ProjectMemberRecord,
 } from "@/modules/partners/types";
-import type { IsoCurrency } from "@/shared/money";
+import { splitByBps, type IsoCurrency } from "@/shared/money";
 
 function asCurrency(value: string): IsoCurrency {
   return value === "INR" ? "INR" : "USD";
@@ -20,6 +20,17 @@ function asKind(value: string): PartnerKind {
   return "participant";
 }
 
+async function partnerAvatarUrls(ctx: Awaited<ReturnType<typeof requireOrg>>, userIds: (string | null | undefined)[]) {
+  const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return new Map<string, string | null>();
+  const { data, error } = await ctx.supabase
+    .from("profiles")
+    .select("id, avatar_url")
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+  return new Map((data ?? []).map((row) => [row.id as string, (row.avatar_url as string | null) ?? null]));
+}
+
 export const listPartners = cache(async (orgSlug: string): Promise<PartnerRecord[]> => {
   const ctx = await requireOrg(orgSlug);
   const { data, error } = await ctx.supabase
@@ -28,12 +39,14 @@ export const listPartners = cache(async (orgSlug: string): Promise<PartnerRecord
     .eq("organization_id", ctx.org.id)
     .order("name");
   if (error) throw new Error(error.message);
+  const avatars = await partnerAvatarUrls(ctx, (data ?? []).map((row) => row.user_id as string | null));
   return (data ?? []).map((row) => ({
     id: row.id,
     name: row.name,
     kind: asKind(row.kind),
     email: (row.email as string | null) ?? null,
     userId: row.user_id,
+    avatarUrl: row.user_id ? avatars.get(row.user_id as string) ?? null : null,
     notes: row.notes,
     active: row.active,
     createdAt: row.created_at,
@@ -52,7 +65,7 @@ export async function listProjectPartners(
     .eq("project_id", projectId);
   if (error) throw new Error(error.message);
 
-  return (data ?? [])
+  const partners = (data ?? [])
     .map((row) => {
       const partner = Array.isArray(row.partners) ? row.partners[0] : row.partners;
       if (!partner) return null;
@@ -67,7 +80,13 @@ export async function listProjectPartners(
         createdAt: partner.created_at as string,
       } satisfies PartnerRecord;
     })
-    .filter((row): row is PartnerRecord => Boolean(row))
+    .filter((row): row is PartnerRecord => Boolean(row));
+  const avatars = await partnerAvatarUrls(ctx, partners.map((partner) => partner.userId));
+  return partners
+    .map((partner) => ({
+      ...partner,
+      avatarUrl: partner.userId ? avatars.get(partner.userId) ?? null : null,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -99,8 +118,17 @@ export async function listProjectPartnersByProject(
     });
     byProject[projectId] = list;
   }
+  const avatars = await partnerAvatarUrls(
+    ctx,
+    Object.values(byProject).flatMap((partners) => partners.map((partner) => partner.userId)),
+  );
   for (const projectId of Object.keys(byProject)) {
-    byProject[projectId].sort((a, b) => a.name.localeCompare(b.name));
+    byProject[projectId] = byProject[projectId]
+      .map((partner) => ({
+        ...partner,
+        avatarUrl: partner.userId ? avatars.get(partner.userId) ?? null : null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
   return byProject;
 }
@@ -209,14 +237,14 @@ export async function loadMonthlyPartnerRegister(
     listPartners(orgSlug),
     ctx.supabase
       .from("partner_allocations")
-      .select("partner_id, earned_minor, currency")
+      .select("id, partner_id, earned_minor, currency, charge_id, distribution_version_id, payment_allocation_id, payment_id, earned_on")
       .eq("organization_id", ctx.org.id)
       .eq("status", "posted")
       .gte("earned_on", start)
       .lt("earned_on", nextMonth),
     ctx.supabase
       .from("partner_settlements")
-      .select("partner_id, amount_minor, currency")
+      .select("id, partner_id, amount_minor, currency, settled_on, method, memo")
       .eq("organization_id", ctx.org.id)
       .eq("status", "posted")
       .gte("settled_on", start)
@@ -226,27 +254,152 @@ export async function loadMonthlyPartnerRegister(
   if (allocRes.error) throw new Error(allocRes.error.message);
   if (settleRes.error) throw new Error(settleRes.error.message);
 
-  const nameById = new Map(partners.map((partner) => [partner.id, partner.name]));
-  const seed = new Map<string, { earned: bigint; settled: bigint; currency: string }>();
+  const allocations = allocRes.data ?? [];
+  const chargeIds = [...new Set(allocations.map((row) => row.charge_id))];
+  const distributionVersionIds = [...new Set(
+    allocations.flatMap((row) => row.distribution_version_id ? [row.distribution_version_id] : []),
+  )];
+  const paymentAllocationIds = [...new Set(
+    allocations.flatMap((row) => row.payment_allocation_id ? [row.payment_allocation_id] : []),
+  )];
+  const paymentIds = [...new Set(
+    allocations.flatMap((row) => row.payment_id ? [row.payment_id] : []),
+  )];
+  const [chargeRes, paymentAllocationRes, distributionLinesRes, paymentRes] = await Promise.all([
+    chargeIds.length > 0
+      ? ctx.supabase
+          .from("charges")
+          .select("id, project_id, memo, charged_on, gross_minor, net_minor, projects(name)")
+          .eq("organization_id", ctx.org.id)
+          .in("id", chargeIds)
+      : Promise.resolve(null),
+    paymentAllocationIds.length > 0
+      ? ctx.supabase
+          .from("payment_allocations")
+          .select("id, amount_minor")
+          .eq("organization_id", ctx.org.id)
+          .in("id", paymentAllocationIds)
+      : Promise.resolve(null),
+    distributionVersionIds.length > 0
+      ? ctx.supabase
+          .from("distribution_lines")
+          .select("version_id, partner_id, share_bps")
+          .eq("organization_id", ctx.org.id)
+          .in("version_id", distributionVersionIds)
+      : Promise.resolve(null),
+    paymentIds.length > 0
+      ? ctx.supabase
+          .from("payments")
+          .select("id, paid_on")
+          .eq("organization_id", ctx.org.id)
+          .in("id", paymentIds)
+      : Promise.resolve(null),
+  ]);
+  if (chargeRes?.error) throw new Error(chargeRes.error.message);
+  if (paymentAllocationRes?.error) throw new Error(paymentAllocationRes.error.message);
+  if (distributionLinesRes?.error) throw new Error(distributionLinesRes.error.message);
+  if (paymentRes?.error) throw new Error(paymentRes.error.message);
 
-  for (const row of allocRes.data ?? []) {
+  const chargeById = new Map((chargeRes?.data ?? []).map((row) => [row.id, row]));
+  const paymentAllocationById = new Map((paymentAllocationRes?.data ?? []).map((row) => [row.id, row]));
+  const paymentDateById = new Map((paymentRes?.data ?? []).map((row) => [row.id, row.paid_on]));
+  const distributionLinesByVersion = new Map<string, { partnerId: string; shareBps: number }[]>();
+  for (const line of distributionLinesRes?.data ?? []) {
+    const lines = distributionLinesByVersion.get(line.version_id) ?? [];
+    lines.push({ partnerId: line.partner_id, shareBps: line.share_bps });
+    distributionLinesByVersion.set(line.version_id, lines);
+  }
+
+  const nameById = new Map(partners.map((partner) => [partner.id, partner.name]));
+  const avatarById = new Map(partners.map((partner) => [partner.id, partner.avatarUrl ?? null]));
+  const seed = new Map<string, {
+    gross: bigint;
+    deductions: bigint;
+    earned: bigint;
+    settled: bigint;
+    currency: string;
+    sources: MonthlyRegisterRow["sources"];
+    settlements: MonthlyRegisterRow["settlements"];
+  }>();
+
+  for (const row of allocations) {
     const key = `${row.partner_id}:${row.currency}`;
     const existing = seed.get(key) ?? {
+      gross: BigInt(0),
+      deductions: BigInt(0),
       earned: BigInt(0),
       settled: BigInt(0),
       currency: row.currency as string,
+      sources: [],
+      settlements: [],
     };
-    existing.earned += BigInt(row.earned_minor);
+    const earnedMinor = BigInt(row.earned_minor);
+    const charge = chargeById.get(row.charge_id);
+    const paymentAllocation = row.payment_allocation_id
+      ? paymentAllocationById.get(row.payment_allocation_id)
+      : null;
+    const grossBase = paymentAllocation
+      ? BigInt(paymentAllocation.amount_minor)
+      : BigInt(charge?.gross_minor ?? row.earned_minor);
+    const netBase = paymentAllocation && charge && BigInt(charge.gross_minor) > BigInt(0)
+      ? (grossBase * BigInt(charge.net_minor)) / BigInt(charge.gross_minor)
+      : BigInt(charge?.net_minor ?? grossBase);
+    const lines = row.distribution_version_id
+      ? distributionLinesByVersion.get(row.distribution_version_id) ?? []
+      : [];
+    const shareTotal = lines.reduce((total, line) => total + line.shareBps, 0);
+    const partnerIndex = lines.findIndex((line) => line.partnerId === row.partner_id);
+    const grossShare = shareTotal === 10_000 && partnerIndex >= 0
+      ? splitByBps(grossBase, lines.map((line) => line.shareBps))[partnerIndex] ?? earnedMinor
+      : netBase > BigInt(0)
+        ? (earnedMinor * grossBase) / netBase
+        : earnedMinor;
+    existing.gross += grossShare;
+    existing.deductions += grossShare > earnedMinor ? grossShare - earnedMinor : BigInt(0);
+    existing.earned += earnedMinor;
+    const projectJoin = charge?.projects as
+      | { name?: string }
+      | { name?: string }[]
+      | null
+      | undefined;
+    const projectName = Array.isArray(projectJoin)
+      ? projectJoin[0]?.name
+      : projectJoin?.name;
+    existing.sources.push({
+      id: row.id,
+      projectId: (charge?.project_id as string | null) ?? "",
+      projectName: projectName ?? "Project",
+      chargeName: charge?.memo ?? "Untitled charge",
+      date: paymentDateById.get(row.payment_id ?? "") ?? row.earned_on,
+      dateLabel: row.payment_id ? "Collected" : "Earned",
+      currency: asCurrency(row.currency),
+      chargeGrossMinor: BigInt(charge?.gross_minor ?? grossBase),
+      grossMinor: grossShare,
+      deductionMinor: grossShare > earnedMinor ? grossShare - earnedMinor : BigInt(0),
+      earnedMinor,
+    });
     seed.set(key, existing);
   }
   for (const row of settleRes.data ?? []) {
     const key = `${row.partner_id}:${row.currency}`;
     const existing = seed.get(key) ?? {
+      gross: BigInt(0),
+      deductions: BigInt(0),
       earned: BigInt(0),
       settled: BigInt(0),
       currency: row.currency as string,
+      sources: [],
+      settlements: [],
     };
     existing.settled += BigInt(row.amount_minor);
+    existing.settlements.push({
+      id: row.id,
+      settledOn: row.settled_on,
+      amountMinor: BigInt(row.amount_minor),
+      currency: asCurrency(row.currency),
+      method: row.method,
+      memo: row.memo,
+    });
     seed.set(key, existing);
   }
 
@@ -255,19 +408,29 @@ export async function loadMonthlyPartnerRegister(
     return {
       partnerId,
       partnerName: nameById.get(partnerId) ?? "Partner",
+      partnerAvatarUrl: avatarById.get(partnerId) ?? null,
       currency: value.currency,
+      grossMinor: value.gross,
+      deductionMinor: value.deductions,
       earnedMinor: value.earned,
       settledMinor: value.settled,
+      sources: value.sources,
+      settlements: value.settlements,
     };
   });
 
   return monthlyRegisterBucket(rows).map((row) => ({
     partnerId: row.partnerId,
     partnerName: row.partnerName,
+    partnerAvatarUrl: row.partnerAvatarUrl ?? null,
     currency: asCurrency(row.currency),
+    grossMinor: row.grossMinor ?? BigInt(0),
+    deductionMinor: row.deductionMinor ?? BigInt(0),
     earnedMinor: row.earnedMinor,
     settledMinor: row.settledMinor,
     pendingMinor: row.pendingMinor,
+    sources: row.sources ?? [],
+    settlements: row.settlements ?? [],
   }));
 }
 
@@ -314,16 +477,60 @@ export const loadPartnerBalances = cache(async (orgSlug: string) => {
   });
 });
 
+export async function loadUserPartnerEarnings(
+  orgSlug: string,
+  userId: string,
+  month: string,
+): Promise<{
+  total: { currency: IsoCurrency; amountMinor: bigint }[];
+  thisMonth: { currency: IsoCurrency; amountMinor: bigint }[];
+}> {
+  const ctx = await requireOrg(orgSlug);
+  const { data: partners, error: partnerError } = await ctx.supabase
+    .from("partners")
+    .select("id")
+    .eq("organization_id", ctx.org.id)
+    .eq("user_id", userId);
+  if (partnerError) throw new Error(partnerError.message);
+  const partnerIds = (partners ?? []).map((row) => row.id as string);
+  if (partnerIds.length === 0) return { total: [], thisMonth: [] };
+
+  const { data: allocations, error } = await ctx.supabase
+    .from("partner_allocations")
+    .select("earned_minor, currency, earned_on")
+    .eq("organization_id", ctx.org.id)
+    .eq("status", "posted")
+    .in("partner_id", partnerIds);
+  if (error) throw new Error(error.message);
+
+  const totalByCurrency = new Map<IsoCurrency, bigint>();
+  const monthByCurrency = new Map<IsoCurrency, bigint>();
+  for (const row of allocations ?? []) {
+    const currency = asCurrency(row.currency as string);
+    const amount = BigInt(row.earned_minor);
+    totalByCurrency.set(currency, (totalByCurrency.get(currency) ?? BigInt(0)) + amount);
+    if ((row.earned_on as string).slice(0, 7) === month) {
+      monthByCurrency.set(currency, (monthByCurrency.get(currency) ?? BigInt(0)) + amount);
+    }
+  }
+  const toTotals = (totals: Map<IsoCurrency, bigint>) =>
+    [...totals.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([currency, amountMinor]) => ({ currency, amountMinor }));
+  return { total: toTotals(totalByCurrency), thisMonth: toTotals(monthByCurrency) };
+}
+
 /** Posted partner earnings for a project's charges (charge- or receipt-timed). */
 export async function loadProjectPartnerEarnings(
   orgSlug: string,
   projectId: string,
 ): Promise<{
-  rows: { partnerId: string; earnedMinor: bigint }[];
+  rows: { partnerId: string; earnedMinor: bigint; grossMinor: bigint }[];
   details: {
     partnerId: string;
     chargeId: string;
     earnedMinor: bigint;
+    grossMinor: bigint;
     earnedOn: string;
   }[];
   totalEarnedMinor: bigint;
@@ -331,7 +538,7 @@ export async function loadProjectPartnerEarnings(
   const ctx = await requireOrg(orgSlug);
   const { data: charges, error: chargesError } = await ctx.supabase
     .from("charges")
-    .select("id")
+    .select("id, gross_minor")
     .eq("organization_id", ctx.org.id)
     .eq("project_id", projectId)
     .neq("status", "void");
@@ -344,29 +551,83 @@ export async function loadProjectPartnerEarnings(
 
   const { data: allocations, error: allocError } = await ctx.supabase
     .from("partner_allocations")
-    .select("partner_id, charge_id, earned_minor, earned_on")
+    .select("partner_id, charge_id, earned_minor, earned_on, distribution_version_id, payment_allocation_id")
     .eq("organization_id", ctx.org.id)
     .eq("status", "posted")
     .in("charge_id", chargeIds)
     .order("earned_on", { ascending: false });
   if (allocError) throw new Error(allocError.message);
 
+  const paymentAllocationIds = [...new Set(
+    (allocations ?? [])
+      .map((row) => row.payment_allocation_id as string | null)
+      .filter((id): id is string => Boolean(id)),
+  )];
+  const distributionVersionIds = [...new Set(
+    (allocations ?? []).map((row) => row.distribution_version_id as string),
+  )];
+  const [paymentAllocationResult, distributionLineResult] = await Promise.all([
+    paymentAllocationIds.length > 0
+      ? ctx.supabase
+          .from("payment_allocations")
+          .select("id, amount_minor")
+          .eq("organization_id", ctx.org.id)
+          .in("id", paymentAllocationIds)
+      : Promise.resolve({ data: [], error: null }),
+    distributionVersionIds.length > 0
+      ? ctx.supabase
+          .from("distribution_lines")
+          .select("version_id, partner_id, share_bps")
+          .eq("organization_id", ctx.org.id)
+          .in("version_id", distributionVersionIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (paymentAllocationResult.error) throw new Error(paymentAllocationResult.error.message);
+  if (distributionLineResult.error) throw new Error(distributionLineResult.error.message);
+
+  const grossByCharge = new Map(
+    (charges ?? []).map((row) => [row.id as string, BigInt(row.gross_minor)]),
+  );
+  const allocatedGrossByPaymentAllocation = new Map(
+    (paymentAllocationResult.data ?? []).map((row) => [row.id as string, BigInt(row.amount_minor)]),
+  );
+  const linesByVersion = new Map<string, { partnerId: string; shareBps: number }[]>();
+  for (const row of distributionLineResult.data ?? []) {
+    const versionId = row.version_id as string;
+    const versionLines = linesByVersion.get(versionId) ?? [];
+    versionLines.push({ partnerId: row.partner_id as string, shareBps: row.share_bps as number });
+    linesByVersion.set(versionId, versionLines);
+  }
+
   const byPartner = new Map<string, bigint>();
+  const grossByPartner = new Map<string, bigint>();
   const details: {
     partnerId: string;
     chargeId: string;
     earnedMinor: bigint;
+    grossMinor: bigint;
     earnedOn: string;
   }[] = [];
 
   for (const row of allocations ?? []) {
     const partnerId = row.partner_id as string;
     const earnedMinor = BigInt(row.earned_minor);
+    const chargeId = row.charge_id as string;
+    const versionId = row.distribution_version_id as string;
+    const lines = linesByVersion.get(versionId) ?? [];
+    const partnerLineIndex = lines.findIndex((line) => line.partnerId === partnerId);
+    const grossBase = row.payment_allocation_id
+      ? allocatedGrossByPaymentAllocation.get(row.payment_allocation_id as string) ?? BigInt(0)
+      : grossByCharge.get(chargeId) ?? BigInt(0);
+    const grossParts = lines.length > 0 ? splitByBps(grossBase, lines.map((line) => line.shareBps)) : [];
+    const grossMinor = partnerLineIndex >= 0 ? grossParts[partnerLineIndex] ?? BigInt(0) : BigInt(0);
     byPartner.set(partnerId, (byPartner.get(partnerId) ?? BigInt(0)) + earnedMinor);
+    grossByPartner.set(partnerId, (grossByPartner.get(partnerId) ?? BigInt(0)) + grossMinor);
     details.push({
       partnerId,
-      chargeId: row.charge_id as string,
+      chargeId,
       earnedMinor,
+      grossMinor,
       earnedOn: row.earned_on as string,
     });
   }
@@ -374,6 +635,7 @@ export async function loadProjectPartnerEarnings(
   const rows = [...byPartner.entries()].map(([partnerId, earnedMinor]) => ({
     partnerId,
     earnedMinor,
+    grossMinor: grossByPartner.get(partnerId) ?? BigInt(0),
   }));
   const totalEarnedMinor = rows.reduce((sum, row) => sum + row.earnedMinor, BigInt(0));
   return { rows, details, totalEarnedMinor };

@@ -10,7 +10,8 @@ export type SplitPartnerChargeRow = {
   chargeId: string;
   label: string;
   dateLabel: string;
-  amountLabel: string;
+  grossAmountLabel: string;
+  netAmountLabel: string;
   href?: string;
 };
 
@@ -20,6 +21,7 @@ export type SplitPartnerTableRow = {
   shareLabel: string;
   effectiveLabel: string | null;
   targetLabel: string;
+  grossEarnedLabel: string;
   earnedLabel: string;
   stillLabel: string;
   /** 0–1 earned vs target for the progress rail */
@@ -106,18 +108,26 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
                 </div>
               </div>
 
-              <div className="grid w-full grid-cols-3 gap-2 border-t border-border/25 pt-3 sm:w-[22rem] sm:shrink-0 sm:gap-3 sm:border-0 sm:pt-0">
+              <div className="grid w-full grid-cols-2 gap-x-3 gap-y-2 border-t border-border/25 pt-3 sm:w-[30rem] sm:shrink-0 sm:grid-cols-4 sm:gap-3 sm:border-0 sm:pt-0">
                 <div className="min-w-0">
                   <p className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
-                    Target
+                    Net target
                   </p>
                   <p className="mt-1 truncate text-sm tabular-nums text-muted-foreground">
                     {row.targetLabel}
                   </p>
                 </div>
                 <div className="min-w-0">
+                  <p className="text-[10px] font-semibold tracking-[0.08em] text-muted-foreground uppercase">
+                    Gross earned
+                  </p>
+                  <p className="mt-1 truncate text-sm font-medium tabular-nums">
+                    {row.grossEarnedLabel}
+                  </p>
+                </div>
+                <div className="min-w-0">
                   <p className="text-[10px] font-semibold tracking-[0.08em] text-emerald-700 uppercase dark:text-emerald-300">
-                    Earned
+                    Net earned
                   </p>
                   <p className="mt-1 truncate font-heading text-base font-semibold tracking-tight tabular-nums text-emerald-800 sm:text-lg dark:text-emerald-200">
                     {row.earnedLabel}
@@ -160,7 +170,7 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
                 <ul className="space-y-2">
                   {row.charges.map((charge) => (
                     <li
-                      key={`${row.partnerId}-${charge.chargeId}-${charge.dateLabel}-${charge.amountLabel}`}
+                      key={`${row.partnerId}-${charge.chargeId}-${charge.dateLabel}-${charge.netAmountLabel}`}
                       className="flex items-center justify-between gap-3 rounded-2xl bg-card px-3 py-2.5 ring-1 ring-border/25"
                     >
                       <div className="min-w-0">
@@ -179,8 +189,9 @@ export function SplitPartnerTable({ rows }: { rows: SplitPartnerTableRow[] }) {
                           {charge.dateLabel}
                         </p>
                       </div>
-                      <span className="shrink-0 font-heading text-base font-semibold tabular-nums tracking-tight text-emerald-800 dark:text-emerald-200">
-                        {charge.amountLabel}
+                      <span className="shrink-0 text-right">
+                        <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Gross {charge.grossAmountLabel}</span>
+                        <span className="block font-heading text-sm font-semibold tabular-nums tracking-tight text-emerald-800 dark:text-emerald-200">Net {charge.netAmountLabel}</span>
                       </span>
                     </li>
                   ))}

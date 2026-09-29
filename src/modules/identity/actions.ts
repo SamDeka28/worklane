@@ -182,6 +182,7 @@ export async function updateProfileAction(orgSlug: string, formData: FormData) {
 
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}`);
+  revalidatePath(`/${orgSlug}`, "layout");
   revalidatePath(`/${orgSlug}/profile`);
   return { ok: true as const };
 }
@@ -230,6 +231,7 @@ export async function uploadAvatarAction(orgSlug: string, formData: FormData) {
 
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}`);
+  revalidatePath(`/${orgSlug}`, "layout");
   revalidatePath(`/${orgSlug}/profile`);
   return { ok: true as const, avatarUrl };
 }
@@ -245,6 +247,7 @@ export async function removeAvatarAction(orgSlug: string) {
     .eq("id", ctx.userId);
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}`);
+  revalidatePath(`/${orgSlug}`, "layout");
   revalidatePath(`/${orgSlug}/profile`);
   return { ok: true as const };
 }

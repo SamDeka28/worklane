@@ -159,6 +159,8 @@ export async function loadProjectFinance(orgSlug: string, projectId: string) {
     return {
       charges: withChargeOutstanding([], [], []),
       snapshot: clientMoneySnapshot([], [], []),
+      allocations: [] as AllocationRow[],
+      payments: [] as PaymentRow[],
     };
   }
 
@@ -191,7 +193,7 @@ export async function loadProjectFinance(orgSlug: string, projectId: string) {
 
   const views = withChargeOutstanding(charges, allocations, payments);
   const snapshot = clientMoneySnapshot(charges, payments, allocations);
-  return { charges: views, snapshot };
+  return { charges: views, snapshot, allocations, payments };
 }
 
 export async function loadMonthlyStatement(

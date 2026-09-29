@@ -45,9 +45,11 @@ function formatLabel(value: string) {
 export function FinanceMonthPicker({
   orgSlug,
   value,
+  view = "month",
 }: {
   orgSlug: string;
   value: string;
+  view?: "month" | "overview" | "receipts";
 }) {
   const router = useRouter();
   const selected = parseYearMonth(value);
@@ -59,7 +61,7 @@ export function FinanceMonthPicker({
   function pick(monthIndex: number) {
     const next = `${viewYear}-${String(monthIndex + 1).padStart(2, "0")}`;
     setOpen(false);
-    router.push(`/${orgSlug}/finance?view=month&month=${next}`);
+    router.push(`/${orgSlug}/finance?view=${view}&month=${next}`);
   }
 
   return (

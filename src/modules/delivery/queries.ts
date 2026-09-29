@@ -618,7 +618,7 @@ export const listProjectBoard = cache(async (orgSlug: string) => {
 });
 
 /** Unbilled milestones with due dates — expected cash, not posted charges. */
-export const listExpectedBillings = cache(async (orgSlug: string): Promise<
+export const listExpectedBillings = cache(async (orgSlug: string, dueFrom?: string, dueTo?: string): Promise<
   {
     milestoneId: string;
     projectId: string;
@@ -632,7 +632,7 @@ export const listExpectedBillings = cache(async (orgSlug: string): Promise<
   }[]
 > => {
   const { org, supabase } = await requireOrg(orgSlug);
-  const { data, error } = await supabase
+  let query = supabase
     .from("milestones")
     .select(
       "id, project_id, name, amount_minor, due_on, charge_id, status, projects(id, name, client_id, clients(name, currency))",
@@ -643,6 +643,9 @@ export const listExpectedBillings = cache(async (orgSlug: string): Promise<
     .not("due_on", "is", null)
     .not("amount_minor", "is", null)
     .order("due_on", { ascending: true });
+  if (dueFrom) query.gte("due_on", dueFrom);
+  if (dueTo) query.lt("due_on", dueTo);
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
 
   const rows: {
