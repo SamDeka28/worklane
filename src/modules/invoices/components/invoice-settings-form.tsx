@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { ImageUp, Pencil, Plus, Settings2, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Field } from "@/components/studio/field";

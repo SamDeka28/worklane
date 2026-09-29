@@ -15,7 +15,7 @@ import {
 import { StatusChip } from "@/components/studio/status-chip";
 import { CreateClientDialog } from "@/modules/clients/components/client-forms";
 import { ClientToolbar } from "@/modules/clients/components/client-toolbar";
-import { listClients } from "@/modules/clients/queries";
+import { listClients, listPrimaryContactsForOrg } from "@/modules/clients/queries";
 import { listClientsWithOutstanding, loadOrgFinance } from "@/modules/finance/queries";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { dueThisMonthMinor } from "@/modules/finance/presentation";
@@ -27,8 +27,12 @@ import { JOURNEY } from "@/shared/journey-copy";
 const PAGE_SIZE = 40;
 
 const zeroSnapshot = {
+  billedMinor: BigInt(0),
   outstandingMinor: BigInt(0),
   collectedMinor: BigInt(0),
+  refundedMinor: BigInt(0),
+  unallocatedMinor: BigInt(0),
+  overdueMinor: BigInt(0),
 };
 
 export default async function ClientsPage({
@@ -46,7 +50,7 @@ export default async function ClientsPage({
   const view = query.view === "cards" ? "cards" : "list";
   const page = Math.max(1, Number(query.page) || 1);
 
-  const [rows, board, finance] = await Promise.all([
+  const [rows, board, finance, contacts] = await Promise.all([
     seeMoney
       ? listClientsWithOutstanding(orgSlug, q)
       : listClients(orgSlug, q).then((clients) =>
@@ -56,11 +60,17 @@ export default async function ClientsPage({
     seeMoney && view === "cards"
       ? loadOrgFinance(orgSlug)
       : Promise.resolve(null as Awaited<ReturnType<typeof loadOrgFinance>> | null),
+    listPrimaryContactsForOrg(orgSlug),
   ]);
 
   const projectCount = new Map<string, number>();
+  const clientProjects = new Map<string, string[]>();
   for (const row of board) {
     projectCount.set(row.project.clientId, (projectCount.get(row.project.clientId) ?? 0) + 1);
+    clientProjects.set(row.project.clientId, [
+      ...(clientProjects.get(row.project.clientId) ?? []),
+      row.project.name,
+    ]);
   }
 
   const filtered = rows.filter(({ client, snapshot }) => {
@@ -151,14 +161,16 @@ export default async function ClientsPage({
                   seeMoney ? (
                     <>
                       <span className="min-w-0 flex-1">Client</span>
-                      <span className="hidden w-24 text-right sm:block">Projects</span>
+                      <span className="hidden w-48 sm:block">Projects</span>
+                      <span className="hidden w-24 text-right lg:block">Billed</span>
+                      <span className="hidden w-24 text-right lg:block">Collected</span>
                       <span className="hidden w-28 text-right sm:block">Due</span>
                       <span className="w-20 text-right sm:w-28">Next</span>
                     </>
                   ) : (
                     <>
                       <span className="min-w-0 flex-1">Client</span>
-                      <span className="hidden w-24 text-right sm:block">Projects</span>
+                      <span className="hidden w-48 sm:block">Projects</span>
                       <span className="w-20 text-right sm:w-28">Next</span>
                     </>
                   )
@@ -174,6 +186,10 @@ export default async function ClientsPage({
                 {visible.map(({ client, snapshot }) => {
                   const projects = projectCount.get(client.id) ?? 0;
                   const owing = seeMoney && snapshot.outstandingMinor > BigInt(0);
+                  const contact = contacts.get(client.id);
+                  const contactDetails = [contact?.name, contact?.email, contact?.phone]
+                    .filter(Boolean)
+                    .join(" · ");
                   return (
                     <DenseRow key={client.id}>
                       <DenseCell className="min-w-0 flex-1">
@@ -185,41 +201,61 @@ export default async function ClientsPage({
                           <div className="min-w-0">
                             <span className="flex flex-wrap items-center gap-2">
                               <span className="truncate text-sm font-medium">{client.name}</span>
+                              <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                                {client.kind === "person" ? "Person" : "Company"}
+                              </span>
+                              <span className="rounded-md bg-muted px-2 py-1 text-[11px] font-medium text-muted-foreground">
+                                {client.currency}
+                              </span>
                               {seeMoney ? (
-                                <StatusChip tone={owing ? "overdue" : "paid"}>
+                                <StatusChip tone={owing ? "due" : "paid"}>
                                   {owing ? "Owing" : "Settled"}
                                 </StatusChip>
                               ) : null}
                             </span>
-                            {seeMoney ? (
-                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {owing
-                                  ? `${moneyLabel(snapshot.outstandingMinor, client.currency)} open`
-                                  : "Nothing outstanding"}
-                              </p>
-                            ) : (
-                              <p className="mt-0.5 truncate text-xs text-muted-foreground capitalize">
-                                {client.kind}
-                              </p>
-                            )}
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                              {contactDetails || "No primary contact"}
+                            </p>
                           </div>
                         </Link>
                       </DenseCell>
                       <DenseCell
-                        align="right"
-                        width="hidden w-24 sm:block"
-                        className="text-sm text-muted-foreground"
+                        align="left"
+                        width="hidden w-48 sm:block"
+                        className="text-xs text-muted-foreground"
                       >
-                        {projects}
+                        <div className="space-y-1 text-left">
+                          {(clientProjects.get(client.id) ?? []).slice(0, 2).map((name) => (
+                            <p key={name} className="truncate">{name}</p>
+                          ))}
+                          {projects === 0 ? <p>No projects</p> : null}
+                          {projects > 2 ? <p>+{projects - 2} more</p> : null}
+                        </div>
                       </DenseCell>
                       {seeMoney ? (
-                        <DenseCell
-                          align="right"
-                          width="hidden w-28 sm:block"
-                          className="text-sm font-medium"
-                        >
-                          {moneyLabel(snapshot.outstandingMinor, client.currency)}
-                        </DenseCell>
+                        <>
+                          <DenseCell
+                            align="right"
+                            width="hidden w-24 lg:block"
+                            className="text-sm text-muted-foreground"
+                          >
+                            {moneyLabel(snapshot.billedMinor, client.currency)}
+                          </DenseCell>
+                          <DenseCell
+                            align="right"
+                            width="hidden w-24 lg:block"
+                            className="text-sm text-muted-foreground"
+                          >
+                            {moneyLabel(snapshot.collectedMinor, client.currency)}
+                          </DenseCell>
+                          <DenseCell
+                            align="right"
+                            width="hidden w-28 sm:block"
+                            className="text-sm font-medium"
+                          >
+                            {moneyLabel(snapshot.outstandingMinor, client.currency)}
+                          </DenseCell>
+                        </>
                       ) : null}
                       <DenseCell align="right" width="w-20 sm:w-28" className="text-xs">
                         <div className="flex flex-col items-end gap-1">
@@ -248,6 +284,10 @@ export default async function ClientsPage({
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {visible.map(({ client, snapshot }) => {
                     const projects = projectCount.get(client.id) ?? 0;
+                    const contact = contacts.get(client.id);
+                    const contactDetails = [contact?.name, contact?.email, contact?.phone]
+                      .filter(Boolean)
+                      .join(" · ");
                     const monthDue = seeMoney
                       ? dueThisMonthMinor(
                           (finance?.charges ?? []).filter((c) => c.clientId === client.id),
@@ -263,13 +303,30 @@ export default async function ClientsPage({
                               <p className="text-xs text-muted-foreground">
                                 {projects} project{projects === 1 ? "" : "s"}
                               </p>
+                              <p className="mt-1 truncate text-xs text-muted-foreground">
+                                {contactDetails || "No primary contact"}
+                              </p>
                             </div>
                           </Link>
+                          <p className="line-clamp-2 text-xs text-muted-foreground">
+                            {(clientProjects.get(client.id) ?? []).slice(0, 2).join(" · ") || "No projects yet"}
+                            {projects > 2 ? ` · +${projects - 2} more` : ""}
+                          </p>
                           {seeMoney ? (
                             <>
                               <MoneyMetaCards
                                 className="grid-cols-2"
                                 items={[
+                                  {
+                                    label: "Billed",
+                                    value: moneyLabel(snapshot.billedMinor, client.currency),
+                                    tone: "slate",
+                                  },
+                                  {
+                                    label: "Collected",
+                                    value: moneyLabel(snapshot.collectedMinor, client.currency),
+                                    tone: "emerald",
+                                  },
                                   {
                                     label: "Due",
                                     value: moneyLabel(snapshot.outstandingMinor, client.currency),

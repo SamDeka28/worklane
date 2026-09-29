@@ -3,15 +3,8 @@
 import Link from "next/link";
 import { FileImage, FileText, UploadCloud, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-  type DragEvent,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ActionSheet } from "@/components/studio/action-sheet";

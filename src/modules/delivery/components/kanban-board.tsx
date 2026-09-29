@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useOptimistic, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { createPortal } from "react-dom";
 import {
   DndContext,

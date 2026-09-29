@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import type { Editor } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/react";
 import {

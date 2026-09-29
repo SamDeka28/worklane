@@ -2,7 +2,8 @@
 
 import { MoreHorizontal, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";

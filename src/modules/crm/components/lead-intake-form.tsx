@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { CheckCircle2, Send } from "lucide-react";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";

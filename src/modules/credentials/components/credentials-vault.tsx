@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import {
   Check,
   Copy,

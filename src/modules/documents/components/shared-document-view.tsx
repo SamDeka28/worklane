@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/react";

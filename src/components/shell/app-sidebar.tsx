@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useOptimistic, useState, useTransition } from "react";
+import { useOptimistic, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import {
   ChevronsUpDown,
   Columns3,

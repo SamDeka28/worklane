@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import {
   AlarmClock,
   Ban,

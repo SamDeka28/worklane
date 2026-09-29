@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { useRouter } from "next/navigation";
 import type { JSONContent } from "@tiptap/react";
 import { Ban, Eye, FileCheck2, Link2, MailCheck, MailOpen, Paperclip, Send, UploadCloud } from "lucide-react";

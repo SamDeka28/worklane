@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Check, Copy, Eye, Link2, MailPlus, Trash2 } from "lucide-react";
 import { toast } from "sonner";

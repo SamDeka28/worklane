@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition, type FocusEvent, type ReactNode } from "react";
+import { useEffect, useState, type FocusEvent, type ReactNode } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ActivityPanel, ActivityToggle } from "@/modules/history/components/activity-view";

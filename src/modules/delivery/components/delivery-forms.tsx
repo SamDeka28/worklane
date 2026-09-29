@@ -2,7 +2,8 @@
 
 import { FolderPlus, MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";
@@ -11,6 +12,7 @@ import { DangerZone } from "@/components/studio/type-to-confirm";
 import { composerControlClassName } from "@/components/studio/chrome";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
+import type { ClientRecord } from "@/modules/clients/types";
 import {
   Dialog,
   DialogContent,
@@ -266,31 +268,72 @@ function HourlyRateField({ currency, defaultValue }: { currency: string; default
 export function EditProjectForm({
   orgSlug,
   project,
+  clients,
 }: {
   orgSlug: string;
   project: ProjectRecord;
+  clients: ClientRecord[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [billingMode, setBillingMode] = useState<string>(project.billingMode);
+  const [clientId, setClientId] = useState(project.clientId);
+  const [confirmTransferOpen, setConfirmTransferOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  function saveProject(confirmedTransfer = false) {
+    const form = formRef.current;
+    if (!form) return;
+    const formData = new FormData(form);
+    if (confirmedTransfer) formData.set("confirm_financial_transfer", "yes");
+    start(async () => {
+      const result = await updateProjectAction(orgSlug, project.id, formData);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      setConfirmTransferOpen(false);
+      toast.success("Saved");
+      router.refresh();
+    });
+  }
 
   return (
+    <>
     <form
+      ref={formRef}
       className="grid gap-4"
-      action={(formData) => {
-        start(async () => {
-          const result = await updateProjectAction(orgSlug, project.id, formData);
-          if (result.error) {
-            toast.error(result.error);
-            return;
-          }
-          toast.success("Saved");
-          router.refresh();
-        });
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (clientId !== project.clientId) {
+          setConfirmTransferOpen(true);
+          return;
+        }
+        saveProject();
       }}
     >
       <Field label="Name" htmlFor="name">
         <Input id="name" name="name" required defaultValue={project.name} />
+      </Field>
+      <Field label="Client" htmlFor="project_client_id">
+        <NativeSelect
+          id="project_client_id"
+          name="client_id"
+          value={clientId}
+          onChange={(event) => setClientId(event.target.value)}
+        >
+          {clients.some((client) => client.id === project.clientId)
+            ? null
+            : <option value={project.clientId}>{project.clientName} · current</option>}
+          {clients.map((client) => (
+            <option key={client.id} value={client.id} disabled={client.currency !== project.currency}>
+              {client.name}{client.currency !== project.currency ? ` · ${client.currency} unavailable` : ""}
+            </option>
+          ))}
+        </NativeSelect>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Client currency must match the project’s existing currency.
+        </p>
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Status" htmlFor="status">
@@ -371,18 +414,37 @@ export function EditProjectForm({
         {pending ? "Saving…" : "Save"}
       </Button>
     </form>
+    <Dialog open={confirmTransferOpen} onOpenChange={setConfirmTransferOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Transfer project finance records?</DialogTitle>
+          <DialogDescription>
+            The project and its charges, invoices, and linked payments will move from {project.clientName} to {clients.find((client) => client.id === clientId)?.name ?? "the selected client"}. This changes which client those historical records belong to; amounts and dates stay the same.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={() => setConfirmTransferOpen(false)} disabled={pending}>Cancel</Button>
+          <Button type="button" onClick={() => saveProject(true)} disabled={pending}>
+            {pending ? "Transferring…" : "Transfer and save"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
 
 export function ProjectSettingsSheet({
   orgSlug,
   project,
+  clients,
   open,
   onOpenChange,
   canDelete = false,
 }: {
   orgSlug: string;
   project: ProjectRecord;
+  clients: ClientRecord[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canDelete?: boolean;
@@ -394,7 +456,7 @@ export function ProjectSettingsSheet({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <EditProjectForm orgSlug={orgSlug} project={project} />
+      <EditProjectForm orgSlug={orgSlug} project={project} clients={clients} />
       {canDelete ? <ProjectDangerZone orgSlug={orgSlug} project={project} /> : null}
     </ActionSheet>
   );
@@ -1003,12 +1065,14 @@ export function TaskForm({
 export function ProjectOverflow({
   orgSlug,
   project,
+  clients,
   canDelete = false,
   settingsOpenInitially = false,
   returnHref,
 }: {
   orgSlug: string;
   project: ProjectRecord;
+  clients: ClientRecord[];
   canDelete?: boolean;
   /** Opened from a `?settings=1` link; closing drops the param. */
   settingsOpenInitially?: boolean;
@@ -1025,6 +1089,7 @@ export function ProjectOverflow({
     <ProjectSettingsSheet
       orgSlug={orgSlug}
       project={project}
+      clients={clients}
       canDelete={canDelete}
       open={settingsOpen}
       onOpenChange={(next) => {

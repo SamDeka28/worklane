@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useSyncExternalStore, useTransition } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { Square, Timer } from "lucide-react";
 import { toast } from "sonner";
 import { Field } from "@/components/studio/field";

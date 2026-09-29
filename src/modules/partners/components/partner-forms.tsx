@@ -2,7 +2,8 @@
 
 import { Lock, LockOpen, Pencil, Percent, UserPlus, Wallet } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";

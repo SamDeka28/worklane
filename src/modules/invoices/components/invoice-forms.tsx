@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useOptimistic, useState, useTransition } from "react";
+import { useEffect, useOptimistic, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import {
   Check,
   Download,

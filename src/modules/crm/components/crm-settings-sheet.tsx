@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useSyncExternalStore, useTransition, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import {
   AtSign,
   Copy,

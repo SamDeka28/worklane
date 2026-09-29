@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { useRouter } from "next/navigation";
 import { CalendarClock, Check, Pencil, X } from "lucide-react";
 import { toast } from "sonner";

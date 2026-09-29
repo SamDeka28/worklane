@@ -1,14 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useOptimistic,
-  useRef,
-  useTransition,
-} from "react";
+import { createContext, useContext, useEffect, useOptimistic, useRef } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 

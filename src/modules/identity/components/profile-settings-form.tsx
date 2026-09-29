@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useRef, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Camera } from "lucide-react";

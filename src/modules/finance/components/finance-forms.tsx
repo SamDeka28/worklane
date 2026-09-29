@@ -2,7 +2,8 @@
 
 import { HandCoins } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { toast } from "sonner";
 import { ActionSheet } from "@/components/studio/action-sheet";
 import { Composer, ComposerBar } from "@/components/studio/composer";

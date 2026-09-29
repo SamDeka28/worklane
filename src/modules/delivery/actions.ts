@@ -406,6 +406,7 @@ export async function updateProjectAction(
   if (!project) return { error: "Project not found" };
 
   const name = String(formData.get("name") ?? "").trim();
+  const clientId = String(formData.get("client_id") ?? project.client_id).trim();
   const status = parseEnum(String(formData.get("status") ?? "active"), PROJECT_STATUSES, "active");
   const billingMode = parseEnum(
     String(formData.get("billing_mode") ?? project.billing_mode),
@@ -432,8 +433,86 @@ export async function updateProjectAction(
     return { error: "Fee must be between 0 and 10000 bps" };
   }
 
-  const currency = await loadClientCurrency(ctx, project.client_id);
+  const [currentCurrency, currency] = await Promise.all([
+    loadClientCurrency(ctx, project.client_id),
+    loadClientCurrency(ctx, clientId),
+  ]);
   if (!currency) return { error: "Client not found" };
+  if (!currentCurrency || currency !== currentCurrency) {
+    return { error: "Choose a client with the same currency as this project" };
+  }
+
+  const changingClient = clientId !== project.client_id;
+  let projectChargeIds: string[] = [];
+  let invoiceIds: string[] = [];
+  let paymentIds: string[] = [];
+  if (changingClient) {
+    const { data: charges, error: chargesError } = await ctx.supabase
+      .from("charges")
+      .select("id")
+      .eq("organization_id", ctx.org.id)
+      .eq("project_id", projectId);
+    if (chargesError) return { error: chargesError.message };
+    projectChargeIds = (charges ?? []).map((row) => row.id as string);
+
+    const [projectInvoices, invoiceLines, allocations] = await Promise.all([
+      ctx.supabase
+        .from("invoices")
+        .select("id")
+        .eq("organization_id", ctx.org.id)
+        .eq("project_id", projectId),
+      projectChargeIds.length > 0
+        ? ctx.supabase
+            .from("invoice_lines")
+            .select("id, invoice_id, charge_id")
+            .eq("organization_id", ctx.org.id)
+            .in("charge_id", projectChargeIds)
+        : Promise.resolve({ data: [], error: null }),
+      projectChargeIds.length > 0
+        ? ctx.supabase
+            .from("payment_allocations")
+            .select("id, payment_id, charge_id")
+            .eq("organization_id", ctx.org.id)
+            .in("charge_id", projectChargeIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+    if (projectInvoices.error) return { error: projectInvoices.error.message };
+    if (invoiceLines.error) return { error: invoiceLines.error.message };
+    if (allocations.error) return { error: allocations.error.message };
+    invoiceIds = [...new Set([
+      ...(projectInvoices.data ?? []).map((row) => row.id as string),
+      ...(invoiceLines.data ?? []).map((row) => row.invoice_id as string),
+    ])];
+    paymentIds = [...new Set((allocations.data ?? []).map((row) => row.payment_id as string))];
+
+    // Invoices/payments can be shared across charges. Only transfer those whose linked
+    // charges all belong to this project, so the ledger never spans two client records.
+    if (invoiceIds.length > 0) {
+      const { data: allInvoiceLines, error: allInvoiceLinesError } = await ctx.supabase
+        .from("invoice_lines")
+        .select("charge_id")
+        .eq("organization_id", ctx.org.id)
+        .in("invoice_id", invoiceIds);
+      if (allInvoiceLinesError) return { error: allInvoiceLinesError.message };
+      if ((allInvoiceLines ?? []).some((line) => line.charge_id && !projectChargeIds.includes(line.charge_id))) {
+        return { error: "An invoice includes charges from another project. Split that invoice before transferring this project to a different client." };
+      }
+    }
+    if (paymentIds.length > 0) {
+      const { data: allAllocations, error: allAllocationsError } = await ctx.supabase
+        .from("payment_allocations")
+        .select("charge_id")
+        .eq("organization_id", ctx.org.id)
+        .in("payment_id", paymentIds);
+      if (allAllocationsError) return { error: allAllocationsError.message };
+      if ((allAllocations ?? []).some((allocation) => !projectChargeIds.includes(allocation.charge_id))) {
+        return { error: "A payment is allocated to charges from another project. Reallocate or split that payment before transferring this project." };
+      }
+    }
+    if (String(formData.get("confirm_financial_transfer") ?? "") !== "yes") {
+      return { error: "Confirm the transfer of this project’s finance records to change its client." };
+    }
+  }
 
   let contractedAmountMinor: string | null = null;
   const contractedRaw = String(formData.get("contracted_amount") ?? "").trim();
@@ -447,10 +526,50 @@ export async function updateProjectAction(
   const rate = parseHourlyRate(formData, currency);
   if ("error" in rate) return { error: rate.error };
 
+  const changedInvoiceIds: string[] = [];
+  const changedPaymentIds: string[] = [];
+  if (changingClient && invoiceIds.length > 0) {
+    const { error: invoiceClientError } = await ctx.supabase
+      .from("invoices")
+      .update({ client_id: clientId })
+      .eq("organization_id", ctx.org.id)
+      .in("id", invoiceIds);
+    if (invoiceClientError) return { error: invoiceClientError.message };
+    changedInvoiceIds.push(...invoiceIds);
+  }
+  if (changingClient && paymentIds.length > 0) {
+    const { error: paymentClientError } = await ctx.supabase
+      .from("payments")
+      .update({ client_id: clientId })
+      .eq("organization_id", ctx.org.id)
+      .in("id", paymentIds);
+    if (paymentClientError) {
+      if (changedInvoiceIds.length > 0) {
+        await ctx.supabase.from("invoices").update({ client_id: project.client_id }).eq("organization_id", ctx.org.id).in("id", changedInvoiceIds);
+      }
+      return { error: paymentClientError.message };
+    }
+    changedPaymentIds.push(...paymentIds);
+  }
+
+  if (changingClient && projectChargeIds.length > 0) {
+    const { error: chargeClientError } = await ctx.supabase
+      .from("charges")
+      .update({ client_id: clientId })
+      .eq("organization_id", ctx.org.id)
+      .eq("project_id", projectId);
+    if (chargeClientError) {
+      if (changedPaymentIds.length > 0) await ctx.supabase.from("payments").update({ client_id: project.client_id }).eq("organization_id", ctx.org.id).in("id", changedPaymentIds);
+      if (changedInvoiceIds.length > 0) await ctx.supabase.from("invoices").update({ client_id: project.client_id }).eq("organization_id", ctx.org.id).in("id", changedInvoiceIds);
+      return { error: chargeClientError.message };
+    }
+  }
+
   const { error } = await ctx.supabase
     .from("projects")
     .update({
       name,
+      client_id: clientId,
       status,
       billing_mode: billingMode,
       default_fee_bps: feeBps,
@@ -465,11 +584,23 @@ export async function updateProjectAction(
     .eq("id", projectId)
     .eq("organization_id", ctx.org.id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    if (changingClient && projectChargeIds.length > 0) {
+      await ctx.supabase
+        .from("charges")
+        .update({ client_id: project.client_id })
+        .eq("organization_id", ctx.org.id)
+        .eq("project_id", projectId);
+    }
+    if (changedPaymentIds.length > 0) await ctx.supabase.from("payments").update({ client_id: project.client_id }).eq("organization_id", ctx.org.id).in("id", changedPaymentIds);
+    if (changedInvoiceIds.length > 0) await ctx.supabase.from("invoices").update({ client_id: project.client_id }).eq("organization_id", ctx.org.id).in("id", changedInvoiceIds);
+    return { error: error.message };
+  }
 
   await recordActivity(ctx, "updated", "project", projectId, { name });
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
   revalidatePath(`/${orgSlug}/projects`);
+  if (changingClient) revalidatePath(`/${orgSlug}/finance`);
   return { ok: true as const };
 }
 

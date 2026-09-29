@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import type { JSONContent } from "@tiptap/react";
 import { MessageSquare, Paperclip, SendHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";

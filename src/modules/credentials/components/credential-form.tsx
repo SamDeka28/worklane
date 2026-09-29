@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { Eye, EyeOff, Lock, Plus, RefreshCw, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { ActionSheet } from "@/components/studio/action-sheet";

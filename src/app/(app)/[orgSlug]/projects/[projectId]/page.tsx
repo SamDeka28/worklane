@@ -17,6 +17,8 @@ import {
 } from "@/components/studio/chrome";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
+import { listClients } from "@/modules/clients/queries";
+import type { ClientRecord } from "@/modules/clients/types";
 import { BILLING_MODE_LABEL, isOpenBoardColumn, projectMoneyStats } from "@/modules/delivery/board";
 import {
   MilestoneForm,
@@ -27,6 +29,7 @@ import {
 import { KanbanBoard } from "@/modules/delivery/components/kanban-board";
 import { MilestoneStudioList } from "@/modules/delivery/components/milestone-studio";
 import { ProjectDocumentsHub } from "@/modules/delivery/components/project-docs";
+import { MonthlyTimesheetExport } from "@/modules/delivery/components/monthly-timesheet-export";
 import { ProjectOverviewRail } from "@/modules/delivery/components/project-overview-rail";
 import { LogTimeRange, TaskClocks } from "@/modules/delivery/components/task-time";
 import { allowsContractedProjectCharge, formatHoursMillis } from "@/modules/delivery/ledger";
@@ -271,6 +274,7 @@ export default async function ProjectDetailPage({
   ]);
   const project = await projectPromise;
   if (!project) notFound();
+  const settingsClients = ctx.canWrite ? await listClients(orgSlug) : [];
   const isHourly = project.billingMode === "hourly";
   const panel =
     query.panel === "log" ? "log" : query.panel === "board" ? "board" : isHourly ? "log" : "board";
@@ -559,6 +563,7 @@ export default async function ProjectDetailPage({
               <ProjectOverflow
                 orgSlug={orgSlug}
                 project={project}
+                clients={settingsClients}
                 canDelete={canDeleteModule(ctx, "delivery")}
                 settingsOpenInitially={query.settings === "1"}
                 returnHref={tabHref(tab)}
@@ -857,16 +862,33 @@ export default async function ProjectDetailPage({
             id="work"
             title="Work"
             action={
-              <FilterChips className="px-0 py-0">
-                {isHourly ? (
-                  <FilterChip href={tabHref("work", "panel=log")} active={panel === "log"}>
-                    Log
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <FilterChips className="px-0 py-0">
+                  {isHourly ? (
+                    <FilterChip href={tabHref("work", "panel=log")} active={panel === "log"}>
+                      Log
+                    </FilterChip>
+                  ) : null}
+                  <FilterChip href={tabHref("work", "panel=board")} active={panel === "board"}>
+                    Board · {openTasks}
                   </FilterChip>
-                ) : null}
-                <FilterChip href={tabHref("work", "panel=board")} active={panel === "board"}>
-                  Board · {openTasks}
-                </FilterChip>
-              </FilterChips>
+                </FilterChips>
+                <MonthlyTimesheetExport
+                  orgSlug={orgSlug}
+                  projectId={project.id}
+                  projectName={project.name}
+                  clientName={project.clientName}
+                  currency={project.currency}
+                  entries={logs.map((log) => ({
+                    workedOn: log.workedOn,
+                    task: log.taskId ? tasks.find((task) => task.id === log.taskId)?.title ?? "" : "",
+                    description: log.description ?? "",
+                    hoursMillis: log.hoursMillis,
+                    hourlyRateMinor: log.hourlyRateMinor?.toString() ?? null,
+                    fixedMinor: log.fixedMinor?.toString() ?? null,
+                  }))}
+                />
+              </div>
             }
           >
             {panel === "board" ? (

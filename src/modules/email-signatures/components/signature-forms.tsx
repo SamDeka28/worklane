@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import { PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { ActionSheet } from "@/components/studio/action-sheet";
