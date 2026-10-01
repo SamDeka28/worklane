@@ -196,6 +196,11 @@ export default async function ClientProfilePage({
               status: doc.status,
               projectId: doc.projectId,
             }))}
+            deductions={ctx.deductions}
+            currencyLocked={
+              finance.charges.length > 0 ||
+              ("payments" in finance && finance.payments.length > 0)
+            }
           />
         }
       />

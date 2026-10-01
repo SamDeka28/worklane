@@ -115,7 +115,7 @@ export default async function DocumentDetailPage({
             refs={refs}
             clientName={clientName}
             projectName={project?.name ?? null}
-            currency={currency === "INR" ? "INR" : "USD"}
+            currency={currency}
             signatures={signatures}
             sends={sends}
             feedback={feedback}

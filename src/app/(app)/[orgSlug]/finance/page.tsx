@@ -731,6 +731,7 @@ export default async function FinancePage({
                 clients={clientOptions}
                 defaultClientId={selectedId}
                 defaultOpen={query.new === "charge"}
+                deductions={ctx.deductions}
                 returnHref={returnHref}
                 triggerLabel="Add charge"
                 triggerVariant="default"

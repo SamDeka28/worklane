@@ -57,7 +57,7 @@ export function StudioDrawer({
           "fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-50 flex max-h-[85dvh] flex-col overflow-hidden rounded-[1.75rem] bg-card shadow-lift ring-1 ring-border/60",
           "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
           open ? "translate-y-0" : "translate-y-[calc(100%-3.5rem)]",
-          "lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:translate-y-0 lg:overflow-visible lg:rounded-none lg:bg-transparent lg:shadow-none lg:ring-0 lg:transition-none",
+          "lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:min-w-0 lg:translate-y-0 lg:overflow-hidden lg:rounded-none lg:bg-transparent lg:shadow-none lg:ring-0 lg:transition-none",
           className,
         )}
       >
@@ -83,7 +83,7 @@ export function StudioDrawer({
         </button>
         <div
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto overscroll-contain border-t border-border/40 lg:border-t-0",
+            "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain border-t border-border/40 lg:border-t-0",
             bodyClassName,
           )}
         >

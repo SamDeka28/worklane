@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { cn } from "@/lib/utils";
 import { createChargeAction, recordPaymentAction } from "@/modules/finance/actions";
+import { DeductionField } from "@/modules/delivery/components/deduction-field";
+import type { DeductionOption } from "@/modules/delivery/deductions";
 import type { CollectTarget } from "@/modules/finance/presentation";
 import { formatMoney, netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
@@ -25,6 +27,7 @@ export function CreateChargeDialog({
   defaultClientId,
   defaultGross,
   defaultFeeBps = "500",
+  deductions = [],
   defaultMemo,
   defaultOpen = false,
   hideTrigger = false,
@@ -39,6 +42,7 @@ export function CreateChargeDialog({
   defaultClientId?: string;
   defaultGross?: string;
   defaultFeeBps?: string;
+  deductions?: DeductionOption[];
   defaultMemo?: string;
   defaultOpen?: boolean;
   hideTrigger?: boolean;
@@ -148,19 +152,15 @@ export function CreateChargeDialog({
             onChange={(event) => setGross(event.target.value)}
           />
         </Field>
-        <Field label="Platform fee" htmlFor="fee_bps" hint={netLabel ? `Net ${netLabel}` : undefined}>
-          <NativeSelect
-            id="fee_bps"
-            name="fee_bps"
-            value={feeBps}
-            onChange={(event) => setFeeBps(event.target.value)}
-          >
-            <option value="0">None (0%)</option>
-            <option value="400">4%</option>
-            <option value="500">5% Upwork</option>
-            <option value="1300">13%</option>
-          </NativeSelect>
-        </Field>
+        <DeductionField
+          orgSlug={orgSlug}
+          inputName="fee_bps"
+          id="fee_bps"
+          defaultBps={Number(defaultFeeBps) || 0}
+          deductions={deductions}
+          hint={netLabel ? `Net ${netLabel}` : undefined}
+          onBpsChange={(bps) => setFeeBps(String(bps))}
+        />
         <div className="grid grid-cols-2 gap-4">
           <Field label="Charged on" htmlFor="charged_on">
             <Input

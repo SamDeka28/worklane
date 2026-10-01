@@ -23,6 +23,7 @@ import { ProjectListPanel } from "@/modules/delivery/components/project-list";
 import { ProjectStatusBoard } from "@/modules/delivery/components/project-status-board";
 import { ProjectToolbar } from "@/modules/delivery/components/project-toolbar";
 import { projectNextStep } from "@/modules/delivery/next-step";
+import { projectTracksTime } from "@/modules/delivery/ledger";
 import { listProjectBoard } from "@/modules/delivery/queries";
 import type { ProjectStatus } from "@/modules/delivery/types";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
@@ -105,11 +106,12 @@ export default async function ProjectsPage({
       unbilledMilestones: row.unbilledMilestones,
       outstandingMinor: seeMoney ? money.outstandingMinor : BigInt(0),
       milestoneCount: row.milestoneCount,
+      retainerBasis: row.project.retainerBasis,
     });
     const nextHref =
       next.tab === "work"
         ? `/${orgSlug}/projects/${row.project.id}?tab=work&panel=${
-            row.project.billingMode === "hourly" ? "log" : "board"
+            projectTracksTime(row.project.billingMode, row.project.retainerBasis) ? "log" : "board"
           }`
         : next.tab === "milestones"
           ? `/${orgSlug}/projects/${row.project.id}?tab=milestones`
@@ -149,6 +151,7 @@ export default async function ProjectsPage({
             <CreateProjectDialog
               orgSlug={orgSlug}
               clients={clientOptions}
+              deductions={ctx.deductions}
               defaultOpen={query.new === "1"}
             />
           ) : null

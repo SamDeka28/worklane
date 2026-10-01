@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
 import { billToFromForm } from "@/modules/invoices/types";
+import { asIsoCurrency } from "@/shared/money";
 import { notifyOwners } from "@/modules/notifications/service";
 
 async function recordActivity(
@@ -37,7 +38,9 @@ export async function createClientAction(orgSlug: string, formData: FormData) {
       return { error: "Invalid notes document" };
     }
   }
-  const currency = String(formData.get("currency") ?? ctx.org.defaultCurrency);
+  const currency = String(formData.get("currency") ?? ctx.org.defaultCurrency)
+    .trim()
+    .toUpperCase();
   const contactName = String(formData.get("contact_name") ?? "").trim() || null;
   const email = String(formData.get("email") ?? "").trim() || null;
   const phone = String(formData.get("phone") ?? "").trim() || null;
@@ -46,8 +49,8 @@ export async function createClientAction(orgSlug: string, formData: FormData) {
   if (!name) {
     return { error: "Client name is required" };
   }
-  if (currency !== "USD" && currency !== "INR") {
-    return { error: "Currency must be USD or INR" };
+  if (asIsoCurrency(currency) !== currency) {
+    return { error: "Pick a supported currency" };
   }
 
   const { data: client, error } = await ctx.supabase
@@ -118,9 +121,36 @@ export async function updateClientAction(orgSlug: string, clientId: string, form
     return { error: "Client name is required" };
   }
 
+  const { data: existing, error: existingError } = await ctx.supabase
+    .from("clients")
+    .select("currency")
+    .eq("id", clientId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (existingError) return { error: existingError.message };
+  if (!existing) return { error: "Client not found" };
+
+  const currentCurrency = asIsoCurrency(existing.currency);
+  const requested = String(formData.get("currency") ?? "").trim().toUpperCase();
+  const currency = requested || currentCurrency;
+  if (asIsoCurrency(currency) !== currency) {
+    return { error: "Pick a supported currency" };
+  }
+  if (currency !== currentCurrency) {
+    const locked = await clientHasMoney(ctx, clientId);
+    if (locked === "error") {
+      return { error: "Couldn't check this client's charges. Try again." };
+    }
+    if (locked) {
+      return {
+        error: "Currency is locked once this client has a charge, invoice, or payment.",
+      };
+    }
+  }
+
   const { error } = await ctx.supabase
     .from("clients")
-    .update({ name, notes, notes_doc: notesDoc, kind })
+    .update({ name, notes, notes_doc: notesDoc, kind, currency })
     .eq("id", clientId)
     .eq("organization_id", ctx.org.id);
 
@@ -130,7 +160,26 @@ export async function updateClientAction(orgSlug: string, clientId: string, form
 
   await recordActivity(ctx, "updated", "client", clientId, { name });
   revalidatePath(`/${orgSlug}/clients/${clientId}`);
+  revalidatePath(`/${orgSlug}/projects`);
   return { ok: true as const };
+}
+
+async function clientHasMoney(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  clientId: string,
+) {
+  const tables = ["charges", "invoices", "payments"] as const;
+  const counts = await Promise.all(
+    tables.map((table) =>
+      ctx.supabase
+        .from(table)
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", ctx.org.id)
+        .eq("client_id", clientId),
+    ),
+  );
+  if (counts.some((result) => result.error)) return "error" as const;
+  return counts.some((result) => (result.count ?? 0) > 0);
 }
 
 export async function updateClientBillingAction(

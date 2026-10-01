@@ -1,3 +1,5 @@
+import type { IsoCurrency } from "@/shared/money";
+
 export type ClientKind = "company" | "person";
 
 export type ClientRecord = {
@@ -7,7 +9,7 @@ export type ClientRecord = {
   name: string;
   notes: string | null;
   notesDoc?: Record<string, unknown> | null;
-  currency: "USD" | "INR";
+  currency: IsoCurrency;
   archivedAt: string | null;
   createdAt: string;
 };

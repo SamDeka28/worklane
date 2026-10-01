@@ -23,6 +23,7 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/modules/delivery/types";
+import { parseCustomDeductions, parseDeductionBps } from "@/modules/delivery/deductions";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
 import { notifyMentions } from "@/modules/mentions/notify";
@@ -30,8 +31,7 @@ import { notify, notifyOwners, userLabel } from "@/modules/notifications/service
 import {
   allocatePartnersForCharge,
 } from "@/modules/partners/allocate";
-import { netFromGross, parseMajorToMinor } from "@/shared/money";
-import type { IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, netFromGross, parseMajorToMinor, grossFromHours, type IsoCurrency } from "@/shared/money";
 
 async function recordActivity(
   ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
@@ -51,7 +51,7 @@ async function recordActivity(
 }
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
-  return value === "INR" || value === "USD" ? value : fallback;
+  return asIsoCurrency(value, fallback);
 }
 
 function parseEnum<T extends string>(
@@ -135,6 +135,7 @@ const BILLING_MODE_LABEL: Record<BillingMode, string> = {
   milestones: "Milestones",
   hourly: "Hourly",
   manual: "Manual billing",
+  monthly: "Monthly",
 };
 
 function listNames(names: string[]) {
@@ -204,8 +205,12 @@ export async function createProjectAction(orgSlug: string, formData: FormData) {
     BILLING_MODES,
     "hourly",
   );
-  const feeBps = Number(formData.get("default_fee_bps") ?? 500);
+  const parsedFee = parseDeductionBps(formData.get("default_fee_bps") ?? "500");
+  if (typeof parsedFee !== "number") return parsedFee;
+  const feeBps = parsedFee;
   const earnOn = String(formData.get("earn_on") ?? "charge") === "receipt" ? "receipt" : "charge";
+  const retainerBasis =
+    billingMode === "monthly" ? (formData.get("retainer_basis") === "hourly" ? "hourly" : "fixed") : null;
   const scope = String(formData.get("scope") ?? "").trim() || null;
   let scopeDoc: unknown = null;
   const scopeDocRaw = String(formData.get("scope_doc") ?? "").trim();
@@ -253,6 +258,7 @@ export async function createProjectAction(orgSlug: string, formData: FormData) {
     billing_mode: billingMode,
     default_fee_bps: feeBps,
     earn_on: earnOn,
+    retainer_basis: retainerBasis,
     contracted_amount_minor: contractedAmountMinor,
     ...(rate.minor != null ? { hourly_rate_minor: rate.minor } : {}),
     scope,
@@ -413,8 +419,14 @@ export async function updateProjectAction(
     BILLING_MODES,
     "hourly",
   );
-  const feeBps = Number(formData.get("default_fee_bps") ?? project.default_fee_bps);
+  const parsedFee = parseDeductionBps(
+    formData.get("default_fee_bps") ?? String(project.default_fee_bps),
+  );
+  if (typeof parsedFee !== "number") return parsedFee;
+  const feeBps = parsedFee;
   const earnOn = String(formData.get("earn_on") ?? project.earn_on) === "receipt" ? "receipt" : "charge";
+  const retainerBasis =
+    billingMode === "monthly" ? (formData.get("retainer_basis") === "hourly" ? "hourly" : "fixed") : null;
   const scope = String(formData.get("scope") ?? "").trim() || null;
   let scopeDoc: unknown = null;
   const scopeDocRaw = String(formData.get("scope_doc") ?? "").trim();
@@ -574,6 +586,7 @@ export async function updateProjectAction(
       billing_mode: billingMode,
       default_fee_bps: feeBps,
       earn_on: earnOn,
+      retainer_basis: retainerBasis,
       contracted_amount_minor: contractedAmountMinor,
       ...(formData.has("hourly_rate") ? { hourly_rate_minor: rate.minor } : {}),
       scope,
@@ -1475,48 +1488,147 @@ export async function billMilestoneAction(
   };
 }
 
+export async function addProjectDeductionAction(orgSlug: string, name: string, percent: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const label = name.trim().slice(0, 40);
+  const pct = Number(String(percent).trim().replace(",", "."));
+  if (!label) return { error: "Name the deduction" };
+  if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+    return { error: "Percent must be between 0 and 100" };
+  }
+  const bps = Math.round(pct * 100);
+
+  const { data: orgRow, error: loadError } = await ctx.supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", ctx.org.id)
+    .single();
+  if (loadError) return { error: loadError.message };
+
+  const existing =
+    orgRow?.settings && typeof orgRow.settings === "object"
+      ? (orgRow.settings as Record<string, unknown>)
+      : {};
+  const current = parseCustomDeductions(existing);
+  if (current.some((option) => option.name.toLowerCase() === label.toLowerCase())) {
+    return { error: "A deduction with that name already exists" };
+  }
+  const deduction = { id: crypto.randomUUID(), name: label, bps };
+  const { error } = await ctx.supabase
+    .from("organizations")
+    .update({ settings: { ...existing, deductions: [...current, deduction] } })
+    .eq("id", ctx.org.id);
+  if (error) return { error: error.message };
+  revalidatePath(`/${orgSlug}`);
+  return { ok: true as const, deduction };
+}
+
 export async function postContractedChargeAction(orgSlug: string, projectId: string) {
   const ctx = await requireWritableOrg(orgSlug);
   const { data: project } = await ctx.supabase
     .from("projects")
-    .select("id, client_id, name, billing_mode, default_fee_bps, earn_on, contracted_amount_minor")
+    .select("id, client_id, name, billing_mode, default_fee_bps, earn_on, contracted_amount_minor, retainer_basis, hourly_rate_minor")
     .eq("id", projectId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
 
   if (!project) return { error: "Project not found" };
 
+  const mode = project.billing_mode as BillingMode;
   try {
-    guardContractedCharge(project.billing_mode as BillingMode);
+    guardContractedCharge(mode);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Cannot post this charge" };
   }
 
-  if (!allowsContractedProjectCharge(project.billing_mode as BillingMode)) {
+  if (!allowsContractedProjectCharge(mode)) {
     return { error: "This billing mode does not post a contracted project charge" };
   }
-  if (project.contracted_amount_minor == null) {
-    return { error: "Set a contracted amount on the project first" };
+  const hourlyRetainer = mode === "monthly" && project.retainer_basis === "hourly";
+  if (!hourlyRetainer && project.contracted_amount_minor == null) {
+    return {
+      error:
+        mode === "monthly"
+          ? "Set the monthly amount on the project first"
+          : "Set a contracted amount on the project first",
+    };
   }
 
-  const { data: existing } = await ctx.supabase
-    .from("charges")
-    .select("id")
-    .eq("organization_id", ctx.org.id)
-    .eq("project_id", projectId)
-    .eq("source", "manual")
-    .eq("status", "open")
-    .limit(1);
+  if (mode === "monthly") {
+    const monthStart = new Date().toISOString().slice(0, 7) + "-01";
+    const { data: thisMonth } = await ctx.supabase
+      .from("charges")
+      .select("id")
+      .eq("organization_id", ctx.org.id)
+      .eq("project_id", projectId)
+      .eq("source", "manual")
+      .neq("status", "void")
+      .gte("charged_on", monthStart)
+      .limit(1);
+    if (thisMonth && thisMonth.length > 0) {
+      return { error: "This month is already charged" };
+    }
+  } else {
+    const { data: existing } = await ctx.supabase
+      .from("charges")
+      .select("id")
+      .eq("organization_id", ctx.org.id)
+      .eq("project_id", projectId)
+      .eq("source", "manual")
+      .eq("status", "open")
+      .limit(1);
 
-  if (existing && existing.length > 0) {
-    return { error: "A contracted charge already exists for this project" };
+    if (existing && existing.length > 0) {
+      return { error: "A contracted charge already exists for this project" };
+    }
   }
 
   const currency = await loadClientCurrency(ctx, project.client_id);
   if (!currency) return { error: "Client not found" };
 
-  const grossMinor = BigInt(project.contracted_amount_minor);
-  if (grossMinor <= BigInt(0)) return { error: "Contracted amount must be greater than zero" };
+  let grossMinor: bigint;
+  let monthLogIds: string[] = [];
+  if (hourlyRetainer) {
+    if (project.hourly_rate_minor == null) {
+      return { error: "Set a rate per hour on the project first" };
+    }
+    const monthStart = new Date().toISOString().slice(0, 7) + "-01";
+    const start = new Date(`${monthStart}T00:00:00.000Z`);
+    const monthEnd = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1))
+      .toISOString()
+      .slice(0, 10);
+    const { data: logs, error: logsError } = await ctx.supabase
+      .from("work_logs")
+      .select("id, hours_millis, hourly_rate_minor, fixed_minor")
+      .eq("organization_id", ctx.org.id)
+      .eq("project_id", projectId)
+      .is("charge_id", null)
+      .gte("worked_on", monthStart)
+      .lt("worked_on", monthEnd);
+    if (logsError) return { error: logsError.message };
+    if (!logs || logs.length === 0) {
+      return { error: "Log this month's hours before posting the charge" };
+    }
+    const projectRate = BigInt(project.hourly_rate_minor);
+    grossMinor = BigInt(0);
+    for (const log of logs) {
+      const fixed = log.fixed_minor == null ? null : BigInt(log.fixed_minor);
+      if (fixed != null && fixed > BigInt(0)) {
+        grossMinor += fixed;
+        continue;
+      }
+      const rate = log.hourly_rate_minor == null ? projectRate : BigInt(log.hourly_rate_minor);
+      const hours = Number(log.hours_millis ?? 0) / 1000;
+      if (hours > 0 && rate > BigInt(0)) grossMinor += grossFromHours(hours, rate);
+    }
+    if (grossMinor <= BigInt(0)) {
+      return { error: "This month's logs don't add up to an amount yet" };
+    }
+    monthLogIds = logs.map((log) => log.id as string);
+  } else {
+    grossMinor = BigInt(project.contracted_amount_minor);
+    if (grossMinor <= BigInt(0)) return { error: "Contracted amount must be greater than zero" };
+  }
   const netMinor = netFromGross(grossMinor, project.default_fee_bps);
 
   const { data: charge, error } = await ctx.supabase
@@ -1532,7 +1644,11 @@ export async function postContractedChargeAction(orgSlug: string, projectId: str
       charged_on: new Date().toISOString().slice(0, 10),
       source: "manual",
       status: "open",
-      memo: `Contracted · ${project.name}`,
+      memo: hourlyRetainer
+        ? `Hourly retainer · ${project.name} · ${new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
+        : mode === "monthly"
+          ? `Monthly · ${project.name} · ${new Date().toLocaleDateString("en-US", { month: "short", year: "numeric" })}`
+          : `Contracted · ${project.name}`,
       created_by: ctx.userId,
     })
     .select("id")
@@ -1540,6 +1656,15 @@ export async function postContractedChargeAction(orgSlug: string, projectId: str
 
   if (error || !charge) {
     return { error: error?.message ?? "Could not post contracted charge" };
+  }
+
+  if (monthLogIds.length > 0) {
+    const { error: linkError } = await ctx.supabase
+      .from("work_logs")
+      .update({ charge_id: charge.id })
+      .eq("organization_id", ctx.org.id)
+      .in("id", monthLogIds);
+    if (linkError) return { error: linkError.message };
   }
 
   try {
@@ -1922,11 +2047,14 @@ async function applyTaskClock(
   if (!entering && !leaving) return {};
   const { data: project } = await ctx.supabase
     .from("projects")
-    .select("billing_mode")
+    .select("billing_mode, retainer_basis")
     .eq("id", task.project_id)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
-  if (project?.billing_mode !== "hourly") return {};
+  const tracksTime =
+    project?.billing_mode === "hourly" ||
+    (project?.billing_mode === "monthly" && project.retainer_basis === "hourly");
+  if (!tracksTime) return {};
 
   const now = new Date().toISOString();
   if (entering && !task.time_started_at) {

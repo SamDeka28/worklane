@@ -1,7 +1,7 @@
 import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
 import { hashShareToken } from "@/modules/portal/token";
 import { isShareScope, type ShareGrantRecord, type ShareScope } from "@/modules/portal/types";
-import type { IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, type IsoCurrency } from "@/shared/money";
 
 export type PortalInvoice = {
   id: string;
@@ -53,7 +53,7 @@ export type PortalView = {
 };
 
 function asCurrency(value: string): IsoCurrency {
-  return value === "INR" ? "INR" : "USD";
+  return asIsoCurrency(value);
 }
 
 function mapGrant(row: {

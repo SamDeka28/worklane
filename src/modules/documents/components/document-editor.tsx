@@ -61,6 +61,7 @@ import {
   resolveDocumentForPreview,
   type PreviewCatalog,
 } from "@/modules/documents/resolve-preview";
+import type { IsoCurrency } from "@/shared/money";
 import { SIGNATURE_FONT, SignatureBlocks } from "@/modules/documents/components/signature-blocks";
 import { TemplateGallery } from "@/modules/documents/components/template-gallery";
 import {
@@ -150,7 +151,7 @@ export function DocumentEditor({
   refs: DocumentRefRow[];
   clientName?: string | null;
   projectName?: string | null;
-  currency?: "USD" | "INR";
+  currency?: IsoCurrency;
   signatures?: Pick<
     DocumentSignature,
     "id" | "signerName" | "signerEmail" | "signedAt" | "method" | "signatureText" | "contentHash"
@@ -418,6 +419,7 @@ export function DocumentEditor({
         clients={clients}
         projectId={projectId}
         defaultClientId={clientId}
+        defaultCurrency={currency}
         billingMode={
           (projects.find((p) => p.id === projectId)?.billingMode as BillingMode) ?? "milestones"
         }

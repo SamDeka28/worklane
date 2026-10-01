@@ -9,7 +9,7 @@ import {
   canSeeMoney,
 } from "@/modules/identity/permissions";
 import { loadPartnerBalances } from "@/modules/partners/queries";
-import type { IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, type IsoCurrency } from "@/shared/money";
 import {
   buildOpsQueue,
   type BillCandidate,
@@ -20,7 +20,7 @@ import {
 } from "@/modules/ops/queue";
 
 function asCurrency(value: string): IsoCurrency {
-  return value === "INR" ? "INR" : "USD";
+  return asIsoCurrency(value);
 }
 
 export const loadOpsQueue = cache(async (

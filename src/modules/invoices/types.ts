@@ -1,3 +1,5 @@
+import type { IsoCurrency } from "@/shared/money";
+
 export const INVOICE_STATUSES = [
   "draft",
   "sent",
@@ -135,7 +137,7 @@ export type InvoiceRecord = {
   projectId: string | null;
   number: string;
   status: InvoiceStatus;
-  currency: "USD" | "INR";
+  currency: IsoCurrency;
   issuedOn: string | null;
   dueOn: string | null;
   terms: string | null;

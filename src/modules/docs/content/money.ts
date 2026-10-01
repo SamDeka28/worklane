@@ -20,7 +20,7 @@ export const MONEY: DocArticle[] = [
         rows: [
           ["Charge", "Something the client owes — from a milestone, a work log, a contracted amount, an invoice line, or added by hand."],
           ["Payment", "Money the client sent. It's applied to charges, oldest first, unless you pick a specific charge."],
-          ["Platform fee", "The marketplace's cut (0%, 4%, 5% Upwork, or 13%). Net = gross × (1 − fee)."],
+          ["Tax / deduction", "Taken off gross before the split. Presets are 0%, 4%, 5% Upwork, and 13%; any other percent can be typed or saved as a named deduction, such as TDS 10%. Net = gross × (1 − rate)."],
           ["Outstanding", "Charges minus payments received, including any not applied yet — what **Clients owe**."],
         ],
       },
@@ -37,7 +37,7 @@ export const MONEY: DocArticle[] = [
       { type: "h2", text: "Currencies" },
       {
         type: "p",
-        text: "Worklane supports **USD** and **INR**. Each client has one currency, and every charge, payment, and invoice for that client uses it. Payments only apply to charges in the same currency.",
+        text: "Each client has one currency, and every charge, payment, and invoice for that client uses it. Payments only apply to charges in the same currency. Set the studio default under **Settings**, then pick a currency when you create a client or a lead.",
       },
       { type: "h2", text: "Charge statuses" },
       {

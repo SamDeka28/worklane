@@ -11,6 +11,7 @@ import {
 } from "@/modules/clients/components/client-forms";
 import type { ClientNextStep } from "@/modules/clients/next-step";
 import { CreateProjectDialog } from "@/modules/delivery/components/delivery-forms";
+import type { DeductionOption } from "@/modules/delivery/deductions";
 import type { AttachableDocument } from "@/modules/delivery/components/project-docs";
 import { CreateChargeDialog } from "@/modules/finance/components/finance-forms";
 
@@ -25,7 +26,9 @@ export function ClientHubChrome({
   chargeOpen,
   seeMoney = true,
   attachableDocuments = [],
+  deductions = [],
   canDelete = false,
+  currencyLocked = false,
 }: {
   orgSlug: string;
   client: {
@@ -36,6 +39,7 @@ export function ClientHubChrome({
     notesDoc?: Record<string, unknown> | null;
     currency: string;
   };
+  currencyLocked?: boolean;
   next: ClientNextStep;
   canWrite: boolean;
   editOpen?: boolean;
@@ -44,6 +48,7 @@ export function ClientHubChrome({
   chargeOpen?: boolean;
   seeMoney?: boolean;
   attachableDocuments?: AttachableDocument[];
+  deductions?: DeductionOption[];
   canDelete?: boolean;
 }) {
   const router = useRouter();
@@ -123,6 +128,8 @@ export function ClientHubChrome({
         clientId={client.id}
         name={client.name}
         kind={client.kind}
+        currency={client.currency}
+        currencyLocked={currencyLocked}
         notes={client.notes}
         notesDoc={client.notesDoc}
         canDelete={canWrite && canDelete}
@@ -153,6 +160,7 @@ export function ClientHubChrome({
         hideTrigger
         returnHref={base}
         attachableDocuments={attachableDocuments}
+        deductions={deductions}
       />
       {seeMoney ? (
         <CreateChargeDialog
@@ -166,6 +174,7 @@ export function ClientHubChrome({
           }}
           hideTrigger
           returnHref={base}
+          deductions={deductions}
         />
       ) : null}
     </>

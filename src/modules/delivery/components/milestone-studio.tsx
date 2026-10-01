@@ -46,7 +46,7 @@ import type {
 } from "@/modules/delivery/types";
 import { formatDay } from "@/modules/finance/presentation";
 import { moneyLabel, type ChargeView } from "@/modules/finance/ledger";
-import { formatMajorInput, netFromGross } from "@/shared/money";
+import { formatMajorInput, netFromGross, type IsoCurrency } from "@/shared/money";
 
 const STATUS_OPTIONS: MilestoneStatus[] = [
   "planned",
@@ -248,7 +248,7 @@ function EditMilestoneDialog({
   showTrigger = true,
 }: {
   orgSlug: string;
-  currency: "USD" | "INR";
+  currency: IsoCurrency;
   milestone: MilestoneRecord;
   items: MilestoneItemRecord[];
   code: string;
@@ -417,7 +417,7 @@ function MilestoneRow({
   projectId: string;
   billingMode: BillingMode;
   feeBps: number;
-  currency: "USD" | "INR";
+  currency: IsoCurrency;
   item: MilestoneRecord;
   items: MilestoneItemRecord[];
   index: number;
@@ -774,7 +774,7 @@ export function MilestoneStudioList({
   projectId: string;
   billingMode: BillingMode;
   feeBps: number;
-  currency: "USD" | "INR";
+  currency: IsoCurrency;
   milestones: MilestoneRecord[];
   itemsByMilestone: Record<string, MilestoneItemRecord[]>;
   chargeByMilestone: Map<string, ChargeView>;

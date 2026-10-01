@@ -109,7 +109,7 @@ export function ChargeCollectButton({
             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
             {[
                 ["Total price", grossMinor],
-                ["Platform fee", grossMinor - netMinor],
+                ["Tax / deduction", grossMinor - netMinor],
                 ["After fee", netMinor],
                 ["Collected", collectedMinor],
             ].map(([label, amount]) => (

@@ -25,8 +25,8 @@ export const DELIVER: DocArticle[] = [
             body: "**Status** defaults to Active. **Billing** defaults to **Hourly (logs post charges)** and decides how charges get posted — see the table below.",
           },
           {
-            title: "Platform fee and partner earnings",
-            body: "**Platform fee** is taken off gross before anything is shared: None (0%), 4%, 5% Upwork (the default), or 13%. **Partner earn on** decides whether partners earn **When charged** or **When collected**.",
+            title: "Tax / deduction and partner earnings",
+            body: "**Tax / deduction** comes off gross before anything is shared. The presets are None (0%), 4%, 5% Upwork (the default), and 13%. Choose **Custom percent** for any other rate, such as 10% TDS, or **Add a deduction** to save a named one for the studio. **Partner earn on** decides whether partners earn **When charged** or **When collected**.",
           },
           { title: "Dates and scope", body: "Add **Contracted amount**, **Starts**, **Due**, and internal **Scope** notes." },
           {
@@ -44,6 +44,7 @@ export const DELIVER: DocArticle[] = [
           ["Milestones", "Milestones", "You charge each milestone when it's due."],
           ["Hourly (logs post charges)", "Hourly", "Every work log posts a charge for hours × rate or a fixed amount. Set **Rate per hour** when you create the project or in **Project settings**; logs start from it."],
           ["Single contracted charge", "Contracted", "One charge for the contracted amount via **… → Post contracted charge**."],
+          ["Monthly retainer", "Monthly", "Either a **fixed amount** each month, or **hourly**: log the month's hours, then **Post this month** bills them as one charge. A month can only be charged once. Tax and deductions come off first."],
           ["Manual", "Manual", "Charge milestones or the contracted amount by hand when you choose."],
           ["None (track only)", "Track only", "No charges — pure delivery tracking."],
         ],

@@ -24,7 +24,7 @@ export const SELL: DocArticle[] = [
           },
           {
             title: "Fill in the deal",
-            body: "**Name** is required. Add **Company**, **Stage**, **Expected close**, and **Estimated value** (USD or INR).",
+            body: "**Name** is required. Add **Company**, **Stage**, **Expected close**, and **Estimated value** in the lead's currency.",
           },
           {
             title: "Set the first next step",
@@ -335,7 +335,7 @@ export const SELL: DocArticle[] = [
         items: [
           { title: "Click New client", body: "From Clients, **+ Create**, or ⌘K." },
           { title: "Choose Kind", body: "**Company** or **Person**." },
-          { title: "Name and currency", body: "Enter the **Name** and pick **USD** or **INR**. Every charge and payment for this client uses that currency." },
+          { title: "Name and currency", body: "Enter the **Name** and pick a **Currency**. Every charge, invoice, and payment for this client uses that currency." },
           { title: "Internal notes", body: "Private notes for your team — never shown on the client portal." },
           { title: "Primary contact (optional)", body: "Contact name, Email, Phone, WhatsApp." },
           { title: "Click Create client", body: "" },

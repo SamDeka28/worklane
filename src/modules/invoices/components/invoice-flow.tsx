@@ -69,7 +69,7 @@ export function InvoiceSteps({
   const reached = reachedStep(invoice, status);
   const voided = status === "void";
   return (
-    <ol className="flex items-center gap-1.5" aria-label="Invoice progress">
+    <ol className="flex min-w-0 items-center gap-1.5" aria-label="Invoice progress">
       {STEPS.map((step, index) => {
         const done = !voided && index < reached;
         const current = !voided && index === reached;

@@ -3,6 +3,7 @@ import { AvatarMark } from "@/components/studio/chrome";
 import { MONEY_COLORS, MoneyDonut } from "@/components/studio/money-donut";
 import { Meter } from "@/components/studio/meter";
 import { moneyLabel } from "@/modules/finance/ledger";
+import type { IsoCurrency } from "@/shared/money";
 
 type Money = {
   totalPriceMinor: bigint;
@@ -27,8 +28,9 @@ export function ProjectOverviewRail({
   totalEarnedMinor,
   splitRows,
   splitHref,
+  perMonth = false,
 }: {
-  currency: "USD" | "INR";
+  currency: IsoCurrency;
   money: Money;
   feeBps: number;
   feeMinor: bigint;
@@ -37,6 +39,7 @@ export function ProjectOverviewRail({
   totalEarnedMinor: bigint;
   splitRows: SplitRow[];
   splitHref: string;
+  perMonth?: boolean;
 }) {
   const collected = Number(money.collectedMinor);
   const due = Number(money.outstandingMinor);
@@ -45,8 +48,8 @@ export function ProjectOverviewRail({
   const collectedRatio = total > 0 ? collected / total : 0;
   const feeLabel =
     feeBps > 0
-      ? `Platform fee (${(feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2)}%)`
-      : "Platform fee";
+      ? `Tax / deduction (${(feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2)}%)`
+      : "Tax / deduction";
 
   const slices = [
     {
@@ -74,14 +77,14 @@ export function ProjectOverviewRail({
       <div className="overflow-hidden rounded-[1.75rem] bg-card shadow-soft ring-1 ring-border/30">
         <section className="px-5 pt-5 pb-5">
           <p className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
-            Project value
+            {perMonth ? "Per month" : "Project value"}
           </p>
           <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">
             {money.totalPriceMinor > BigInt(0)
               ? moneyLabel(money.totalPriceMinor, currency)
               : "-"}
           </p>
-          <p className="mt-1 text-sm text-muted-foreground">Client total</p>
+          <p className="mt-1 text-sm text-muted-foreground">{perMonth ? "Charged each month" : "Client total"}</p>
 
           {money.totalPriceMinor > BigInt(0) ? (
             <>

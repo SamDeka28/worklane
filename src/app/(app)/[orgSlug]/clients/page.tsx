@@ -100,7 +100,7 @@ export default async function ClientsPage({
         purpose={JOURNEY.clients.purpose}
         actions={
           ctx.canWrite ? (
-            <CreateClientDialog orgSlug={orgSlug} defaultOpen={query.new === "1"} />
+            <CreateClientDialog orgSlug={orgSlug} defaultOpen={query.new === "1"} defaultCurrency={ctx.org.defaultCurrency} />
           ) : null
         }
       />

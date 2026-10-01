@@ -13,8 +13,7 @@ import {
   compilePoolRemainderDistribution,
 } from "@/modules/partners/ledger";
 import type { PartnerKind } from "@/modules/partners/types";
-import { formatMoney, netFromGross, parseMajorToMinor } from "@/shared/money";
-import type { IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, formatMoney, netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
 function asKind(value: string): PartnerKind {
   if (value === "originator" || value === "referral") return value;
@@ -22,7 +21,7 @@ function asKind(value: string): PartnerKind {
 }
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
-  return value === "INR" || value === "USD" ? value : fallback;
+  return asIsoCurrency(value, fallback);
 }
 
 async function loadClientCurrencyForPartner(

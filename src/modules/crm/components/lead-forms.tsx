@@ -32,6 +32,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
+import { CurrencySelect } from "@/components/studio/currency-select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { formatDay } from "@/modules/finance/presentation";
@@ -69,7 +70,7 @@ import {
 } from "@/modules/files/actions";
 import { FileAttachmentPreview } from "@/modules/files/components/file-viewer";
 import type { FileRecord } from "@/modules/files/queries";
-import { formatMajorInput } from "@/shared/money";
+import { formatMajorInput, type IsoCurrency } from "@/shared/money";
 
 export type LeadTab = "overview" | "timeline" | "notes" | "proposals";
 
@@ -480,7 +481,7 @@ function LeadFormFields({
   lead?: LeadRecord;
   stages: LeadStageRecord[];
   defaultStage?: string;
-  defaultCurrency: "USD" | "INR";
+  defaultCurrency: IsoCurrency;
   showMoney: boolean;
   disabled?: boolean;
   settings: CrmSettings;
@@ -626,16 +627,13 @@ function LeadFormFields({
         {showMoney ? (
           <Field label="Estimated value" htmlFor={id("estimated_value")} className="sm:col-span-2">
             <div className="flex gap-2">
-              <NativeSelect
-                aria-label="Currency"
-                name="currency"
+              <CurrencySelect
+                ariaLabel="Currency"
                 defaultValue={currency}
                 disabled={disabled}
+                compact
                 className="w-24 shrink-0"
-              >
-                <option value="USD">USD</option>
-                <option value="INR">INR</option>
-              </NativeSelect>
+              />
               <Input
                 id={id("estimated_value")}
                 name="estimated_value"
@@ -847,7 +845,7 @@ export function CreateLeadDialog({
 }: {
   orgSlug: string;
   stages: LeadStageRecord[];
-  defaultCurrency?: "USD" | "INR";
+  defaultCurrency?: IsoCurrency;
   showMoney?: boolean;
   settings: CrmSettings;
   members: CrmMember[];

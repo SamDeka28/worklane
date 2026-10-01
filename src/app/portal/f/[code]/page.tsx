@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { LeadIntakeForm } from "@/modules/crm/components/lead-intake-form";
 import { createServerSupabaseClient } from "@/shared/db/supabase/server";
+import { asIsoCurrency } from "@/shared/money";
 
 export const metadata: Metadata = {
   title: "Get in touch",
@@ -40,7 +41,7 @@ export default async function LeadIntakePage({
         code={code}
         embed={embed}
         orgName={config.orgName}
-        currency={config.currency === "INR" ? "INR" : "USD"}
+        currency={asIsoCurrency(config.currency)}
         headline={config.headline?.trim() || `Work with ${config.orgName}`}
         intro={
           config.intro?.trim() ||

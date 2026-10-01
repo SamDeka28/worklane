@@ -34,11 +34,11 @@ import {
   invoiceSubtotalMinor,
   lineTotalMinor,
 } from "@/modules/invoices/totals";
-import { netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 import { sendTrackedApplicationEmail } from "@/modules/emails/application-send";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
-  return value === "INR" || value === "USD" ? value : fallback;
+  return asIsoCurrency(value, fallback);
 }
 
 function field(formData: FormData, key: string, max = 500): string {

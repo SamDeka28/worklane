@@ -11,7 +11,7 @@ import {
   type ChargeRow,
   type PaymentRow,
 } from "@/modules/finance/ledger";
-import type { IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, type IsoCurrency } from "@/shared/money";
 
 function mapCharge(row: {
   id: string;
@@ -39,7 +39,7 @@ function mapCharge(row: {
     grossMinor: asLedgerMinor(row.gross_minor),
     feeBps: row.fee_bps,
     netMinor: asLedgerMinor(row.net_minor),
-    currency: row.currency === "INR" ? "INR" : "USD",
+    currency: asIsoCurrency(row.currency),
     chargedOn: row.charged_on,
     dueOn: row.due_on,
     source: row.source,
@@ -65,7 +65,7 @@ function mapPayment(row: {
     id: row.id,
     clientId: row.client_id,
     amountMinor: asLedgerMinor(row.amount_minor),
-    currency: row.currency === "INR" ? "INR" : "USD",
+    currency: asIsoCurrency(row.currency),
     paidOn: row.paid_on,
     method: row.method,
     reference: row.reference,

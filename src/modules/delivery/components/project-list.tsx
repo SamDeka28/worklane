@@ -14,6 +14,7 @@ import type { ProjectNextStep } from "@/modules/delivery/next-step";
 import type { ProjectStatus } from "@/modules/delivery/types";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { formatDay } from "@/modules/finance/presentation";
+import type { IsoCurrency } from "@/shared/money";
 
 const STATUS_TONE = {
   planning: "planning",
@@ -44,7 +45,7 @@ export type ProjectListCard = {
     clientName: string;
     billingMode: keyof typeof BILLING_MODE_LABEL;
     dueOn: string | null;
-    currency: "USD" | "INR";
+    currency: IsoCurrency;
   };
   money: {
     totalPriceMinor: bigint;
@@ -196,6 +197,7 @@ function ProjectListRow({
                   </span>
                   {" / "}
                   {moneyLabel(card.money.totalPriceMinor, card.project.currency)}
+                  {card.project.billingMode === "monthly" ? "/mo" : ""}
                 </>
               ) : (
                 "No contract yet"

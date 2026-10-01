@@ -114,7 +114,7 @@ export const GETTING_STARTED: DocArticle[] = [
       },
       {
         type: "p",
-        text: "If the work is already signed, go straight to **Clients → New client**, choose **Company** or **Person**, pick a **Currency** (USD or INR), and add a primary contact.",
+        text: "If the work is already signed, go straight to **Clients → New client**, choose **Company** or **Person**, pick a **Currency**, and add a primary contact.",
       },
       { type: "h2", text: "3. Open a project" },
       {
@@ -125,7 +125,7 @@ export const GETTING_STARTED: DocArticle[] = [
             title: "Choose a billing mode",
             body: "Pick **Milestones** for fixed-price phases, **Hourly (logs post charges)** for time-and-materials, or **Single contracted charge** for one flat fee. See [How billing works](/docs/billing-basics).",
           },
-          { title: "Set dates and the platform fee", body: "Add **Starts** and **Due** dates and pick a **Platform fee** if the work comes through a marketplace." },
+          { title: "Set dates and the deduction", body: "Add **Starts** and **Due** dates and set **Tax / deduction** if a marketplace or tax comes off the client total." },
           { title: "Click Create project", body: "You're added as the project lead, and the task board starts with **To do**, **Doing**, and **Done**." },
         ],
       },

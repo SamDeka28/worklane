@@ -17,6 +17,8 @@ import {
   type OrgRole,
 } from "@/modules/identity/types";
 import { requireUser } from "@/shared/db/require-user";
+import { parseCustomDeductions, type DeductionOption } from "@/modules/delivery/deductions";
+import { asIsoCurrency } from "@/shared/money";
 import {
   resolveComponent,
   resolveInterface,
@@ -51,6 +53,8 @@ export type OrgContext = {
     location: string | null;
     address: string | null;
   };
+  /** Named tax / deduction presets saved on the studio, besides the built-ins. */
+  deductions: DeductionOption[];
 };
 
 type OrgRow = {
@@ -67,7 +71,7 @@ export function mapOrganization(row: OrgRow): Organization {
     id: row.id,
     slug: row.slug,
     name: row.name,
-    defaultCurrency: row.default_currency === "INR" ? "INR" : "USD",
+    defaultCurrency: asIsoCurrency(row.default_currency),
     timezone: row.timezone,
     modules: { ...DEFAULT_MODULES, ...(row.settings?.modules ?? {}) },
   };
@@ -179,6 +183,7 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
       location: (profile?.location as string | null) ?? null,
       address: (profile?.address as string | null) ?? null,
     },
+    deductions: parseCustomDeductions(orgRow.settings),
   };
 });
 

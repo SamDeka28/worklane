@@ -7,10 +7,10 @@ import { requireWritableOrg } from "@/modules/identity/org";
 import { canDeleteModule } from "@/modules/identity/permissions";
 import { notifyMentions } from "@/modules/mentions/notify";
 import { notify, notifyOwners, userLabel } from "@/modules/notifications/service";
-import { parseMajorToMinor, type IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
-  return value === "INR" || value === "USD" ? value : fallback;
+  return asIsoCurrency(value, fallback);
 }
 
 function parseTags(raw: string): string[] {

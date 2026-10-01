@@ -33,7 +33,7 @@ import { canAccessModule, canSeeMoney } from "@/modules/identity/permissions";
 import { loadOpsQueue } from "@/modules/ops/queries";
 import { loadPartnerBalances, loadUserPartnerEarnings } from "@/modules/partners/queries";
 import { JOURNEY } from "@/shared/journey-copy";
-import { formatMoney } from "@/shared/money";
+import { formatMoney, type IsoCurrency } from "@/shared/money";
 
 function activityCopy(verb: string, clientName: string | null, entityType?: string) {
   const who = clientName ?? "a client";
@@ -96,8 +96,8 @@ function monthShort(yearMonth: string) {
 }
 
 function earningsLabel(
-  totals: { currency: "USD" | "INR"; amountMinor: bigint }[],
-  fallback: "USD" | "INR",
+  totals: { currency: IsoCurrency; amountMinor: bigint }[],
+  fallback: IsoCurrency,
 ) {
   if (totals.length === 0) return moneyLabel(BigInt(0), fallback);
   return totals

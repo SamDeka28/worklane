@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";
+import { CurrencySelect } from "@/components/studio/currency-select";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,7 @@ export function DocumentCreateSheets({
   defaultClientId,
   billingMode = "milestones",
   milestones,
+  defaultCurrency = "USD",
 }: {
   orgSlug: string;
   documentId: string;
@@ -49,6 +51,7 @@ export function DocumentCreateSheets({
   defaultClientId?: string;
   billingMode?: BillingMode;
   milestones: { id: string; name: string }[];
+  defaultCurrency?: string;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -142,10 +145,7 @@ export function DocumentCreateSheets({
             />
           </Field>
           <Field label="Currency" htmlFor="doc_client_currency">
-            <NativeSelect id="doc_client_currency" name="currency" defaultValue="USD">
-              <option value="USD">USD</option>
-              <option value="INR">INR</option>
-            </NativeSelect>
+            <CurrencySelect id="doc_client_currency" defaultValue={defaultCurrency} />
           </Field>
           <div className="grid gap-3 rounded-2xl bg-muted/40 p-3 ring-1 ring-border/40">
             <p className="text-[11px] font-semibold tracking-[0.06em] text-muted-foreground uppercase">
@@ -185,8 +185,8 @@ export function DocumentCreateSheets({
                   data.set("currency", "USD");
                   return data;
                 })());
-                if (created.error || !created.id) {
-                  toast.error(created.error ?? "Could not create client");
+                if ("error" in created || !created.id) {
+                  toast.error("error" in created ? created.error : "Could not create client");
                   return;
                 }
                 clientId = created.id;
@@ -194,8 +194,8 @@ export function DocumentCreateSheets({
               formData.set("client_id", clientId);
               formData.set("document_id", documentId);
               const result = await createProjectAction(orgSlug, formData);
-              if (result.error || !result.id) {
-                toast.error(result.error ?? "Could not create project");
+              if ("error" in result || !result.id) {
+                toast.error("error" in result ? result.error : "Could not create project");
                 return;
               }
               const name = String(formData.get("name") ?? "").trim();

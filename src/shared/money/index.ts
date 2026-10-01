@@ -1,11 +1,60 @@
 /** Integer minor units. Never use floating point for stored money. */
 
-export type IsoCurrency = "USD" | "INR";
+export const CURRENCIES = [
+  { code: "USD", name: "US dollar", exponent: 2 },
+  { code: "EUR", name: "Euro", exponent: 2 },
+  { code: "GBP", name: "British pound", exponent: 2 },
+  { code: "INR", name: "Indian rupee", exponent: 2 },
+  { code: "AUD", name: "Australian dollar", exponent: 2 },
+  { code: "CAD", name: "Canadian dollar", exponent: 2 },
+  { code: "NZD", name: "New Zealand dollar", exponent: 2 },
+  { code: "CHF", name: "Swiss franc", exponent: 2 },
+  { code: "SGD", name: "Singapore dollar", exponent: 2 },
+  { code: "HKD", name: "Hong Kong dollar", exponent: 2 },
+  { code: "JPY", name: "Japanese yen", exponent: 0 },
+  { code: "CNY", name: "Chinese yuan", exponent: 2 },
+  { code: "KRW", name: "South Korean won", exponent: 0 },
+  { code: "AED", name: "UAE dirham", exponent: 2 },
+  { code: "SAR", name: "Saudi riyal", exponent: 2 },
+  { code: "QAR", name: "Qatari riyal", exponent: 2 },
+  { code: "BHD", name: "Bahraini dinar", exponent: 3 },
+  { code: "ZAR", name: "South African rand", exponent: 2 },
+  { code: "BRL", name: "Brazilian real", exponent: 2 },
+  { code: "MXN", name: "Mexican peso", exponent: 2 },
+  { code: "MYR", name: "Malaysian ringgit", exponent: 2 },
+  { code: "PHP", name: "Philippine peso", exponent: 2 },
+  { code: "THB", name: "Thai baht", exponent: 2 },
+  { code: "IDR", name: "Indonesian rupiah", exponent: 2 },
+  { code: "LKR", name: "Sri Lankan rupee", exponent: 2 },
+  { code: "NPR", name: "Nepalese rupee", exponent: 2 },
+  { code: "BDT", name: "Bangladeshi taka", exponent: 2 },
+  { code: "PKR", name: "Pakistani rupee", exponent: 2 },
+  { code: "NGN", name: "Nigerian naira", exponent: 2 },
+  { code: "KES", name: "Kenyan shilling", exponent: 2 },
+  { code: "EGP", name: "Egyptian pound", exponent: 2 },
+  { code: "TRY", name: "Turkish lira", exponent: 2 },
+  { code: "PLN", name: "Polish zloty", exponent: 2 },
+  { code: "SEK", name: "Swedish krona", exponent: 2 },
+  { code: "NOK", name: "Norwegian krone", exponent: 2 },
+  { code: "DKK", name: "Danish krone", exponent: 2 },
+] as const;
 
-export const CURRENCY_EXPONENT: Record<IsoCurrency, number> = {
-  USD: 2,
-  INR: 2,
-};
+export type IsoCurrency = (typeof CURRENCIES)[number]["code"];
+
+export const CURRENCY_EXPONENT = Object.fromEntries(
+  CURRENCIES.map((currency) => [currency.code, currency.exponent]),
+) as Record<IsoCurrency, number>;
+
+const CURRENCY_CODES = new Set<string>(CURRENCIES.map((currency) => currency.code));
+
+/** A stored code, or the fallback when it isn't one we support. */
+export function asIsoCurrency(
+  value: string | null | undefined,
+  fallback: IsoCurrency = "USD",
+): IsoCurrency {
+  const code = String(value ?? "").trim().toUpperCase();
+  return CURRENCY_CODES.has(code) ? (code as IsoCurrency) : fallback;
+}
 
 export type Money = {
   amountMinor: bigint;
@@ -53,6 +102,7 @@ export function formatMajorInput(amountMinor: bigint, currency: IsoCurrency) {
   const scale = BigInt(10 ** exp);
   const whole = abs / scale;
   const frac = abs % scale;
+  if (exp === 0) return `${negative ? "-" : ""}${whole}`;
   return `${negative ? "-" : ""}${whole}.${frac.toString().padStart(exp, "0")}`;
 }
 

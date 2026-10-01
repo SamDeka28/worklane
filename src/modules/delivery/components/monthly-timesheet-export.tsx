@@ -8,7 +8,7 @@ import { NativeSelect } from "@/components/ui/native-select";
 import { sendProjectTimesheetEmailAction } from "@/modules/delivery/timesheet-actions";
 import { formatHoursMillis } from "@/modules/delivery/ledger";
 import type { ContactRecord } from "@/modules/clients/types";
-import { formatMajorInput, grossFromHours } from "@/shared/money";
+import { formatMajorInput, grossFromHours, type IsoCurrency } from "@/shared/money";
 import { ComposeEmailButton } from "@/modules/emails/components/compose-email";
 import type { EmailAttachmentPayload } from "@/modules/emails/types";
 
@@ -47,7 +47,7 @@ export function MonthlyTimesheetExport({
   projectId: string;
   projectName: string;
   clientName: string;
-  currency: "USD" | "INR";
+  currency: IsoCurrency;
   canEmail: boolean;
   contacts: Pick<ContactRecord, "name" | "email" | "isPrimary">[];
   entries: TimesheetEntry[];

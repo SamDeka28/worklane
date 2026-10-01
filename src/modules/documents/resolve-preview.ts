@@ -3,6 +3,7 @@ import { asDocumentRefType } from "@/modules/documents/refs";
 import { moneyLabel } from "@/modules/finance/ledger";
 import { formatDay } from "@/modules/finance/presentation";
 import { MILESTONE_STATUS_LABEL } from "@/modules/delivery/milestone-life";
+import type { IsoCurrency } from "@/shared/money";
 
 export type PreviewClient = {
   id: string;
@@ -42,7 +43,7 @@ export type PreviewCatalog = {
   projects: PreviewProject[];
   milestones: PreviewMilestone[];
   tasks: PreviewTask[];
-  currency?: "USD" | "INR";
+  currency?: IsoCurrency;
 };
 
 function plain(value: string, marks?: JSONContent["marks"]): JSONContent {

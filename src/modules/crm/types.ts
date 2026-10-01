@@ -1,3 +1,5 @@
+import type { IsoCurrency } from "@/shared/money";
+
 export const DEFAULT_LEAD_STAGES = [
   { name: "New", slug: "new", systemKey: null },
   { name: "Contacted", slug: "contacted", systemKey: null },
@@ -40,7 +42,7 @@ export type LeadRecord = {
   whatsapp: string | null;
   source: string | null;
   estimatedValueMinor: bigint | null;
-  currency: "USD" | "INR";
+  currency: IsoCurrency;
   closeOn: string | null;
   ownerUserId: string | null;
   tags: string[];

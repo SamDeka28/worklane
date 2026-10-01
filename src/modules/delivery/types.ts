@@ -1,3 +1,5 @@
+import type { IsoCurrency } from "@/shared/money";
+
 export const PROJECT_STATUSES = [
   "planning",
   "active",
@@ -14,6 +16,7 @@ export const BILLING_MODES = [
   "milestones",
   "hourly",
   "manual",
+  "monthly",
 ] as const;
 
 export type BillingMode = (typeof BILLING_MODES)[number];
@@ -41,7 +44,7 @@ export type ProjectRecord = {
   organizationId: string;
   clientId: string;
   clientName: string;
-  currency: "USD" | "INR";
+  currency: IsoCurrency;
   name: string;
   status: ProjectStatus;
   billingMode: BillingMode;
@@ -50,6 +53,8 @@ export type ProjectRecord = {
   contractedAmountMinor: bigint | null;
   /** Default rate per hour on hourly projects; logs prefill it. */
   hourlyRateMinor: bigint | null;
+  /** Set on monthly retainers: a fixed amount, or the hours logged that month. */
+  retainerBasis: "fixed" | "hourly" | null;
   scope: string | null;
   scopeDoc: Record<string, unknown> | null;
   startsOn: string | null;

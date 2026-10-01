@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";
 import { DangerZone } from "@/components/studio/type-to-confirm";
+import { CurrencySelect } from "@/components/studio/currency-select";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,11 +36,13 @@ export function CreateClientDialog({
   defaultOpen = false,
   hideTrigger = false,
   returnHref,
+  defaultCurrency = "USD",
 }: {
   orgSlug: string;
   defaultOpen?: boolean;
   hideTrigger?: boolean;
   returnHref?: string;
+  defaultCurrency?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(defaultOpen);
@@ -97,10 +100,7 @@ export function CreateClientDialog({
           <Input id="name" name="name" required placeholder="Latisha, RNPL…" />
         </Field>
         <Field label="Currency" htmlFor="currency">
-          <NativeSelect id="currency" name="currency" defaultValue="USD">
-            <option value="USD">USD</option>
-            <option value="INR">INR</option>
-          </NativeSelect>
+          <CurrencySelect id="currency" defaultValue={defaultCurrency} />
         </Field>
         <SoftDocField
           label="Internal notes"
@@ -137,6 +137,8 @@ export function EditClientForm({
   clientId,
   name,
   kind,
+  currency,
+  currencyLocked = false,
   notes,
   notesDoc,
 }: {
@@ -144,6 +146,8 @@ export function EditClientForm({
   clientId: string;
   name: string;
   kind: string;
+  currency: string;
+  currencyLocked?: boolean;
   notes: string | null;
   notesDoc?: Record<string, unknown> | null;
 }) {
@@ -175,6 +179,17 @@ export function EditClientForm({
       </Field>
       <Field label="Name" htmlFor="name">
         <Input id="name" name="name" required defaultValue={name} />
+      </Field>
+      <Field
+        label="Currency"
+        htmlFor="currency"
+        hint={
+          currencyLocked
+            ? "Locked because this client already has a charge, invoice, or payment."
+            : "Projects, charges, and invoices for this client use this currency."
+        }
+      >
+        <CurrencySelect id="currency" defaultValue={currency} disabled={currencyLocked} />
       </Field>
       <SoftDocField
         label="Internal notes"
@@ -321,6 +336,8 @@ export function EditClientSheet({
   clientId,
   name,
   kind,
+  currency,
+  currencyLocked = false,
   notes,
   notesDoc,
   open,
@@ -331,6 +348,8 @@ export function EditClientSheet({
   clientId: string;
   name: string;
   kind: string;
+  currency: string;
+  currencyLocked?: boolean;
   notes: string | null;
   notesDoc?: Record<string, unknown> | null;
   open: boolean;
@@ -341,7 +360,7 @@ export function EditClientSheet({
   return (
     <ActionSheet
       title="Edit profile"
-      description="Name, kind, and internal notes."
+      description="Name, kind, currency, and internal notes."
       hideTrigger
       open={open}
       onOpenChange={onOpenChange}
@@ -351,6 +370,8 @@ export function EditClientSheet({
         clientId={clientId}
         name={name}
         kind={kind}
+        currency={currency}
+        currencyLocked={currencyLocked}
         notes={notes}
         notesDoc={notesDoc}
       />

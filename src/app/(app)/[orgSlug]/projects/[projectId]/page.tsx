@@ -32,7 +32,7 @@ import { ProjectDocumentsHub } from "@/modules/delivery/components/project-docs"
 import { MonthlyTimesheetExport } from "@/modules/delivery/components/monthly-timesheet-export";
 import { ProjectOverviewRail } from "@/modules/delivery/components/project-overview-rail";
 import { LogTimeRange, TaskClocks } from "@/modules/delivery/components/task-time";
-import { allowsContractedProjectCharge, formatHoursMillis } from "@/modules/delivery/ledger";
+import { allowsContractedProjectCharge, formatHoursMillis, projectTracksTime } from "@/modules/delivery/ledger";
 import {
   chargeByMilestoneId,
   milestoneBillingLabel,
@@ -280,8 +280,9 @@ export default async function ProjectDetailPage({
     ? await listContacts(orgSlug, project.clientId)
     : [];
   const isHourly = project.billingMode === "hourly";
+  const tracksTime = projectTracksTime(project.billingMode, project.retainerBasis);
   const panel =
-    query.panel === "log" ? "log" : query.panel === "board" ? "board" : isHourly ? "log" : "board";
+    query.panel === "log" ? "log" : query.panel === "board" ? "board" : tracksTime ? "log" : "board";
   const clientDocs = documents.filter((doc) => doc.clientId === project.clientId);
   const projectDocs = projectSurfaceDocs;
   const attachableDocs = clientDocs.filter((doc) => !doc.projectId);
@@ -309,10 +310,15 @@ export default async function ProjectDetailPage({
     unbilledMilestones: unbilledMilestones.length,
     outstandingMinor: seeMoney ? money.outstandingMinor : BigInt(0),
     milestoneCount: milestones.length,
+    retainerBasis: project.retainerBasis,
+    chargedThisMonth: finance.charges.some(
+      (charge) =>
+        charge.status !== "void" && charge.chargedOn.startsWith(new Date().toISOString().slice(0, 7)),
+    ),
   });
   const nextHref =
     next.tab === "work"
-      ? tabHref("work", `panel=${isHourly ? "log" : "board"}`)
+      ? tabHref("work", `panel=${tracksTime ? "log" : "board"}`)
       : next.tab === "milestones"
         ? tabHref("milestones")
         : tabHref("charges", "collect=1");
@@ -366,7 +372,13 @@ export default async function ProjectDetailPage({
         })),
       }
     : null;
-  const chargeAction = !ctx.canWrite ? null : isHourly ? (
+  const chargeAction = !ctx.canWrite ? null : project.billingMode === "monthly" ? (
+    <PostContractedChargeButton
+      orgSlug={orgSlug}
+      projectId={project.id}
+      billingMode={project.billingMode}
+    />
+  ) : isHourly ? (
     <Button size="sm" nativeButton={false} render={<Link href={tabHref("work", "panel=log")} />}>
       Log work
     </Button>
@@ -514,6 +526,12 @@ export default async function ProjectDetailPage({
       triggerSize="default"
       triggerLabel="Add milestone"
     />
+  ) : next.cta === "Post this month" ? (
+    <PostContractedChargeButton
+      orgSlug={orgSlug}
+      projectId={project.id}
+      billingMode={project.billingMode}
+    />
   ) : (
     <Button size="default" nativeButton={false} render={<Link href={nextHref} />}>
       {next.cta}
@@ -552,7 +570,11 @@ export default async function ProjectDetailPage({
               <>
                 <span aria-hidden>·</span>
                 <span className="tabular-nums font-semibold text-foreground">
-                  {money.totalPriceMinor > BigInt(0)
+                  {project.billingMode === "monthly" && project.retainerBasis === "hourly" && project.hourlyRateMinor != null
+                    ? `${moneyLabel(project.hourlyRateMinor, project.currency)}/hr`
+                    : project.billingMode === "monthly" && project.contractedAmountMinor != null
+                    ? `${moneyLabel(project.contractedAmountMinor, project.currency)} / month`
+                    : money.totalPriceMinor > BigInt(0)
                     ? `${moneyLabel(money.totalPriceMinor, project.currency)} total`
                     : `${moneyLabel(money.outstandingMinor, project.currency)} due`}
                 </span>
@@ -571,6 +593,7 @@ export default async function ProjectDetailPage({
                 canDelete={canDeleteModule(ctx, "delivery")}
                 settingsOpenInitially={query.settings === "1"}
                 returnHref={tabHref(tab)}
+                deductions={ctx.deductions}
               />
             </div>
           ) : null
@@ -592,7 +615,7 @@ export default async function ProjectDetailPage({
         ) : null}
         {canAccessProjectTab(ctx.permissions, "work") ? (
           <SoftTab
-            href={tabHref("work", `panel=${isHourly ? "log" : "board"}`)}
+            href={tabHref("work", `panel=${tracksTime ? "log" : "board"}`)}
             active={tab === "work"}
           >
             Work
@@ -646,7 +669,7 @@ export default async function ProjectDetailPage({
             <div className="min-w-0 space-y-4">
               <div className="flex flex-wrap gap-x-5 gap-y-2 rounded-3xl bg-muted/40 px-4 py-3 text-sm ring-1 ring-border/30">
                 <Link
-                  href={tabHref("work", `panel=${isHourly ? "log" : "board"}`)}
+                  href={tabHref("work", `panel=${tracksTime ? "log" : "board"}`)}
                   className="hover:text-foreground"
                 >
                   <span className="text-muted-foreground">Tasks </span>
@@ -812,6 +835,7 @@ export default async function ProjectDetailPage({
                 totalEarnedMinor={totalEarnedMinor}
                 splitRows={splitPartnerRows}
                 splitHref={tabHref("split")}
+                perMonth={project.billingMode === "monthly" && project.retainerBasis !== "hourly"}
               />
             ) : null}
           </div>
@@ -868,7 +892,7 @@ export default async function ProjectDetailPage({
             action={
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <FilterChips className="px-0 py-0">
-                  {isHourly ? (
+                  {tracksTime ? (
                     <FilterChip href={tabHref("work", "panel=log")} active={panel === "log"}>
                       Log
                     </FilterChip>
@@ -996,8 +1020,12 @@ export default async function ProjectDetailPage({
               <EmptyState icon={Coins}
                 title="No charges yet"
                 body={
-                  isHourly
+                  project.billingMode === "monthly" && project.retainerBasis === "hourly"
+                    ? "Log the month's hours, then post one charge for them. Tax and deductions come off before the split."
+                    : isHourly
                     ? "Every work log posts a charge. Log hours to post the first amount."
+                    : project.billingMode === "monthly"
+                      ? "Post the monthly amount. Tax and deductions come off before the split."
                     : allowsContractedProjectCharge(project.billingMode)
                       ? "Post the contracted amount, or charge a milestone, to post the first amount."
                       : "Charge a milestone to post the first amount on the ledger."
@@ -1303,7 +1331,7 @@ export default async function ProjectDetailPage({
         ) : null}
       </HubBody>
 
-      {tab === "work" && isHourly && panel === "log" && ctx.canWrite ? (
+      {tab === "work" && tracksTime && panel === "log" && ctx.canWrite ? (
         <WorkLogComposer
           orgSlug={orgSlug}
           projectId={project.id}

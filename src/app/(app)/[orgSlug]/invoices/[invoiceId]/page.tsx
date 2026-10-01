@@ -174,7 +174,7 @@ function StudioSection({
         </span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
       </summary>
-      <div className="grid gap-3 px-5 pt-1 pb-5">{children}</div>
+      <div className="grid min-w-0 gap-3 px-5 pt-1 pb-5">{children}</div>
     </details>
   );
 }
@@ -313,7 +313,7 @@ export default async function InvoiceDetailPage({
             className="lg:w-[22rem] lg:shrink-0 lg:border-l lg:border-border/50 lg:bg-card xl:w-[24rem]"
           >
             <div className="divide-y divide-border/40">
-              <section className="grid gap-4 px-5 py-5">
+              <section className="grid min-w-0 gap-4 px-5 py-5">
                 <InvoiceSteps invoice={invoice} status={status} />
                 <InvoiceNextStep
                   orgSlug={orgSlug}

@@ -34,6 +34,8 @@ import {
   uploadProjectAttachments,
   type AttachableDocument,
 } from "@/modules/delivery/components/project-docs";
+import { DeductionField } from "@/modules/delivery/components/deduction-field";
+import type { DeductionOption } from "@/modules/delivery/deductions";
 import { hoursBetween, toLocalInput } from "@/modules/delivery/components/task-time";
 import {
   billMilestoneAction,
@@ -79,6 +81,7 @@ export function CreateProjectDialog({
   open: openProp,
   onOpenChange,
   attachableDocuments = [],
+  deductions = [],
 }: {
   orgSlug: string;
   clients: ClientOption[];
@@ -89,6 +92,7 @@ export function CreateProjectDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   attachableDocuments?: AttachableDocument[];
+  deductions?: DeductionOption[];
 }) {
   const router = useRouter();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
@@ -98,6 +102,7 @@ export function CreateProjectDialog({
   const selected = defaultClientId ?? clients[0]?.id ?? "";
   const [clientId, setClientId] = useState(selected);
   const [billingMode, setBillingMode] = useState<string>("hourly");
+  const [retainerBasis, setRetainerBasis] = useState<"fixed" | "hourly">("fixed");
   const clientCurrency = clients.find((client) => client.id === clientId)?.currency ?? "USD";
 
   useEffect(() => {
@@ -135,12 +140,12 @@ export function CreateProjectDialog({
         action={(formData) => {
           start(async () => {
             const result = await createProjectAction(orgSlug, formData);
-            if (result.error) {
+            if ("error" in result) {
               toast.error(result.error);
               return;
             }
             try {
-              await uploadProjectAttachments(orgSlug, result.id!, formData);
+              await uploadProjectAttachments(orgSlug, result.id, formData);
             } catch (error) {
               toast.error(
                 error instanceof Error
@@ -194,28 +199,51 @@ export function CreateProjectDialog({
               <option value="single_charge">Single contracted charge</option>
               <option value="milestones">Milestones</option>
               <option value="manual">Manual</option>
+              <option value="monthly">Monthly retainer</option>
               <option value="none">None (track only)</option>
             </NativeSelect>
           </Field>
         </div>
-        {billingMode === "hourly" ? <HourlyRateField currency={clientCurrency} /> : null}
-        <Field label="Platform fee" htmlFor="default_fee_bps">
-          <NativeSelect id="default_fee_bps" name="default_fee_bps" defaultValue="500">
-            <option value="0">None (0%)</option>
-            <option value="400">4%</option>
-            <option value="500">5% Upwork</option>
-            <option value="1300">13%</option>
-          </NativeSelect>
-        </Field>
+        {billingMode === "monthly" ? (
+          <Field
+            label="Retainer"
+            htmlFor="retainer_basis"
+            hint="Fixed posts the same amount each month. Hourly adds up the hours logged that month."
+          >
+            <NativeSelect
+              id="retainer_basis"
+              name="retainer_basis"
+              value={retainerBasis}
+              onChange={(event) => setRetainerBasis(event.target.value === "hourly" ? "hourly" : "fixed")}
+            >
+              <option value="fixed">Fixed amount</option>
+              <option value="hourly">Hourly</option>
+            </NativeSelect>
+          </Field>
+        ) : null}
+        {billingMode === "hourly" || (billingMode === "monthly" && retainerBasis === "hourly") ? (
+          <HourlyRateField currency={clientCurrency} />
+        ) : null}
+        <DeductionField orgSlug={orgSlug} inputName="default_fee_bps" defaultBps={500} deductions={deductions} />
         <Field label="Partner earn on" htmlFor="earn_on" hint="When partners earn their share of net">
           <NativeSelect id="earn_on" name="earn_on" defaultValue="charge">
             <option value="charge">When charged</option>
             <option value="receipt">When collected</option>
           </NativeSelect>
         </Field>
-        <Field label="Contracted amount" htmlFor="contracted_amount">
+        {billingMode === "monthly" && retainerBasis === "hourly" ? null : (
+        <Field
+          label={billingMode === "monthly" ? "Amount per month" : "Contracted amount"}
+          htmlFor="contracted_amount"
+          hint={
+            billingMode === "monthly"
+              ? "Posted each month. Tax and deductions come off before the split."
+              : undefined
+          }
+        >
           <Input id="contracted_amount" name="contracted_amount" inputMode="decimal" placeholder="Optional" />
         </Field>
+        )}
         <div className="grid grid-cols-2 gap-4">
           <Field label="Starts" htmlFor="starts_on">
             <Input id="starts_on" name="starts_on" type="date" />
@@ -269,14 +297,19 @@ export function EditProjectForm({
   orgSlug,
   project,
   clients,
+  deductions = [],
 }: {
   orgSlug: string;
   project: ProjectRecord;
   clients: ClientRecord[];
+  deductions?: DeductionOption[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [billingMode, setBillingMode] = useState<string>(project.billingMode);
+  const [retainerBasis, setRetainerBasis] = useState<"fixed" | "hourly">(
+    project.retainerBasis === "hourly" ? "hourly" : "fixed",
+  );
   const [clientId, setClientId] = useState(project.clientId);
   const [confirmTransferOpen, setConfirmTransferOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -288,7 +321,7 @@ export function EditProjectForm({
     if (confirmedTransfer) formData.set("confirm_financial_transfer", "yes");
     start(async () => {
       const result = await updateProjectAction(orgSlug, project.id, formData);
-      if (result.error) {
+      if ("error" in result) {
         toast.error(result.error);
         return;
       }
@@ -356,11 +389,29 @@ export function EditProjectForm({
             <option value="single_charge">Single contracted charge</option>
             <option value="milestones">Milestones</option>
             <option value="manual">Manual</option>
+            <option value="monthly">Monthly retainer</option>
             <option value="none">None (track only)</option>
           </NativeSelect>
         </Field>
       </div>
-      {billingMode === "hourly" ? (
+      {billingMode === "monthly" ? (
+        <Field
+          label="Retainer"
+          htmlFor="retainer_basis"
+          hint="Fixed posts the same amount each month. Hourly adds up the hours logged that month."
+        >
+          <NativeSelect
+            id="retainer_basis"
+            name="retainer_basis"
+            value={retainerBasis}
+            onChange={(event) => setRetainerBasis(event.target.value === "hourly" ? "hourly" : "fixed")}
+          >
+            <option value="fixed">Fixed amount</option>
+            <option value="hourly">Hourly</option>
+          </NativeSelect>
+        </Field>
+      ) : null}
+      {billingMode === "hourly" || (billingMode === "monthly" && retainerBasis === "hourly") ? (
         <HourlyRateField
           currency={project.currency}
           defaultValue={
@@ -368,21 +419,28 @@ export function EditProjectForm({
           }
         />
       ) : null}
-      <Field label="Platform fee" htmlFor="default_fee_bps">
-        <NativeSelect id="default_fee_bps" name="default_fee_bps" defaultValue={String(project.defaultFeeBps)}>
-          <option value="0">None (0%)</option>
-          <option value="400">4%</option>
-          <option value="500">5% Upwork</option>
-          <option value="1300">13%</option>
-        </NativeSelect>
-      </Field>
+      <DeductionField
+        orgSlug={orgSlug}
+        inputName="default_fee_bps"
+        defaultBps={project.defaultFeeBps}
+        deductions={deductions}
+      />
       <Field label="Partner earn on" htmlFor="earn_on">
         <NativeSelect id="earn_on" name="earn_on" defaultValue={project.earnOn}>
           <option value="charge">When charged</option>
           <option value="receipt">When collected</option>
         </NativeSelect>
       </Field>
-      <Field label="Contracted amount" htmlFor="contracted_amount">
+      {billingMode === "monthly" && retainerBasis === "hourly" ? null : (
+      <Field
+        label={billingMode === "monthly" ? "Amount per month" : "Contracted amount"}
+        htmlFor="contracted_amount"
+        hint={
+          billingMode === "monthly"
+            ? "Posted each month. Tax and deductions come off before the split."
+            : undefined
+        }
+      >
         <Input
           id="contracted_amount"
           name="contracted_amount"
@@ -394,6 +452,7 @@ export function EditProjectForm({
           }
         />
       </Field>
+      )}
       <div className="grid grid-cols-2 gap-4">
         <Field label="Starts" htmlFor="starts_on">
           <Input id="starts_on" name="starts_on" type="date" defaultValue={project.startsOn ?? ""} />
@@ -441,6 +500,7 @@ export function ProjectSettingsSheet({
   open,
   onOpenChange,
   canDelete = false,
+  deductions = [],
 }: {
   orgSlug: string;
   project: ProjectRecord;
@@ -448,6 +508,7 @@ export function ProjectSettingsSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   canDelete?: boolean;
+  deductions?: DeductionOption[];
 }) {
   return (
     <ActionSheet
@@ -456,7 +517,7 @@ export function ProjectSettingsSheet({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <EditProjectForm orgSlug={orgSlug} project={project} clients={clients} />
+      <EditProjectForm orgSlug={orgSlug} project={project} clients={clients} deductions={deductions} />
       {canDelete ? <ProjectDangerZone orgSlug={orgSlug} project={project} /> : null}
     </ActionSheet>
   );
@@ -570,7 +631,9 @@ export function WorkLogComposer({
                   : defaultRateLabel
                     ? `Hours × ${defaultRateLabel} from project settings. Change the rate for this log if needed.`
                     : "Enter hours and a rate. Set a default rate per hour in project settings."
-              : "Track time without billing."}
+              : billingMode === "monthly"
+                ? "These hours are added into this month's charge when you post it."
+                : "Track time without billing."}
           </p>
         </div>
         {posts ? (
@@ -971,12 +1034,12 @@ export function PostContractedChargeButton({
             toast.error(result.error);
             return;
           }
-          toast.success("Contracted charge posted");
+          toast.success(billingMode === "monthly" ? "This month posted" : "Contracted charge posted");
           router.refresh();
         });
       }}
     >
-      {pending ? "Posting…" : "Post contracted charge"}
+      {pending ? "Posting…" : billingMode === "monthly" ? "Post this month" : "Post contracted charge"}
     </Button>
   );
 }
@@ -1069,6 +1132,7 @@ export function ProjectOverflow({
   canDelete = false,
   settingsOpenInitially = false,
   returnHref,
+  deductions = [],
 }: {
   orgSlug: string;
   project: ProjectRecord;
@@ -1077,6 +1141,7 @@ export function ProjectOverflow({
   /** Opened from a `?settings=1` link; closing drops the param. */
   settingsOpenInitially?: boolean;
   returnHref?: string;
+  deductions?: DeductionOption[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -1091,6 +1156,7 @@ export function ProjectOverflow({
       project={project}
       clients={clients}
       canDelete={canDelete}
+      deductions={deductions}
       open={settingsOpen}
       onOpenChange={(next) => {
         setSettingsOpen(next);
@@ -1119,12 +1185,14 @@ export function ProjectOverflow({
                   toast.error(result.error);
                   return;
                 }
-                toast.success("Contracted charge posted");
+                toast.success(
+                  project.billingMode === "monthly" ? "This month posted" : "Contracted charge posted",
+                );
                 router.refresh();
               });
             }}
           >
-            Post contracted charge
+            {project.billingMode === "monthly" ? "Post this month" : "Post contracted charge"}
           </DropdownMenuItem>
         ) : null}
         <DropdownMenuItem onClick={() => setSettingsOpen(true)}>

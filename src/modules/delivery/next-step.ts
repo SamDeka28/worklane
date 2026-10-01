@@ -14,6 +14,9 @@ export function projectNextStep(input: {
   unbilledMilestones: number;
   outstandingMinor: bigint;
   milestoneCount?: number;
+  retainerBasis?: "fixed" | "hourly" | null;
+  /** Monthly retainers: false until this calendar month has a charge. */
+  chargedThisMonth?: boolean;
 }): ProjectNextStep {
   const milestoneCount = input.milestoneCount ?? 0;
 
@@ -35,6 +38,25 @@ export function projectNextStep(input: {
       detail: "Hourly projects post a charge when you log hours or a fixed amount.",
       tab: "work",
       cta: "Log work",
+    };
+  }
+  if (input.billingMode === "monthly" && input.retainerBasis === "hourly" && input.logCount === 0) {
+    return {
+      title: "Log this month's hours",
+      detail: "An hourly retainer bills the time you log. Post the month once the hours are in.",
+      tab: "work",
+      cta: "Log work",
+    };
+  }
+  if (input.billingMode === "monthly" && input.chargedThisMonth === false) {
+    return {
+      title: "Post this month",
+      detail:
+        input.retainerBasis === "hourly"
+          ? "Add up this month's hours into one charge. Tax and deductions come off before the split."
+          : "Charge the monthly amount. Tax and deductions come off before the split.",
+      tab: "money",
+      cta: "Post this month",
     };
   }
   if (input.unbilledMilestones > 0) {

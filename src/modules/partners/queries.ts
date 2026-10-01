@@ -9,10 +9,10 @@ import type {
   PartnerSettlement,
   ProjectMemberRecord,
 } from "@/modules/partners/types";
-import { splitByBps, type IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, splitByBps, type IsoCurrency } from "@/shared/money";
 
 function asCurrency(value: string): IsoCurrency {
-  return value === "INR" ? "INR" : "USD";
+  return asIsoCurrency(value);
 }
 
 function asKind(value: string): PartnerKind {

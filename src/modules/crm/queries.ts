@@ -21,7 +21,7 @@ import { resolveSender } from "@/modules/email-senders/server";
 import { senderSignatureState } from "@/modules/email-signatures/server";
 import type { RenderedSignature } from "@/modules/email-signatures/types";
 import type { SenderVia } from "@/modules/email-senders/types";
-import type { IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, type IsoCurrency } from "@/shared/money";
 
 type LeadRow = {
   id: string;
@@ -66,7 +66,7 @@ type LeadStageRow = {
 };
 
 function asCurrency(value: string): IsoCurrency {
-  return value === "INR" ? "INR" : "USD";
+  return asIsoCurrency(value);
 }
 
 function asOrigin(value: string | null | undefined): LeadOrigin {

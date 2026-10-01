@@ -32,8 +32,16 @@ export function workLogPostsCharge(mode: BillingMode): boolean {
   return mode === "hourly";
 }
 
+/** Hourly billing, or a monthly retainer that bills the hours logged that month. */
+export function projectTracksTime(
+  mode: BillingMode,
+  retainerBasis: "fixed" | "hourly" | null,
+): boolean {
+  return mode === "hourly" || (mode === "monthly" && retainerBasis === "hourly");
+}
+
 export function allowsContractedProjectCharge(mode: BillingMode): boolean {
-  return mode === "single_charge" || mode === "manual";
+  return mode === "single_charge" || mode === "manual" || mode === "monthly";
 }
 
 export function allowsMilestoneBilling(mode: BillingMode): boolean {

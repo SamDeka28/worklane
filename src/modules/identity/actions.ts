@@ -7,6 +7,7 @@ import { requireSupabase } from "@/shared/db/require-user";
 import { requireOrg, requireWritableOrg } from "@/modules/identity/org";
 import { parseInvoiceBusiness } from "@/modules/invoices/settings";
 import { extraFieldsFromForm } from "@/modules/invoices/types";
+import { asIsoCurrency } from "@/shared/money";
 
 export async function signOutAction() {
   const supabase = await requireSupabase();
@@ -70,10 +71,16 @@ export async function updateOrgAction(orgSlug: string, formData: FormData) {
   if (!name) {
     return { error: "Name is required" };
   }
+  const currency = String(formData.get("currency") ?? ctx.org.defaultCurrency)
+    .trim()
+    .toUpperCase();
+  if (asIsoCurrency(currency) !== currency) {
+    return { error: "Pick a supported currency" };
+  }
 
   const { error } = await ctx.supabase
     .from("organizations")
-    .update({ name })
+    .update({ name, default_currency: currency })
     .eq("id", ctx.org.id);
 
   if (error) {

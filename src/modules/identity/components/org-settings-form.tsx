@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/studio/field";
+import { CurrencySelect } from "@/components/studio/currency-select";
 import {
   updateOrgAction,
   updateOrgBusinessAction,
@@ -17,10 +18,12 @@ import type { InvoiceBusiness } from "@/modules/invoices/settings";
 export function OrgSettingsForm({
   orgSlug,
   name,
+  defaultCurrency,
   canWrite,
 }: {
   orgSlug: string;
   name: string;
+  defaultCurrency: string;
   canWrite: boolean;
 }) {
   const router = useRouter();
@@ -44,6 +47,17 @@ export function OrgSettingsForm({
       >
         <Field label="Studio name" htmlFor="name">
           <Input id="name" name="name" defaultValue={name} disabled={!canWrite} />
+        </Field>
+        <Field
+          label="Default currency"
+          htmlFor="default_currency"
+          hint="Used for new clients and leads. Existing clients keep the currency they were created with, and invoices follow the client."
+        >
+          <CurrencySelect
+            id="default_currency"
+            defaultValue={defaultCurrency}
+            disabled={!canWrite}
+          />
         </Field>
         {canWrite ? (
           <Button

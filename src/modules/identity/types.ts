@@ -1,3 +1,5 @@
+import type { IsoCurrency } from "@/shared/money";
+
 export const ORG_ROLES = [
   "owner",
   "admin",
@@ -34,7 +36,7 @@ export type Organization = {
   id: string;
   slug: string;
   name: string;
-  defaultCurrency: "USD" | "INR";
+  defaultCurrency: IsoCurrency;
   timezone: string;
   modules: OrgModules;
 };

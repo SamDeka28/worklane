@@ -8,7 +8,7 @@ import {
   type InvoiceRecord,
   type InvoiceStatus,
 } from "@/modules/invoices/types";
-import type { IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, type IsoCurrency } from "@/shared/money";
 
 type InvoiceRow = {
   id: string;
@@ -53,7 +53,7 @@ type LineRow = {
 };
 
 function asCurrency(value: string): IsoCurrency {
-  return value === "INR" ? "INR" : "USD";
+  return asIsoCurrency(value);
 }
 
 function mapLine(row: LineRow): InvoiceLine {

@@ -6,6 +6,7 @@ import type {
   ContactRecord,
 } from "@/modules/clients/types";
 import { requireOrg } from "@/modules/identity/org";
+import { asIsoCurrency } from "@/shared/money";
 
 function mapClient(row: {
   id: string;
@@ -25,7 +26,7 @@ function mapClient(row: {
     name: row.name,
     notes: row.notes,
     notesDoc: row.notes_doc ?? null,
-    currency: row.currency === "INR" ? "INR" : "USD",
+    currency: asIsoCurrency(row.currency),
     archivedAt: row.archived_at,
     createdAt: row.created_at,
   };

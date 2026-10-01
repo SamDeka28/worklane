@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { requireOrg } from "@/modules/identity/org";
 import { asLedgerMinor } from "@/modules/finance/ledger";
+import { asIsoCurrency, type IsoCurrency } from "@/shared/money";
 import type {
   BoardColumn,
   BoardTask,
@@ -53,6 +54,7 @@ function mapProject(row: {
   earn_on: string;
   contracted_amount_minor: string | number | null;
   hourly_rate_minor?: string | number | null;
+  retainer_basis?: string | null;
   scope: string | null;
   scope_doc: Record<string, unknown> | null;
   starts_on: string | null;
@@ -66,7 +68,7 @@ function mapProject(row: {
     organizationId: row.organization_id,
     clientId: row.client_id,
     clientName: client?.name ?? "Client",
-    currency: client?.currency === "INR" ? "INR" : "USD",
+    currency: asIsoCurrency(client?.currency),
     name: row.name,
     status: asStatus(row.status, PROJECT_STATUSES, "active"),
     billingMode: asStatus(row.billing_mode, BILLING_MODES, "hourly"),
@@ -75,6 +77,8 @@ function mapProject(row: {
     contractedAmountMinor:
       row.contracted_amount_minor == null ? null : asLedgerMinor(row.contracted_amount_minor),
     hourlyRateMinor: row.hourly_rate_minor == null ? null : asLedgerMinor(row.hourly_rate_minor),
+    retainerBasis:
+      row.billing_mode === "monthly" ? (row.retainer_basis === "hourly" ? "hourly" : "fixed") : null,
     scope: row.scope,
     scopeDoc: row.scope_doc,
     startsOn: row.starts_on,
@@ -84,7 +88,7 @@ function mapProject(row: {
 }
 
 const PROJECT_SELECT =
-  "id, organization_id, client_id, name, status, billing_mode, default_fee_bps, earn_on, contracted_amount_minor, hourly_rate_minor, scope, scope_doc, starts_on, due_on, created_at, clients(name, currency)";
+  "id, organization_id, client_id, name, status, billing_mode, default_fee_bps, earn_on, contracted_amount_minor, hourly_rate_minor, retainer_basis, scope, scope_doc, starts_on, due_on, created_at, clients(name, currency)";
 
 export const listProjects = cache(async (orgSlug: string) => {
   const { org, supabase } = await requireOrg(orgSlug);
@@ -625,7 +629,7 @@ export const listExpectedBillings = cache(async (orgSlug: string, dueFrom?: stri
     projectName: string;
     clientId: string;
     clientName: string;
-    currency: "USD" | "INR";
+    currency: IsoCurrency;
     name: string;
     amountMinor: bigint;
     dueOn: string;
@@ -654,7 +658,7 @@ export const listExpectedBillings = cache(async (orgSlug: string, dueFrom?: stri
     projectName: string;
     clientId: string;
     clientName: string;
-    currency: "USD" | "INR";
+    currency: IsoCurrency;
     name: string;
     amountMinor: bigint;
     dueOn: string;
@@ -672,7 +676,7 @@ export const listExpectedBillings = cache(async (orgSlug: string, dueFrom?: stri
       projectName: projectJoin.name as string,
       clientId: projectJoin.client_id as string,
       clientName: (clientJoin?.name as string | undefined) ?? "Client",
-      currency: clientJoin?.currency === "INR" ? "INR" : "USD",
+      currency: asIsoCurrency(clientJoin?.currency),
       name: row.name as string,
       amountMinor: asLedgerMinor(row.amount_minor as string | number | bigint),
       dueOn: row.due_on as string,

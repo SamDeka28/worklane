@@ -36,7 +36,7 @@ import type {
   ProjectMemberRecord,
 } from "@/modules/partners/types";
 import { moneyLabel } from "@/modules/finance/ledger";
-import { formatMajorInput, netFromGross, parseMajorToMinor } from "@/shared/money";
+import { formatMajorInput, netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
 type TriggerSize =
   | "default"
@@ -68,7 +68,7 @@ export type SplitDialogSeed = {
   }[];
 };
 
-function formatPoolAmountInput(amountMinor: bigint, currency: "USD" | "INR") {
+function formatPoolAmountInput(amountMinor: bigint, currency: IsoCurrency) {
   const raw = formatMajorInput(amountMinor, currency);
   return raw.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "");
 }
@@ -479,7 +479,7 @@ export function ProjectSplitDialog({
   }[];
   partners?: PartnerRecord[];
   partnersByProjectId?: Record<string, PartnerRecord[]>;
-  currency?: "USD" | "INR";
+  currency?: IsoCurrency;
   /** Latest saved split for the default project (reopen Edit split with real values). */
   initialSplit?: SplitDialogSeed | null;
   initialSplitsByProjectId?: Record<string, SplitDialogSeed>;
@@ -784,7 +784,7 @@ export function ProjectSplitDialog({
           </div>
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">
-              Platform fee{feeBps > 0 ? ` (${(feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2)}%)` : ""}
+              Tax / deduction{feeBps > 0 ? ` (${(feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2)}%)` : ""}
             </span>
             <span className="tabular-nums text-muted-foreground">
               {feeMinor > BigInt(0) ? `−${moneyLabel(feeMinor, currency)}` : moneyLabel(BigInt(0), currency)}

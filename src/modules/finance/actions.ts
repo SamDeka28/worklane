@@ -8,11 +8,10 @@ import {
   voidPartnerAllocationsForPayment,
 } from "@/modules/partners/allocate";
 import { notify, orgManagerIds } from "@/modules/notifications/service";
-import { formatMoney, netFromGross, parseMajorToMinor } from "@/shared/money";
-import type { IsoCurrency } from "@/shared/money";
+import { asIsoCurrency, formatMoney, netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
-  return value === "INR" || value === "USD" ? value : fallback;
+  return asIsoCurrency(value, fallback);
 }
 
 export async function createChargeAction(orgSlug: string, formData: FormData) {

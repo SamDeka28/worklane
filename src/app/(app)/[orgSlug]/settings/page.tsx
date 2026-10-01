@@ -241,12 +241,13 @@ async function SettingsContent({
 
   return (
     <SettingsPanel title="Studio" hint="Your studio's name and account">
-      <OrgSettingsForm orgSlug={orgSlug} name={ctx.org.name} canWrite={ctx.canWrite} />
-      <dl className="mt-8 grid max-w-lg gap-3 border-t border-border/50 pt-5 text-sm sm:grid-cols-3">
-        <div>
-          <dt className="text-xs text-muted-foreground">Currency</dt>
-          <dd className="mt-0.5 font-medium">{ctx.org.defaultCurrency}</dd>
-        </div>
+      <OrgSettingsForm
+        orgSlug={orgSlug}
+        name={ctx.org.name}
+        defaultCurrency={ctx.org.defaultCurrency}
+        canWrite={ctx.canWrite}
+      />
+      <dl className="mt-8 grid max-w-lg gap-3 border-t border-border/50 pt-5 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-xs text-muted-foreground">Your role</dt>
           <dd className="mt-0.5 font-medium capitalize">{ctx.role}</dd>

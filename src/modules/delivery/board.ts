@@ -16,6 +16,7 @@ export const BILLING_MODE_LABEL: Record<ProjectRecord["billingMode"], string> = 
   milestones: "Milestones",
   hourly: "Hourly",
   manual: "Manual",
+  monthly: "Monthly",
 };
 
 export function projectMoneyStats(

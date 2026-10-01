@@ -238,7 +238,7 @@ export function AddInvoiceLineForm({
 
   return (
     <form
-      className="grid gap-2 rounded-xl border border-dashed border-border/70 p-3"
+      className="grid min-w-0 gap-2 rounded-xl border border-dashed border-border/70 p-3"
       autoComplete="off"
       action={(formData) => {
         percentFieldToBps(formData, "tax_percent", "tax_bps");
@@ -298,7 +298,7 @@ export function AddInvoiceLineForm({
           ))}
         </datalist>
       ) : null}
-      <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] gap-2">
+      <div className="flex min-w-0 gap-2">
         <Input
           name="quantity"
           aria-label="Quantity"
@@ -307,6 +307,7 @@ export function AddInvoiceLineForm({
           min={0}
           value={quantity}
           onChange={(event) => setQuantity(event.target.value)}
+          className="w-16 shrink-0 px-2"
         />
         <Input
           name="unit_amount"
@@ -316,8 +317,9 @@ export function AddInvoiceLineForm({
           required
           value={rate}
           onChange={(event) => setRate(event.target.value)}
+          className="min-w-0 flex-1"
         />
-        <Button type="submit" disabled={pending} className="gap-1.5">
+        <Button type="submit" size="sm" disabled={pending} className="shrink-0 px-3">
           <Plus className="size-4" />
           {pending ? "Adding…" : "Add"}
         </Button>
@@ -383,7 +385,7 @@ export function InvoiceLineEditor({
   }
 
   return (
-    <div className="space-y-1.5">
+    <div className="min-w-0 space-y-1.5">
       {invoice.lines.map((line) =>
         editingId === line.id ? (
           <LineEditRow
@@ -413,11 +415,11 @@ export function InvoiceLineEditor({
         ) : (
           <div
             key={line.id}
-            className="group flex items-center gap-2 rounded-2xl bg-muted/40 py-2 pr-1.5 pl-3 text-sm"
+            className="group flex min-w-0 items-center gap-2 rounded-2xl bg-muted/40 py-2 pr-1.5 pl-3 text-sm"
           >
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{line.description}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="truncate text-xs text-muted-foreground">
                 {line.quantity} ×{" "}
                 {formatMoney({
                   amountMinor: line.unitAmountMinor,
