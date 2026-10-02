@@ -1,10 +1,9 @@
-import { Download } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { CopyAddress } from "@/app/connect/copy-address";
+import { PluginDownloadForm } from "@/app/connect/plugin-download-form";
 import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { approveMcpAccessAction, denyMcpAccessAction } from "@/modules/mcp/actions";
 import { clientAllowsRedirect, normalizeScope, resolveOauthClient } from "@/modules/mcp/oauth";
 import { originFromHeaders } from "@/modules/mcp/origin";
@@ -104,8 +103,8 @@ export default async function ConnectPage({
                   "Open the Worklane plugin you just created.",
                   "Copy the app id from the page address. It starts with asdk_app_. Pasting the whole address works.",
                   <>
-                    Download <span className="whitespace-nowrap">version {PLUGIN_VERSION}</span> as
-                    worklane.zip, then upload it as a new version of that plugin.
+                    Download <span className="whitespace-nowrap">version {PLUGIN_VERSION}</span> and
+                    upload that file as a new version of the same plugin. Keep the file name.
                   </>,
                 ].map((step, index) => (
                   <li key={index} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
@@ -116,35 +115,7 @@ export default async function ConnectPage({
                   </li>
                 ))}
               </ol>
-              <form action="/connect/plugin" className="mt-5 flex flex-col gap-2">
-                <label htmlFor="app_id" className="text-sm font-medium text-foreground">
-                  App id
-                </label>
-                <Input
-                  id="app_id"
-                  name="app_id"
-                  required
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="asdk_app_…"
-                  defaultValue={value("app_id")}
-                  aria-invalid={invalidAppId || undefined}
-                  className="font-mono text-xs font-normal"
-                />
-                {invalidAppId ? (
-                  <p className="text-sm text-destructive">
-                    That is not an app id. Copy the asdk_app_ value from the ChatGPT address.
-                  </p>
-                ) : (
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    If the address shows plugin_asdk_app_, paste it as it is.
-                  </p>
-                )}
-                <Button type="submit" className="mt-2">
-                  <Download data-icon="inline-start" />
-                  Download plugin
-                </Button>
-              </form>
+              <PluginDownloadForm defaultAppId={value("app_id")} invalid={invalidAppId} />
             </section>
           </div>
         </div>
