@@ -14,6 +14,7 @@ import {
 } from "@/modules/partners/ledger";
 import type { PartnerKind } from "@/modules/partners/types";
 import { asIsoCurrency, formatMoney, netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
+import { createPartnerRecord, isWriteError } from "@/modules/records/mutate";
 
 function asKind(value: string): PartnerKind {
   if (value === "originator" || value === "referral") return value;
@@ -53,37 +54,8 @@ export async function createPartnerAction(orgSlug: string, formData: FormData) {
       return { error: "Invalid notes document" };
     }
   }
-  if (!name) return { error: "Partner name is required" };
-  if (!email || !email.includes("@")) return { error: "Enter a valid email" };
-
-  const { data, error } = await ctx.supabase
-    .from("partners")
-    .insert({
-      organization_id: ctx.org.id,
-      name,
-      email,
-      kind,
-      notes,
-      notes_doc: notesDoc,
-      active: true,
-    })
-    .select("id")
-    .single();
-  if (error || !data) {
-    if (error?.message?.includes("partners_org_email_uidx")) {
-      return { error: "A partner with that email already exists" };
-    }
-    return { error: error?.message ?? "Could not create partner" };
-  }
-
-  await ctx.supabase.from("activities").insert({
-    organization_id: ctx.org.id,
-    actor_id: ctx.userId,
-    verb: "created",
-    entity_type: "partner",
-    entity_id: data.id,
-    metadata: { name, kind, email },
-  });
+  const created = await createPartnerRecord(ctx, { name, email, kind, notes, notesDoc });
+  if (isWriteError(created)) return { error: created.error };
   await notifyOwners({
     organizationId: ctx.org.id,
     orgName: ctx.org.name,
@@ -92,7 +64,7 @@ export async function createPartnerAction(orgSlug: string, formData: FormData) {
     title: (actor) => `${actor} added partner ${name}`,
     body: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} · ${email}`,
     href: `/${orgSlug}/partners`,
-    entity: { type: "partner", id: data.id as string },
+    entity: { type: "partner", id: created.id as string },
     actionLabel: "View partners",
   });
 
@@ -100,13 +72,13 @@ export async function createPartnerAction(orgSlug: string, formData: FormData) {
   const inviteData = new FormData();
   inviteData.set("email", email);
   inviteData.set("role", "partner");
-  inviteData.set("partner_id", data.id as string);
+  inviteData.set("partner_id", created.id as string);
   inviteData.set("display_name", name);
   const invite = await inviteOrgMemberAction(orgSlug, inviteData);
   if (invite.error) {
     revalidatePath(`/${orgSlug}/partners`);
     return {
-      id: data.id as string,
+      id: created.id as string,
       warning: `Partner saved, but invite failed: ${invite.error}`,
     };
   }
@@ -114,7 +86,7 @@ export async function createPartnerAction(orgSlug: string, formData: FormData) {
   revalidatePath(`/${orgSlug}/partners`);
   revalidatePath(`/${orgSlug}/team`);
   return {
-    id: data.id as string,
+    id: created.id as string,
     emailed: invite.emailed,
     acceptUrl: invite.acceptUrl,
     alreadyMember: invite.alreadyMember,

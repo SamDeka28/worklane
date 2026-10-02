@@ -225,13 +225,12 @@ async function deliverLeadEmail(
   return { ok: true as const };
 }
 
-/** Sends a one-to-one email to an existing lead. */
-export async function sendLeadEmailAction(
-  orgSlug: string,
+/** Sends a one-to-one email to an existing lead. The caller already resolved the studio. */
+export async function sendLeadEmailForContext(
+  ctx: Ctx,
   leadId: string,
   input: SendLeadEmailInput,
 ) {
-  const ctx = await requireWritableOrg(orgSlug);
   const allowed = await sendAllowed(ctx);
   if ("error" in allowed) return { error: allowed.error };
   const parsed = parseEmail(input);
@@ -283,9 +282,22 @@ export async function sendLeadEmailAction(
   );
   if ("error" in sent) return { error: sent.error };
 
-  revalidatePath(`/${orgSlug}/crm`);
-  revalidatePath(`/${orgSlug}`);
   return { ok: true as const, tracked: input.trackOpens };
+}
+
+/** Sends a one-to-one email to an existing lead. */
+export async function sendLeadEmailAction(
+  orgSlug: string,
+  leadId: string,
+  input: SendLeadEmailInput,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const sent = await sendLeadEmailForContext(ctx, leadId, input);
+  if (!("error" in sent)) {
+    revalidatePath(`/${orgSlug}/crm`);
+    revalidatePath(`/${orgSlug}`);
+  }
+  return sent;
 }
 
 /** Starts a lead by emailing them: creates the lead, then sends and logs the first email. */

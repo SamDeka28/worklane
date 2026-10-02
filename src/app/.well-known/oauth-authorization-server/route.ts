@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { OFFLINE_SCOPE, READ_SCOPE, requestOrigin } from "@/modules/mcp/origin";
+import { OFFLINE_SCOPE, READ_SCOPE, WRITE_SCOPE, requestOrigin } from "@/modules/mcp/origin";
 
 export function GET(request: Request) {
   const origin = requestOrigin(request);
@@ -14,6 +14,6 @@ export function GET(request: Request) {
     token_endpoint_auth_methods_supported: ["none"],
     client_id_metadata_document_supported: true,
     authorization_response_iss_parameter_supported: true,
-    scopes_supported: [READ_SCOPE, OFFLINE_SCOPE],
+    scopes_supported: [READ_SCOPE, WRITE_SCOPE, OFFLINE_SCOPE],
   });
 }

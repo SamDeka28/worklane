@@ -410,9 +410,50 @@ export const ACCOUNT: DocArticle[] = [
         ],
       },
       {
-        type: "callout",
-        tone: "note",
-        text: "An assistant cannot create clients, post charges, or send email. Disconnect it any time from Profile → Connected assistants. The next request has to sign in again.",
+        type: "p",
+        text: "Reading is included with that connection. Changes need a separate allow. See [Use Worklane from ChatGPT](/docs/use-worklane-from-chatgpt).",
+      },
+    ],
+  },
+  {
+    slug: "use-worklane-from-chatgpt",
+    title: "Use Worklane from ChatGPT",
+    summary: "Connect ChatGPT, allow changes, and see what the assistant can read, create, and send.",
+    category: "account",
+    kind: "how-to",
+    related: ["assistants", "roles-and-access"],
+    blocks: [
+      {
+        type: "p",
+        text: "ChatGPT uses the same access you already have in the studio. Open [Connect using MCP](/connect), sign in, and install the plugin from that page.",
+      },
+      { type: "h2", text: "Read access and change access" },
+      {
+        type: "list",
+        items: [
+          "A connection can always read the records you can already open: notes, document text, emails, timelines, and settings.",
+          "Creating, changing, voiding, or sending needs the write allow on the Connect page.",
+          "An older connection that only allowed reading stays that way until you connect again from a change and allow it.",
+        ],
+      },
+      { type: "h2", text: "What it can change" },
+      {
+        type: "p",
+        text: "It can create and update clients, projects, tasks, work logs, charges, receipts, invoices, leads, documents, partners, and portal shares, using the same rules as the app. It previews a document, invoice, or email before saving or sending. Amounts are entered the way you type them on a form, such as 1500, in that client's currency.",
+      },
+      { type: "h2", text: "What it will not do" },
+      {
+        type: "list",
+        items: [
+          "It cannot sign you out or switch accounts.",
+          "Mailbox passwords, invitation tokens, and file bytes are not copied into the chat. A vault secret appears only when you ask to reveal that entry.",
+          "A PDF or image is named. The assistant does not open the file.",
+        ],
+      },
+      { type: "h2", text: "Disconnect" },
+      {
+        type: "p",
+        text: "Open Profile → Connected assistants and disconnect the app. The next request has to sign in again.",
       },
     ],
   },

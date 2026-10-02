@@ -36,6 +36,8 @@ export type Dataset = {
   relations: Relation[];
   /** Team list is members plus profile names, not a single business table. */
   members?: boolean;
+  /** One row of studio settings, not a business table of records. */
+  settings?: boolean;
 };
 
 const id = (name: string, meaning: string): Field => ({
@@ -45,9 +47,9 @@ const id = (name: string, meaning: string): Field => ({
   meaning,
 });
 
-const text = (name: string, meaning: string, searchable = false): Field => ({
+const text = (name: string, meaning: string, searchable = false, column = name): Field => ({
   name,
-  column: name,
+  column,
   type: "text",
   meaning,
   searchable,
@@ -612,6 +614,7 @@ export const DATASETS: Dataset[] = [
       id("id", "Version id."),
       id("document_id", "Document id."),
       num("version_number", "Version number."),
+      text("text", "Document body as paragraphs and headings. Not the editor file.", true, "content_doc"),
       text("status", "draft, sent, accepted, signed, or void."),
       date("created_at", "When this version was saved."),
       date("locked_at", "When it was locked for sending."),
@@ -735,6 +738,93 @@ export const DATASETS: Dataset[] = [
       text("action", "created, updated, or deleted."),
       text("changes", "Fields that changed."),
       date("created_at", "When it happened."),
+    ],
+    relations: [],
+  },
+  {
+    name: "lead_emails",
+    table: "lead_emails",
+    description: "Emails the studio sent to a lead. The link token is not included.",
+    module: "crm",
+    dateField: "sent_at",
+    orderField: "sent_at",
+    fields: [
+      id("id", "Email id."),
+      id("lead_id", "Lead id."),
+      text("to_email", "Recipient."),
+      text("to_name", "Recipient name."),
+      text("subject", "Subject.", true),
+      text("body", "Message the studio wrote.", true),
+      num("open_count", "How many times the tracking pixel loaded."),
+      date("sent_at", "When it was sent."),
+    ],
+    relations: [{ dataset: "leads", from: "lead_id", to: "id" }],
+  },
+  {
+    name: "tracked_emails",
+    table: "mail_pixels",
+    description: "Emails composed or tracked in the email module. Tokens are not included.",
+    module: null,
+    dateField: "created_at",
+    orderField: "created_at",
+    fields: [
+      id("id", "Email id."),
+      text("subject", "Subject.", true),
+      text("recipient", "Recipient.", true),
+      text("body", "Message body.", true),
+      id("lead_id", "Linked lead, if the recipient matched one."),
+      num("open_count", "Opens recorded."),
+      date("sent_at", "When Worklane sent it. Null when only a tracking pixel was created."),
+      date("created_at", "When it was created."),
+    ],
+    relations: [{ dataset: "leads", from: "lead_id", to: "id" }],
+  },
+  {
+    name: "notifications",
+    table: "notifications",
+    description: "Notifications for the signed-in member.",
+    module: null,
+    dateField: "created_at",
+    orderField: "created_at",
+    fields: [
+      id("id", "Notification id."),
+      text("kind", "Category."),
+      text("title", "Title.", true),
+      text("body", "Detail.", true),
+      date("read_at", "When it was marked read."),
+      date("created_at", "When it arrived."),
+    ],
+    relations: [],
+  },
+  {
+    name: "credentials",
+    table: "project_credentials",
+    description: "Vault entries by name, kind, and project. The secret is not included. Ask to reveal one entry.",
+    module: "delivery",
+    orderField: "name",
+    fields: [
+      id("id", "Credential id."),
+      id("project_id", "Project id."),
+      text("name", "Name.", true),
+      text("kind", "login, api_key, database, server, email, or other."),
+      text("url", "Where it is used."),
+      bool("restricted", "True when only some people can open it."),
+      date("secret_updated_at", "When the secret last changed."),
+    ],
+    relations: [{ dataset: "projects", from: "project_id", to: "id" }],
+  },
+  {
+    name: "settings",
+    table: "organizations",
+    description: "Studio timezone, currency, invoice business details, CRM stages, email templates, notification preferences, and who can see which module. One row. Secrets are not included.",
+    module: null,
+    settings: true,
+    orderField: "name",
+    fields: [
+      text("timezone", "Studio timezone used for last month and other relative dates."),
+      text("currency", "Default currency. Client currencies can differ."),
+      text("modules", "Which modules are turned on."),
+      text("invoice_layout", "Default invoice layout."),
     ],
     relations: [],
   },

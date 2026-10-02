@@ -8,7 +8,7 @@ export const GETTING_STARTED: DocArticle[] = [
       "The studio operating system: sell the work, deliver it, and collect on it — on one continuous record.",
     category: "getting-started",
     kind: "guide",
-    related: ["quick-start", "navigating-worklane", "roles-and-access"],
+    related: ["quick-start", "navigating-worklane", "roles-and-access", "use-worklane-from-chatgpt"],
     blocks: [
       {
         type: "p",
@@ -67,7 +67,7 @@ export const GETTING_STARTED: DocArticle[] = [
         type: "callout",
         tone: "tip",
         title: "New here?",
-        text: "Follow the [Quick start](/docs/quick-start) — it takes you from an empty studio to your first collected payment in about ten minutes.",
+        text: "Follow the [Quick start](/docs/quick-start) — it takes you from an empty studio to your first collected payment in about ten minutes. To ask ChatGPT about the studio, or to let it make changes you allow, see [Use Worklane from ChatGPT](/docs/use-worklane-from-chatgpt).",
       },
     ],
   },

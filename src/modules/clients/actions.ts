@@ -6,6 +6,7 @@ import { canDeleteModule } from "@/modules/identity/permissions";
 import { billToFromForm } from "@/modules/invoices/types";
 import { asIsoCurrency } from "@/shared/money";
 import { notifyOwners } from "@/modules/notifications/service";
+import { createClientRecord, isWriteError, updateClientBillingRecord } from "@/modules/records/mutate";
 
 async function recordActivity(
   ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
@@ -46,47 +47,25 @@ export async function createClientAction(orgSlug: string, formData: FormData) {
   const phone = String(formData.get("phone") ?? "").trim() || null;
   const whatsapp = String(formData.get("whatsapp") ?? "").trim() || null;
 
-  if (!name) {
-    return { error: "Client name is required" };
-  }
-  if (asIsoCurrency(currency) !== currency) {
-    return { error: "Pick a supported currency" };
-  }
-
-  const { data: client, error } = await ctx.supabase
-    .from("clients")
-    .insert({
-      organization_id: ctx.org.id,
-      kind,
-      name,
-      notes,
-      notes_doc: notesDoc,
-      currency,
-      created_by: ctx.userId,
-    })
-    .select("id")
-    .single();
-
-  if (error || !client) {
-    return { error: error?.message ?? "Could not create client" };
+  const created = await createClientRecord(ctx, {
+    name,
+    kind,
+    notes,
+    currency,
+    contactName,
+    email,
+    phone,
+  });
+  if (isWriteError(created)) return { error: created.error };
+  if (whatsapp && created.id) {
+    await ctx.supabase
+      .from("contacts")
+      .update({ whatsapp })
+      .eq("client_id", created.id)
+      .eq("organization_id", ctx.org.id)
+      .eq("is_primary", true);
   }
 
-  if (contactName || email || phone || whatsapp) {
-    const { error: contactError } = await ctx.supabase.from("contacts").insert({
-      organization_id: ctx.org.id,
-      client_id: client.id,
-      name: contactName,
-      email,
-      phone,
-      whatsapp,
-      is_primary: true,
-    });
-    if (contactError) {
-      return { error: contactError.message };
-    }
-  }
-
-  await recordActivity(ctx, "created", "client", client.id, { name });
   await notifyOwners({
     organizationId: ctx.org.id,
     orgName: ctx.org.name,
@@ -94,12 +73,12 @@ export async function createClientAction(orgSlug: string, formData: FormData) {
     category: "clients",
     title: (actor) => `${actor} added client ${name}`,
     body: [contactName, email].filter(Boolean).join(" · ") || "New client in the studio.",
-    href: `/${orgSlug}/clients/${client.id}`,
-    entity: { type: "client", id: client.id as string },
+    href: `/${orgSlug}/clients/${created.id}`,
+    entity: { type: "client", id: created.id as string },
     actionLabel: "View client",
   });
   revalidatePath(`/${orgSlug}`);
-  return { id: client.id as string };
+  return { id: created.id as string };
 }
 
 export async function updateClientAction(orgSlug: string, clientId: string, formData: FormData) {
@@ -198,29 +177,10 @@ export async function updateClientBillingAction(
     !billing.taxId &&
     billing.extras.length === 0;
 
-  const { data: client, error } = await ctx.supabase
-    .from("clients")
-    .update({ billing: empty ? null : billing })
-    .eq("id", clientId)
-    .eq("organization_id", ctx.org.id)
-    .select("name")
-    .maybeSingle();
-
-  if (error) return { error: error.message };
-  if (!client) return { error: "Client not found" };
-
-  let draftsUpdated = 0;
-  if (!empty) {
-    const { data: drafts } = await ctx.supabase
-      .from("invoices")
-      .update({ bill_to: billing })
-      .eq("organization_id", ctx.org.id)
-      .eq("client_id", clientId)
-      .eq("status", "draft")
-      .is("issued_at", null)
-      .select("id");
-    draftsUpdated = drafts?.length ?? 0;
-  }
+  const updated = await updateClientBillingRecord(ctx, clientId, empty ? null : billing);
+  if (isWriteError(updated)) return { error: updated.error };
+  const client = { name: updated.name };
+  const draftsUpdated = Number(updated.draftsUpdated ?? 0);
 
   await recordActivity(ctx, "updated", "client", clientId, {
     name: client.name,

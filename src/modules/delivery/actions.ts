@@ -10,6 +10,7 @@ import {
   parseHours,
 } from "@/modules/delivery/ledger";
 import { statusForColumn } from "@/modules/delivery/board";
+import { createWorkLogRecord, isWriteError } from "@/modules/records/mutate";
 import {
   BILLING_MODES,
   MILESTONE_STATUSES,
@@ -703,119 +704,29 @@ export async function createWorkLogAction(
     return { error: error instanceof Error ? error.message : "Enter a valid amount" };
   }
 
-  let posted;
-  try {
-    posted = chargeFromWorkLog({
-      billingMode: project.billing_mode as BillingMode,
-      hours,
-      hourlyRateMinor,
-      fixedMinor,
-      feeBps: project.default_fee_bps,
-    });
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : "Could not price this log" };
-  }
-
-  const { data: log, error } = await ctx.supabase
-    .from("work_logs")
-    .insert({
-      organization_id: ctx.org.id,
-      project_id: projectId,
-      milestone_id: milestoneId,
-      worked_on: workedOn,
-      hours_millis: hoursMillis,
-      hourly_rate_minor: hourlyRateMinor?.toString() ?? null,
-      fixed_minor: fixedMinor?.toString() ?? null,
-      description,
-      task_id: taskId,
-      started_at: startedAt?.toISOString() ?? null,
-      ended_at: endedAt?.toISOString() ?? null,
-      created_by: ctx.userId,
-    })
-    .select("id")
-    .single();
-
-  if (error || !log) {
-    return { error: error?.message ?? "Could not save work log" };
-  }
-
-  if (task?.time_stopped_at) {
-    await ctx.supabase
-      .from("tasks")
-      .update({ time_started_at: null, time_stopped_at: null })
-      .eq("id", task.id)
-      .eq("organization_id", ctx.org.id);
-  }
-
-  if (posted.postsCharge) {
-    const memo =
-      description ??
-      (hours
-        ? `${hours}h on ${project.name}`
-        : `Work on ${project.name}`);
-    const { data: charge, error: chargeError } = await ctx.supabase
-      .from("charges")
-      .insert({
-        organization_id: ctx.org.id,
-        client_id: project.client_id,
-        project_id: projectId,
-        work_log_id: log.id,
-        gross_minor: posted.gross.toString(),
-        fee_bps: project.default_fee_bps,
-        net_minor: posted.net.toString(),
-        currency,
-        charged_on: workedOn,
-        source: "work_log",
-        status: "open",
-        memo,
-        created_by: ctx.userId,
-      })
-      .select("id")
-      .single();
-
-    if (chargeError || !charge) {
-      return { error: chargeError?.message ?? "Logged, but the charge could not be posted" };
-    }
-
-    await ctx.supabase
-      .from("work_logs")
-      .update({ charge_id: charge.id })
-      .eq("id", log.id)
-      .eq("organization_id", ctx.org.id);
-
-    try {
-      await allocatePartnersForCharge(ctx, {
-        chargeId: charge.id,
-        projectId,
-        netMinor: posted.net,
-        currency,
-        earnedOn: workedOn,
-        earnOn: project.earn_on === "receipt" ? "receipt" : "charge",
-      });
-    } catch (allocError) {
-      return {
-        error:
-          allocError instanceof Error
-            ? allocError.message
-            : "Logged, but partner earnings failed",
-      };
-    }
-
-    await recordActivity(ctx, "charged", "client", project.client_id, {
-      charge_id: charge.id,
-      work_log_id: log.id,
-      project_id: projectId,
-      gross_minor: posted.gross.toString(),
-    });
-  }
+  const saved = await createWorkLogRecord(ctx, {
+    projectId,
+    workedOn,
+    hours,
+    hoursMillis,
+    description,
+    milestoneId,
+    taskId,
+    startedAt: startedAt?.toISOString() ?? null,
+    endedAt: endedAt?.toISOString() ?? null,
+    hourlyRateMinor,
+    fixedMinor,
+    clearTaskClock: Boolean(task?.time_stopped_at),
+  });
+  if (isWriteError(saved)) return { error: saved.error };
 
   await recordActivity(ctx, "logged", "project", projectId, {
-    work_log_id: log.id,
-    charged: posted.postsCharge,
+    work_log_id: saved.id,
+    charged: saved.charged,
   });
 
   revalidatePath(`/${orgSlug}`);
-  return { id: log.id as string, charged: posted.postsCharge };
+  return { id: saved.id as string, charged: Boolean(saved.charged) };
 }
 
 async function syncProjectContractedFromMilestones(

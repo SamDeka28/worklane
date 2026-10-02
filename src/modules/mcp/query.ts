@@ -19,8 +19,10 @@ import {
   type PaymentRow,
 } from "@/modules/finance/ledger";
 import type { OrgContext } from "@/modules/identity/org";
-import { canAccessModule, canSeeMoney } from "@/modules/identity/permissions";
+import { canAccessModule, canAccessProjectTab, canSeeMoney } from "@/modules/identity/permissions";
 import type { ModuleKey } from "@/modules/identity/types";
+import { parseCrmSettings } from "@/modules/crm/settings";
+import { parseOrgInvoiceSettings } from "@/modules/invoices/settings";
 import { asIsoCurrency, formatMoney, type IsoCurrency } from "@/shared/money";
 
 type Reader = { supabase: SupabaseClient; userId: string };
@@ -64,6 +66,7 @@ export type StudioQuery = {
   include?: string[];
   cursor?: string;
   limit?: number;
+  context?: boolean;
   measure?: "billed" | "collected" | "outstanding" | "overdue" | "contracted";
 };
 
@@ -250,6 +253,10 @@ async function runDataset(
   const selected = selectFields(dataset, fields, input.fields);
   if ("error" in selected) return selected;
   if (dataset.members) return runMembers(ctx, dataset, selected.fields, input, period);
+  if (dataset.settings) return runSettings(ctx);
+  if (dataset.name === "credentials" && !canAccessProjectTab(ctx.permissions, "credentials")) {
+    return { error: "You don't have access to the credential vault in this studio." };
+  }
 
   const grouped = Boolean(input.groupBy?.length || input.aggregates?.length);
   const limit = Math.min(PAGE_MAX, Math.max(1, input.limit ?? 50));
@@ -266,6 +273,7 @@ async function runDataset(
   let query = ctx.supabase.from(dataset.table).select(columns.join(",")) as unknown as QueryBuilder;
   query = query.eq("organization_id", ctx.org.id);
   if (dataset.table === "files") query = query.is("deleted_at", null);
+  if (dataset.name === "notifications") query = query.eq("user_id", ctx.userId);
   if (dataset.name === "record_events") {
     const lead = moduleOpen(ctx, "crm");
     const task = moduleOpen(ctx, "delivery");
@@ -321,7 +329,12 @@ async function runDataset(
   const page = loaded.slice(0, limit);
   const labeled = await labelRows(ctx, page);
   const rows = presentRows(dataset, selected.fields, labeled, seeMoney);
-  const included = input.include?.length ? await loadIncludes(ctx, dataset, page, input.include, seeMoney) : null;
+  const includeNames = input.include?.length
+    ? input.include
+    : input.context
+      ? dataset.relations.slice(0, 3).map((relation) => relation.dataset)
+      : [];
+  const included = includeNames.length ? await loadIncludes(ctx, dataset, page, includeNames, seeMoney) : null;
   if (included && "error" in included) return included;
   return {
     dataset: dataset.name,
@@ -525,7 +538,9 @@ function presentRows(dataset: Dataset, fields: Field[], rows: Row[], seeMoney: b
     for (const field of fields) {
       if (field.finance && !seeMoney) continue;
       const value = row[field.column];
-      if (field.type === "money") {
+      if (field.column === "content_doc") {
+        out[field.name] = textFromDoc(value);
+      } else if (field.type === "money") {
         const currency = String(row[dataset.currencyField ?? "currency"] ?? row.currency ?? "");
         out[field.name] =
           value == null ? null : moneyOut(asLedgerMinor(value as string | number | bigint), currency);
@@ -617,6 +632,83 @@ async function loadIncludes(
     };
   }
   return included;
+}
+
+function textFromDoc(value: unknown) {
+  const parts: string[] = [];
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") return;
+    const record = node as { text?: unknown; content?: unknown };
+    if (typeof record.text === "string" && record.text.trim()) parts.push(record.text.trim());
+    if (Array.isArray(record.content)) record.content.forEach(walk);
+  };
+  walk(value);
+  return parts.join("\n");
+}
+
+async function runSettings(ctx: OrgContext) {
+  const [{ data: org }, { data: stages }, { data: profile }, { data: members }] = await Promise.all([
+    ctx.supabase.from("organizations").select("settings").eq("id", ctx.org.id).maybeSingle(),
+    ctx.supabase
+      .from("lead_stages")
+      .select("name, slug, probability_bps, position")
+      .eq("organization_id", ctx.org.id)
+      .order("position"),
+    ctx.supabase.from("profiles").select("notification_prefs").eq("id", ctx.userId).maybeSingle(),
+    ctx.supabase.from("organization_members").select("user_id, role, permissions").eq("organization_id", ctx.org.id),
+  ]);
+  const root = org?.settings ?? {};
+  const invoice = parseOrgInvoiceSettings(root);
+  const crm = parseCrmSettings(root);
+  return {
+    dataset: "settings",
+    period: null,
+    rows: [
+      {
+        timezone: ctx.org.timezone,
+        currency: ctx.org.defaultCurrency,
+        modules: ctx.org.modules,
+        role: ctx.role,
+        canSeeMoney: canSeeMoney(ctx.permissions),
+        permissions: ctx.permissions,
+        invoice: {
+          layout: invoice.brand.layout,
+          business: invoice.business,
+          numberPrefix: invoice.numberPrefix,
+          defaultDueDays: invoice.defaultDueDays,
+          defaultTaxBps: invoice.defaultTaxBps,
+        },
+        crm: {
+          staleDays: crm.staleDays,
+          lostReasons: crm.lostReasons,
+          sources: crm.sources,
+          stages: stages ?? [],
+          emailTemplates: crm.emailTemplates.map((template) => ({
+            id: template.id,
+            name: template.name,
+            purpose: template.purpose,
+            subject: template.subject,
+            body: template.body,
+          })),
+          intake: {
+            enabled: crm.intake.enabled,
+            headline: crm.intake.headline,
+            intro: crm.intake.intro,
+            source: crm.intake.source,
+          },
+        },
+        notificationPreferences: profile?.notification_prefs ?? {},
+        access: (members ?? []).map((member) => ({
+          userId: member.user_id,
+          role: member.role,
+          permissions: member.permissions,
+        })),
+      },
+    ],
+    nextCursor: null,
+    truncated: false,
+    note: "The public intake code, mailbox passwords, and invitation tokens are not included.",
+  };
 }
 
 async function runMembers(

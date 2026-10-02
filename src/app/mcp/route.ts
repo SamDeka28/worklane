@@ -23,7 +23,10 @@ async function advertiseOauth(response: Response) {
   const body = await response.clone().json().catch(() => null);
   if (!body || !Array.isArray(body.result?.tools)) return response;
   for (const tool of body.result.tools) {
-    tool.securitySchemes = [{ type: "oauth2", scopes: ["worklane:read"] }];
+    const advertised = tool._meta?.securitySchemes ?? tool.securitySchemes;
+    tool.securitySchemes = Array.isArray(advertised) && advertised.length > 0
+      ? advertised
+      : [{ type: "oauth2", scopes: ["worklane:read"] }];
   }
   const headers = new Headers(response.headers);
   headers.delete("content-length");
@@ -40,7 +43,11 @@ async function handle(request: Request) {
   const server = createWorklaneMcpServer({
     origin,
     reader: grant
-      ? { supabase: createMemberSupabaseClient(grant.userId), userId: grant.userId }
+      ? {
+          supabase: createMemberSupabaseClient(grant.userId),
+          userId: grant.userId,
+          scopes: grant.scopes,
+        }
       : null,
   });
   const transport = new WebStandardStreamableHTTPServerTransport({

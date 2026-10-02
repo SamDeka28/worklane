@@ -1,15 +1,16 @@
 {
   "name": "worklane",
   "version": "1.0.0",
-  "description": "Read your Worklane studio, including totals and questions the screens do not answer.",
+  "description": "Read and change your Worklane studio, including notes, documents, and the records the screens do not add up.",
   "skills": "./skills/",
   "interface": {
     "displayName": "Worklane",
-    "shortDescription": "Read studio records, totals, and questions the screens do not answer.",
+    "shortDescription": "Read and change studio records you already have access to.",
     "developerName": "Worklane",
     "category": "Productivity",
     "capabilities": [
-      "Read"
+      "Read",
+      "Write"
     ],
     "websiteURL": "http://localhost:3000/connect"
   }

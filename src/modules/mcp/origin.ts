@@ -10,6 +10,7 @@ export function requestOrigin(request: Request) {
 }
 
 export const READ_SCOPE = "worklane:read";
+export const WRITE_SCOPE = "worklane:write";
 export const OFFLINE_SCOPE = "offline_access";
 export const ACCESS_TTL_SEC = 60 * 60;
 export const REFRESH_TTL_MS = 90 * 24 * 60 * 60 * 1000;
@@ -23,7 +24,7 @@ export function protectedResourceMetadata(origin: string) {
   return {
     resource: mcpResource(origin),
     authorization_servers: [origin],
-    scopes_supported: [READ_SCOPE, OFFLINE_SCOPE],
+    scopes_supported: [READ_SCOPE, WRITE_SCOPE, OFFLINE_SCOPE],
     bearer_methods_supported: ["header"],
     resource_documentation: `${origin}/connect`,
     resource_policy_uri: `${origin}/privacy`,

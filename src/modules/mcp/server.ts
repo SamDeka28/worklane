@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { registerStudioActions } from "@/modules/mcp/writes";
 import { describeStudioData, queryStudio } from "@/modules/mcp/query";
 import {
   readClient,
@@ -48,6 +49,24 @@ export function connectRequired(origin: string) {
   };
 }
 
+/** A read-only connection has to be approved again before it can change the studio. */
+export function writeRequired(origin: string) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: "This connection can read Worklane but cannot change it. Connect again and allow changes.",
+      },
+    ],
+    isError: true as const,
+    _meta: {
+      "mcp/www_authenticate": [
+        `'Bearer realm="worklane", resource_metadata="${origin}/.well-known/oauth-protected-resource", error="insufficient_scope", error_description="Allow changes to continue", scope="worklane:write"'`,
+      ],
+    },
+  };
+}
+
 const auth = {
   annotations: { readOnlyHint: true },
   _meta: {
@@ -57,7 +76,7 @@ const auth = {
 
 export function createWorklaneMcpServer(input: {
   origin: string;
-  reader?: { supabase: SupabaseClient; userId: string } | null;
+  reader?: { supabase: SupabaseClient; userId: string; scopes?: string[] } | null;
 }) {
   const reader = input.reader;
   const origin = input.origin;
@@ -149,6 +168,10 @@ export function createWorklaneMcpServer(input: {
           .describe("Up to 3 directly related dataset names from the catalog."),
         cursor: z.string().optional().describe("nextCursor from the previous page."),
         limit: z.number().int().min(1).max(100).optional(),
+        context: z
+          .boolean()
+          .optional()
+          .describe("Also return up to three directly related datasets, including notes and document text."),
       },
       ...auth,
     },
@@ -234,6 +257,8 @@ export function createWorklaneMcpServer(input: {
     },
     async (input) => (reader ? result(await readLead(reader, input)) : connectRequired(origin)),
   );
+
+  registerStudioActions(server, { origin, reader: reader ?? null, connectRequired, writeRequired, result });
 
   return server;
 }

@@ -58,9 +58,11 @@ export default async function ConnectPage({
         {started && ready && client ? (
           <>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {client.clientName} is asking to read your studios, clients, projects, invoices, and
-              leads. It cannot create, change, or send anything. You can disconnect it later from
-              your profile.
+              {client.clientName} is asking to read your studios.{" "}
+              {scope?.includes("worklane:write")
+                ? "Allowing this also lets it create, change, and send on your behalf, using the same access you already have."
+                : "This connection can read only. Connect again from a write action if you want it to make changes."}{" "}
+              You can disconnect it later from your profile.
             </p>
             <form action={approveMcpAccessAction} className="mt-6 flex flex-col gap-2">
               <input type="hidden" name="client_id" value={clientId} />
@@ -86,7 +88,7 @@ export default async function ConnectPage({
           <>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               {client
-                ? `${client.clientName} wants to connect. Sign in to Worklane to continue. Access stays read-only.`
+                ? `${client.clientName} wants to connect. Sign in to Worklane to continue.`
                 : "This connection request is missing a valid assistant, redirect, or security check."}
             </p>
             {client && here ? (
@@ -111,12 +113,12 @@ export default async function ConnectPage({
           <>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               Install the Worklane plugin in ChatGPT. ChatGPT opens this page, you sign in, and
-              Worklane shares read access for your studios. Nothing is pasted by hand.
+              Worklane shares your studios. Reading is included. Changes need you to allow them on this page. Nothing is pasted by hand.
             </p>
             <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
               <li>Download the plugin. It already points at this site.</li>
               <li>In ChatGPT, install it from your plugins folder or submit the zip.</li>
-              <li>ChatGPT returns here. Sign in, then allow read access.</li>
+              <li>ChatGPT returns here. Sign in, then allow access.</li>
             </ol>
             <div className="mt-6">
               <Button nativeButton={false} render={<Link href="/connect/plugin" />}>

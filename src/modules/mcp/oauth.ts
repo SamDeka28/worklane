@@ -6,6 +6,7 @@ import {
   OFFLINE_SCOPE,
   READ_SCOPE,
   REFRESH_TTL_MS,
+  WRITE_SCOPE,
 } from "@/modules/mcp/origin";
 
 export type OauthClient = {
@@ -153,10 +154,13 @@ export async function getOauthClient(clientId: string): Promise<OauthClient | nu
 }
 
 export function normalizeScope(raw: string | null | undefined) {
-  const trimmed = raw?.trim();
+  const trimmed = raw?.trim() ?? "";
   const parts = new Set((trimmed ? trimmed : `${READ_SCOPE} ${OFFLINE_SCOPE}`).split(/\s+/).filter(Boolean));
-  if (!parts.has(READ_SCOPE)) return null;
-  return [READ_SCOPE, ...(parts.has(OFFLINE_SCOPE) ? [OFFLINE_SCOPE] : [])].join(" ");
+  if (!parts.has(READ_SCOPE) && !parts.has(WRITE_SCOPE)) return null;
+  const scopes = [READ_SCOPE];
+  if (parts.has(WRITE_SCOPE)) scopes.push(WRITE_SCOPE);
+  if (!trimmed || parts.has(OFFLINE_SCOPE)) scopes.push(OFFLINE_SCOPE);
+  return scopes.join(" ");
 }
 
 export async function issueAuthorizationCode(input: {
@@ -199,6 +203,7 @@ async function issueTokens(input: {
       client_id: input.client.clientId,
       client_name: input.client.clientName,
       refresh_hash: sha256(refreshToken),
+      scope: input.scope,
       last_used_at: new Date().toISOString(),
     });
     if (error) throw new Error(error.message);
@@ -278,7 +283,7 @@ export async function exchangeRefreshToken(input: {
   const db = admin();
   const { data, error } = await db
     .from("oauth_grants")
-    .select("id, user_id, client_id, revoked_at, created_at")
+    .select("id, user_id, client_id, scope, revoked_at, created_at")
     .eq("refresh_hash", sha256(input.refreshToken))
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -291,14 +296,18 @@ export async function exchangeRefreshToken(input: {
   const tokens = await issueTokens({
     userId: data.user_id as string,
     client,
-    scope: `${READ_SCOPE} ${OFFLINE_SCOPE}`,
+    scope: typeof data.scope === "string" && data.scope.includes(READ_SCOPE) ? data.scope : `${READ_SCOPE} ${OFFLINE_SCOPE}`,
     audience: input.audience,
     grantId: data.id as string,
   });
   return { tokens };
 }
 
-export type AccessGrant = { userId: string; grantId: string; clientId: string };
+export type AccessGrant = { userId: string; grantId: string; clientId: string; scopes: string[] };
+
+export function grantAllowsWrite(grant: AccessGrant) {
+  return grant.scopes.includes(WRITE_SCOPE);
+}
 
 export async function resolveAccessToken(token: string): Promise<AccessGrant | null> {
   const payload = verifyJwt(token, tokenSecret());
@@ -318,7 +327,12 @@ export async function resolveAccessToken(token: string): Promise<AccessGrant | n
     .from("oauth_grants")
     .update({ last_used_at: new Date().toISOString() })
     .eq("id", payload.grant);
-  return { userId: payload.sub, grantId: payload.grant, clientId: String(payload.client_id ?? "") };
+  return {
+    userId: payload.sub,
+    grantId: payload.grant,
+    clientId: String(payload.client_id ?? ""),
+    scopes: scope.split(/\s+/).filter(Boolean),
+  };
 }
 
 export async function listGrantsForUser(userId: string) {
