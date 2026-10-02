@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { requireOrg } from "@/modules/identity/org";
+import { requireOrg, type OrgContext } from "@/modules/identity/org";
 import {
   FEEDBACK_COLUMNS,
   mapFeedback,
@@ -233,7 +233,7 @@ export async function listSignaturesForVersion(
   const ctx = await requireOrg(orgSlug);
   const { data, error } = await ctx.supabase
     .from("document_signatures")
-    .select("id, document_version_id, signer_name, signer_email, intent_text, signed_at, method, signature_text, content_hash")
+    .select("id, document_version_id, signer_name, signer_email, intent_text, signed_at, method, signature_text, signature_image, content_hash")
     .eq("organization_id", ctx.org.id)
     .eq("document_version_id", versionId)
     .order("signed_at", { ascending: true });
@@ -247,6 +247,7 @@ export async function listSignaturesForVersion(
     signedAt: row.signed_at,
     method: row.method === "portal" ? "portal" : "studio",
     signatureText: row.signature_text ?? null,
+    signatureImage: row.signature_image ?? null,
     contentHash: row.content_hash ?? null,
   }));
 }
@@ -331,23 +332,49 @@ export async function listDocumentRefs(
   });
 }
 
-/** Documents linked to a project or that mention the project / its milestones / tasks. */
-export async function listDocumentsForProjectSurface(
-  orgSlug: string,
+export type ProjectDocument = DocumentRecord & {
+  mentionCount: number;
+  /** link is tied to the project. client is tied to the project's client and no other project. */
+  mentionedVia: "link" | "tag" | "both" | "client";
+};
+
+/**
+ * Documents that belong on a project's documents list: linked to the project,
+ * linked to its client without another project, or tagged in the body.
+ */
+export async function documentsOnProject(
+  ctx: OrgContext,
   projectId: string,
-): Promise<
-  Array<
-    DocumentRecord & {
-      mentionCount: number;
-      mentionedVia: "link" | "tag" | "both";
-    }
-  >
-> {
-  const ctx = await requireOrg(orgSlug);
-  const linked = await listDocuments(orgSlug);
-  const linkedIds = new Set(
-    linked.filter((doc) => doc.projectId === projectId).map((doc) => doc.id),
-  );
+): Promise<ProjectDocument[] | { error: string }> {
+  const { data: project } = await ctx.supabase
+    .from("projects")
+    .select("id, client_id")
+    .eq("organization_id", ctx.org.id)
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!project) return { error: "Project not found" };
+  const clientId = (project.client_id as string | null) ?? null;
+
+  const { data: documentRows, error: documentError } = await ctx.supabase
+    .from("documents")
+    .select("id, kind, title, status, client_id, project_id, source_document_id, created_at, updated_at")
+    .eq("organization_id", ctx.org.id)
+    .order("updated_at", { ascending: false });
+  if (documentError) return { error: documentError.message };
+  const linked = (documentRows ?? []).map((row) => ({
+    id: row.id as string,
+    kind: asKind(row.kind),
+    title: row.title as string,
+    status: asStatus(row.status),
+    clientId: row.client_id as string | null,
+    projectId: row.project_id as string | null,
+    sourceDocumentId: row.source_document_id as string | null,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
+  }));
+  const onProject = (doc: DocumentRecord) =>
+    doc.projectId === projectId || (clientId != null && doc.clientId === clientId && !doc.projectId);
+  const linkedIds = new Set(linked.filter(onProject).map((doc) => doc.id));
 
   const { data: milestoneRows } = await ctx.supabase
     .from("milestones")
@@ -414,21 +441,29 @@ export async function listDocumentsForProjectSurface(
     .map((id) => {
       const doc = byId.get(id);
       if (!doc) return null;
-      const linkedHere = linkedIds.has(id);
+      const onThisProject = doc.projectId === projectId;
+      const onClient = clientId != null && doc.clientId === clientId && !doc.projectId;
       const tagged = taggedIds.has(id);
+      const mentionedVia = onThisProject && tagged ? "both" : onThisProject ? "link" : onClient ? "client" : "tag";
       return {
         ...doc,
         mentionCount: mentionCounts.get(id) ?? 0,
-        mentionedVia: linkedHere && tagged ? "both" : linkedHere ? "link" : "tag",
+        mentionedVia,
       } as const;
     })
     .filter(Boolean)
-    .sort((a, b) => b!.updatedAt.localeCompare(a!.updatedAt)) as Array<
-    DocumentRecord & {
-      mentionCount: number;
-      mentionedVia: "link" | "tag" | "both";
-    }
-  >;
+    .sort((a, b) => b!.updatedAt.localeCompare(a!.updatedAt)) as ProjectDocument[];
+}
+
+/** Documents linked to a project, its client, or that mention the project / its milestones / tasks. */
+export async function listDocumentsForProjectSurface(
+  orgSlug: string,
+  projectId: string,
+): Promise<ProjectDocument[]> {
+  const ctx = await requireOrg(orgSlug);
+  const rows = await documentsOnProject(ctx, projectId);
+  if ("error" in rows) return [];
+  return rows;
 }
 
 export async function listDocumentSends(

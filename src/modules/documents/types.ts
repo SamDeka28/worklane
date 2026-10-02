@@ -75,5 +75,6 @@ export type DocumentSignature = {
   /** "portal" = the client signed from their link; "studio" = signed or recorded by your team. */
   method: "studio" | "portal";
   signatureText: string | null;
+  signatureImage: string | null;
   contentHash: string | null;
 };

@@ -237,6 +237,12 @@ export async function sendLeadEmailForContext(
   if ("error" in parsed) return { error: parsed.error };
   const attachments = parseEmailAttachments(input.attachments);
   if ("error" in attachments) return attachments;
+  const signature = input.includeSignature
+    ? (allowed.signature ?? (await senderSignature(ctx, "leads", { force: true })))
+    : null;
+  if (input.includeSignature && !signature) {
+    return { error: "No email signature is saved. Add one on your profile, then send again." };
+  }
 
   const [{ data: lead }, { data: parentRow }, stageTo] = await Promise.all([
     ctx.supabase
@@ -270,7 +276,7 @@ export async function sendLeadEmailForContext(
     parsed.email,
     {
       trackOpens: input.trackOpens,
-      signature: input.includeSignature ? allowed.signature : null,
+      signature,
       templateId: input.templateId,
       parent: parentRow
         ? { id: String(parentRow.id), message_id: (parentRow.message_id as string | null) ?? null }
@@ -282,7 +288,7 @@ export async function sendLeadEmailForContext(
   );
   if ("error" in sent) return { error: sent.error };
 
-  return { ok: true as const, tracked: input.trackOpens };
+  return { ok: true as const, tracked: input.trackOpens, signatureIncluded: Boolean(signature) };
 }
 
 /** Sends a one-to-one email to an existing lead. */
@@ -309,6 +315,12 @@ export async function startLeadWithEmailAction(orgSlug: string, input: StartLead
   if ("error" in parsed) return { error: parsed.error };
   const attachments = parseEmailAttachments(input.attachments);
   if ("error" in attachments) return attachments;
+  const signature = input.includeSignature
+    ? (allowed.signature ?? (await senderSignature(ctx, "leads", { force: true })))
+    : null;
+  if (input.includeSignature && !signature) {
+    return { error: "No email signature is saved. Add one on your profile, then send again." };
+  }
 
   const contactName = input.contactName.trim().slice(0, 120) || null;
   const company = input.company.trim().slice(0, 120) || companyFromEmail(parsed.email.to) || null;
@@ -351,7 +363,7 @@ export async function startLeadWithEmailAction(orgSlug: string, input: StartLead
     parsed.email,
     {
       trackOpens: input.trackOpens,
-      signature: input.includeSignature ? allowed.signature : null,
+      signature,
       templateId: input.templateId,
       parent: null,
       followUp: parseFollowUp(input.followUp, parsed.email.subject),
@@ -386,5 +398,5 @@ export async function startLeadWithEmailAction(orgSlug: string, input: StartLead
 
   revalidatePath(`/${orgSlug}/crm`);
   revalidatePath(`/${orgSlug}`);
-  return { ok: true as const, leadId };
+  return { ok: true as const, leadId, signatureIncluded: Boolean(signature) };
 }

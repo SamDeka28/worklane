@@ -52,6 +52,7 @@ export type SharedSignature = {
   signerName: string;
   signerEmail: string;
   signatureText: string | null;
+  signatureImage: string | null;
   signedAt: string;
   contentHash: string | null;
 };
@@ -214,7 +215,7 @@ export async function loadSharedDocument(
     versionId
       ? admin
           .from("document_signatures")
-          .select("signer_name, signer_email, signature_text, signed_at, content_hash, method")
+          .select("signer_name, signer_email, signature_text, signature_image, signed_at, content_hash, method")
           .eq("document_version_id", versionId)
           .order("signed_at", { ascending: true })
           .limit(10)
@@ -237,6 +238,7 @@ export async function loadSharedDocument(
       signerName: row.signer_name as string,
       signerEmail: row.signer_email as string,
       signatureText: (row.signature_text as string | null) ?? null,
+      signatureImage: (row.signature_image as string | null) ?? null,
       signedAt: row.signed_at as string,
       contentHash: (row.content_hash as string | null) ?? null,
     }),

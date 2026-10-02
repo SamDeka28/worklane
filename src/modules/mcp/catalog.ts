@@ -157,6 +157,7 @@ export const DATASETS: Dataset[] = [
       { dataset: "project_members", from: "id", to: "project_id" },
       { dataset: "charges", from: "id", to: "project_id" },
       { dataset: "invoices", from: "id", to: "project_id" },
+      { dataset: "documents", from: "id", to: "project_id" },
     ],
   },
   {
@@ -582,7 +583,7 @@ export const DATASETS: Dataset[] = [
   {
     name: "documents",
     table: "documents",
-    description: "Proposals and statements of work. File contents and email bodies are not included.",
+    description: "Proposals and statements of work. The body is document_versions.text. Use preview_document for the readable preview.",
     module: "documents",
     dateField: "updated_at",
     orderField: "updated_at",
@@ -601,12 +602,13 @@ export const DATASETS: Dataset[] = [
       { dataset: "document_sends", from: "id", to: "document_id" },
       { dataset: "document_feedback", from: "id", to: "document_id" },
       { dataset: "clients", from: "client_id", to: "id" },
+      { dataset: "projects", from: "project_id", to: "id" },
     ],
   },
   {
     name: "document_versions",
     table: "document_versions",
-    description: "Version metadata. The document body is not included.",
+    description: "A saved version. text is the document body as headings and paragraphs.",
     module: "documents",
     dateField: "created_at",
     orderField: "version_number",

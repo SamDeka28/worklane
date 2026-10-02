@@ -21,7 +21,7 @@ export type AttachableDocument = {
   status: string;
   projectId?: string | null;
   mentionCount?: number;
-  mentionedVia?: "link" | "tag" | "both";
+  mentionedVia?: "link" | "tag" | "both" | "client";
 };
 
 function formatBytes(size: number) {
@@ -312,7 +312,9 @@ export function ProjectDocumentsHub({
                       ? " · tagged in body"
                       : doc.mentionedVia === "both"
                         ? " · linked & tagged"
-                        : " · in Docs"}
+                        : doc.mentionedVia === "client"
+                          ? " · linked to the client"
+                          : " · linked to this project"}
                     {doc.mentionCount && doc.mentionCount > 0
                       ? ` · ${doc.mentionCount} tag${doc.mentionCount === 1 ? "" : "s"}`
                       : ""}

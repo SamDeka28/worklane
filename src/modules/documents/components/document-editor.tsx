@@ -62,7 +62,8 @@ import {
   type PreviewCatalog,
 } from "@/modules/documents/resolve-preview";
 import type { IsoCurrency } from "@/shared/money";
-import { SIGNATURE_FONT, SignatureBlocks } from "@/modules/documents/components/signature-blocks";
+import { SignatureCapture } from "@/modules/documents/components/signature-capture";
+import { SignatureBlocks } from "@/modules/documents/components/signature-blocks";
 import { TemplateGallery } from "@/modules/documents/components/template-gallery";
 import {
   DocumentSendDialog,
@@ -154,7 +155,7 @@ export function DocumentEditor({
   currency?: IsoCurrency;
   signatures?: Pick<
     DocumentSignature,
-    "id" | "signerName" | "signerEmail" | "signedAt" | "method" | "signatureText" | "contentHash"
+    "id" | "signerName" | "signerEmail" | "signedAt" | "method" | "signatureText" | "signatureImage" | "contentHash"
   >[];
   sends?: DocumentSend[];
   feedback?: DocumentFeedback[];
@@ -620,6 +621,7 @@ export function DocumentEditor({
                         signerName: sig.signerName,
                         signerEmail: sig.signerEmail,
                         signatureText: sig.signatureText,
+                        signatureImage: sig.signatureImage,
                         signedAt: sig.signedAt,
                         contentHash: sig.contentHash,
                       }))}
@@ -999,7 +1001,7 @@ export function DocumentEditor({
         {canWrite && !locked ? (
           <RailCard
             title="Record a signature"
-            description="Captures the signer's name and email as an electronic signature, then locks this version."
+            description="Captures the signer's name, email, and signature, then locks this version."
           >
             <SignForm orgSlug={orgSlug} versionId={version.id} pending={pending} start={start} />
           </RailCard>
@@ -1209,6 +1211,7 @@ function SignForm({
   start: (fn: () => Promise<void>) => void;
 }) {
   const router = useRouter();
+  const [signatureReady, setSignatureReady] = useState(false);
   return (
     <form
       className="grid gap-3"
@@ -1252,15 +1255,14 @@ function SignForm({
           required
         />
       </Field>
-      <input
-        type="hidden"
-        name="intent_text"
-        value="I agree to the terms in this document and intend to sign electronically."
-      />
+      <div className="grid gap-1.5">
+        <span className="text-sm font-medium">Signature</span>
+        <SignatureCapture onReadyChange={setSignatureReady} />
+      </div>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        By signing, they agree to the terms in this document and intend to sign electronically.
+        By signing, they agree to the terms in this document and adopt the signature above.
       </p>
-      <Button type="submit" disabled={pending} className="w-full gap-2">
+      <Button type="submit" disabled={pending || !signatureReady} className="w-full gap-2">
         <PenLine className="size-4" />
         Sign document
       </Button>
@@ -1285,7 +1287,7 @@ function CountersignForm({
 }) {
   const router = useRouter();
   const [name, setName] = useState(defaultName);
-  const [signature, setSignature] = useState(defaultName);
+  const [signatureReady, setSignatureReady] = useState(Boolean(defaultName));
   const [consent, setConsent] = useState(false);
   return (
     <form
@@ -1325,25 +1327,10 @@ function CountersignForm({
           required
         />
       </Field>
-      <Field label="Type your signature" htmlFor="countersign_signature">
-        <Input
-          id="countersign_signature"
-          name="signature_text"
-          value={signature}
-          onChange={(event) => setSignature(event.target.value)}
-          autoComplete="off"
-          data-1p-ignore
-          data-lpignore="true"
-          required
-        />
-      </Field>
-      <p
-        className="min-h-10 truncate rounded-lg bg-muted/40 px-3 py-1 text-3xl leading-tight"
-        style={{ fontFamily: SIGNATURE_FONT }}
-        aria-hidden
-      >
-        {signature || "\u00a0"}
-      </p>
+      <div className="grid gap-1.5">
+        <span className="text-sm font-medium">Signature</span>
+        <SignatureCapture initialText={defaultName} onReadyChange={setSignatureReady} />
+      </div>
       <label className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
         <input
           type="checkbox"
@@ -1352,12 +1339,12 @@ function CountersignForm({
           onChange={(event) => setConsent(event.target.checked)}
           className="mt-0.5"
         />
-        I agree to the terms of this document on behalf of my organization and adopt the above as my
-        electronic signature.
+        I agree to the terms of this document on behalf of my organization and adopt the signature
+        above as my electronic signature.
       </label>
       <Button
         type="submit"
-        disabled={pending || !consent || !name.trim() || !signature.trim()}
+        disabled={pending || !consent || !name.trim() || !signatureReady}
         className="w-full gap-2"
       >
         <PenLine className="size-4" />

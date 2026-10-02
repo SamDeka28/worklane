@@ -43,7 +43,8 @@ import type {
   SharedRevision,
   SharedSignature,
 } from "@/modules/documents/sends";
-import { SIGNATURE_FONT, SignatureBlocks } from "@/modules/documents/components/signature-blocks";
+import { SignatureCapture } from "@/modules/documents/components/signature-capture";
+import { SignatureBlocks } from "@/modules/documents/components/signature-blocks";
 
 
 type ComposerMode = "comment" | "suggestion";
@@ -767,8 +768,7 @@ function SignDialog({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [name, setName] = useState(recipientName ?? "");
-  const [signature, setSignature] = useState(recipientName ?? "");
-  const [signatureTouched, setSignatureTouched] = useState(false);
+  const [signatureReady, setSignatureReady] = useState(Boolean(recipientName));
   const [consent, setConsent] = useState(false);
 
   return (
@@ -778,9 +778,8 @@ function SignDialog({
           className="grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
-            const formData = new FormData();
+            const formData = new FormData(event.currentTarget);
             formData.set("signer_name", name);
-            formData.set("signature_text", signature);
             if (consent) formData.set("consent", "on");
             start(async () => {
               const result = await signPortalDocumentAction(token, formData);
@@ -807,38 +806,16 @@ function SignDialog({
                 value={name}
                 required
                 autoComplete="name"
-                onChange={(event) => {
-                  setName(event.target.value);
-                  if (!signatureTouched) setSignature(event.target.value);
-                }}
+                onChange={(event) => setName(event.target.value)}
               />
             </label>
             <label className="grid gap-1.5 text-sm">
               <span className="font-medium">Email</span>
               <Input value={recipientEmail} readOnly disabled />
             </label>
-            <label className="grid gap-1.5 text-sm">
+            <div className="grid gap-1.5 text-sm">
               <span className="font-medium">Signature</span>
-              <Input
-                value={signature}
-                required
-                onChange={(event) => {
-                  setSignature(event.target.value);
-                  setSignatureTouched(true);
-                }}
-                placeholder="Type your name to sign"
-              />
-            </label>
-            <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-4">
-              <p
-                className="min-h-12 truncate text-4xl leading-tight text-slate-900"
-                style={{ fontFamily: SIGNATURE_FONT }}
-              >
-                {signature || " "}
-              </p>
-              <p className="mt-1 border-t border-slate-300 pt-1 text-[11px] text-slate-500">
-                {name || "Your name"} · {new Date().toLocaleDateString()}
-              </p>
+              <SignatureCapture initialText={recipientName ?? ""} onReadyChange={setSignatureReady} />
             </div>
             <label className="flex items-start gap-2 text-xs leading-relaxed text-slate-600">
               <input
@@ -848,7 +825,7 @@ function SignDialog({
                 className="mt-0.5 rounded border-input"
               />
               <span>
-                I have read this document, I agree to its terms, and I adopt the typed name above as
+                I have read this document, I agree to its terms, and I adopt the signature above as
                 my electronic signature. I understand this is as binding as a handwritten signature.
               </span>
             </label>
@@ -857,7 +834,7 @@ function SignDialog({
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={pending || !consent || !name.trim() || !signature.trim()}>
+            <Button type="submit" disabled={pending || !consent || !name.trim() || !signatureReady}>
               <PenLine className="size-4" />
               {pending ? "Signing…" : "Sign document"}
             </Button>

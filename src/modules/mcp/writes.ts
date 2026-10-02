@@ -2,6 +2,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { sendLeadEmailForContext } from "@/modules/crm/email-actions";
+import { countersignDocumentForContext, emailSignedCopyForContext } from "@/modules/documents/actions";
+import { previewDocumentsForContext } from "@/modules/documents/preview";
+import { sendTrackedEmailForContext } from "@/modules/emails/actions";
 import {
   billMilestoneForContext,
   createMilestoneForContext,
@@ -47,7 +50,6 @@ import {
   deleteTaskRecord,
   logLeadNoteRecord,
   moveLeadRecord,
-  previewDocumentText,
   previewInvoiceRecord,
   recordPaymentRecord,
   renameStudioRecord,
@@ -76,6 +78,13 @@ const inputSchema = {
   gross: z.string().optional().describe("Charge amount in major units."),
   email: z.string().optional(),
   to: z.string().optional(),
+  cc: z.string().optional().describe("CC addresses, separated by commas. Up to 5."),
+  includeSignature: z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .describe(
+      "On send_lead_email and send_email, set true when the member asks to include their email signature. The saved signature is added under that message. Leave unset otherwise.",
+    ),
   subject: z.string().optional(),
   templateId: z.string().optional(),
   layout: z.string().optional().describe("Invoice layout: classic, minimal, bold, modern, elegant, studio, corporate, swiss, edge, letterhead, or ribbon."),
@@ -112,6 +121,8 @@ type ToolInput = {
   gross?: string;
   email?: string;
   to?: string;
+  cc?: string;
+  includeSignature?: boolean | string;
   subject?: string;
   templateId?: string;
   layout?: string;
@@ -130,6 +141,24 @@ type ToolInput = {
   dueOn?: string;
   attachments?: string;
 };
+
+async function signedVersionId(ctx: OrgContext, documentId: string) {
+  const { data } = await ctx.supabase
+    .from("document_versions")
+    .select("id")
+    .eq("organization_id", ctx.org.id)
+    .eq("document_id", documentId)
+    .eq("status", "signed")
+    .order("version_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.id;
+}
+
+function includeEmailSignature(value: boolean | string | undefined) {
+  if (value === true) return true;
+  return typeof value === "string" && /^(true|yes|1)$/i.test(value.trim());
+}
 
 function emailFiles(raw: string | undefined) {
   if (!raw?.trim()) {
@@ -210,8 +239,16 @@ export function registerStudioActions(
     );
   };
 
-  add("preview_document", "Preview a document template as text before saving it. Does not create a record.", false, false, (input) =>
-    run(input, async (ctx) => previewDocumentText({ title: input.title || input.name || "Untitled", templateId: input.templateId, orgName: ctx.org.name })),
+  add("preview_document", "Preview a saved document, the documents on a project, or the documents on a client. Pass id for one document, projectId for that project's documents (including ones linked only to its client), or clientId for a client's documents. With none of those, preview a template before saving. Returns the text. Does not save or send.", false, false, (input) =>
+    run(input, (ctx) =>
+      previewDocumentsForContext(ctx, {
+        id: input.id,
+        projectId: input.projectId,
+        clientId: input.clientId,
+        title: input.title || input.name,
+        templateId: input.templateId,
+      }),
+    ),
   );
   add("preview_invoice", "Preview invoice content and compare layouts. Pass an invoice id to preview that invoice, or omit it to compare layouts. Does not save or send. Numbers do not change between layouts.", false, false, (input) =>
     run(input, (ctx) => previewInvoiceRecord(ctx, { id: input.id, layout: input.layout, currency: input.currency })),
@@ -306,17 +343,17 @@ export function registerStudioActions(
       note: "This is the message. Sending is a separate step.",
     }),
   );
-  add("send_lead_email", "Send an email to an existing lead. Preview the body first. This sends. attachments is a JSON array of filename, contentType, and contentBase64.", true, true, async (input) => {
+  add("send_lead_email", "Send an email to an existing lead. cc is comma-separated. Set includeSignature true only when the member asks to include their email signature; the saved signature is then added under the message. Do not say it was included unless the result says signatureIncluded. Preview the body first. This sends. attachments is a JSON array of filename, contentType, and contentBase64.", true, true, async (input) => {
     const files = emailFiles(input.attachments);
     if ("error" in files) return result(files);
     return run(input, (ctx) =>
       sendLeadEmailForContext(ctx, input.leadId || input.id || "", {
         to: input.to || input.email || "",
-        cc: "",
+        cc: input.cc || "",
         subject: input.subject || "",
         body: input.body || "",
         trackOpens: true,
-        includeSignature: true,
+        includeSignature: includeEmailSignature(input.includeSignature),
         templateId: input.templateId || null,
         replyToId: null,
         followUp: null,
@@ -344,7 +381,25 @@ export function registerStudioActions(
   add("create_sow", "Create a draft statement of work from a proposal. Does not send it.", false, true, (input) =>
     run(input, (ctx) => createSowRecord(ctx, input.id || "")),
   );
-  add("send_document", "Email the current document version for signature. Refuses while placeholders remain. Marks the document sent only after the email is accepted. Do not claim it was sent or signed unless this result says sent. notes may list CC addresses separated by commas. attachments is a JSON array of filename, contentType, and contentBase64.", true, true, async (input) => {
+  add("send_email", "Send a studio email that is not tied to one lead. cc is comma-separated. Set includeSignature true only when the member asks to include their email signature; the saved signature is then added under the message. Do not say it was included unless the result says signatureIncluded. Preview the body first. This sends. attachments is a JSON array of filename, contentType, and contentBase64.", true, true, async (input) => {
+    const files = emailFiles(input.attachments);
+    if ("error" in files) return result(files);
+    return run(input, (ctx) =>
+      sendTrackedEmailForContext(ctx, {
+        to: input.to || input.email || "",
+        cc: input.cc || "",
+        subject: input.subject || "",
+        body: input.body || "",
+        includeSignature: includeEmailSignature(input.includeSignature),
+        attachments: files.attachments.map((file) => ({
+          filename: file.filename,
+          contentType: file.contentType,
+          contentBase64: file.content.toString("base64").replace(/=+$/, ""),
+        })),
+      }),
+    );
+  });
+  add("send_document", "Email the current document version for signature. cc is comma-separated. Refuses while placeholders remain. Marks the document sent only after the email is accepted. Do not claim it was sent or signed unless this result says sent. attachments is a JSON array of filename, contentType, and contentBase64.", true, true, async (input) => {
     const files = emailFiles(input.attachments);
     if ("error" in files) return result(files);
     return run(input, (ctx) =>
@@ -353,12 +408,39 @@ export function registerStudioActions(
         to: input.to || input.email || "",
         subject: input.subject || "",
         message: input.body || "",
-        cc: input.notes,
+        cc: input.cc,
         name: input.name,
         attachments: files.attachments,
       }),
     );
   });
+  add("countersign_document", "Add the studio signature after the client has signed. id is the document. name and email are the signer. body is the typed signature. This emails the fully signed PDF. Do not claim it was signed unless the result says ok.", true, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "documents");
+      if (blocked) return blocked;
+      const versionId = await signedVersionId(ctx, input.id || "");
+      if (!versionId) return { error: "This document does not have a client-signed version to countersign." };
+      const form = new FormData();
+      form.set("signer_name", input.name || "");
+      form.set("signer_email", input.email || "");
+      form.set("signature_text", input.body || input.name || "");
+      form.set("consent", "on");
+      return countersignDocumentForContext(ctx, versionId, form);
+    }),
+  );
+  add("send_signed_copy", "Email the signed PDF of a document. id is the document. cc is comma-separated. Sends the certificate once both sides have signed. Do not claim it was sent unless the result says ok.", true, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "documents");
+      if (blocked) return blocked;
+      const versionId = await signedVersionId(ctx, input.id || "");
+      if (!versionId) return { error: "This document does not have a signed version to email." };
+      const form = new FormData();
+      form.set("to", input.to || input.email || "");
+      form.set("cc", input.cc || "");
+      form.set("message", input.body || "");
+      return emailSignedCopyForContext(ctx, versionId, form);
+    }),
+  );
   add("create_invoice", "Start a draft invoice for a client. amount is major units for the first line. This does not issue or email it.", false, true, (input) =>
     run(input, async (ctx) => {
       const blocked = assertWrite(ctx, "finance");

@@ -7,6 +7,7 @@ export type DocumentPdfSignature = {
   signerName: string;
   signerEmail: string;
   signatureText: string | null;
+  signatureImage?: string | null;
   signedAt: string;
   contentHash: string | null;
   ipAddress: string | null;
@@ -237,14 +238,26 @@ function SignatureCard({ signature, orgName, clientName }: {
   return (
     <View style={s.sigCard} wrap={false}>
       <Text style={s.sigLabel}>{clean(label.toUpperCase())}</Text>
-      <Text style={s.sigScript}>{clean(signature.signatureText ?? signature.signerName)}</Text>
+      {signature.signatureImage ? (
+        <Image src={signature.signatureImage} style={s.sigImage} />
+      ) : (
+        <Text style={s.sigScript}>{clean(signature.signatureText ?? signature.signerName)}</Text>
+      )}
       <View style={s.sigMeta}>
         <MetaRow label="Name" value={signature.signerName} />
         <MetaRow label="Email" value={signature.signerEmail} />
         <MetaRow label="Signed" value={new Date(signature.signedAt).toUTCString()} />
         <MetaRow
           label="Method"
-          value={signature.party === "client" ? "Typed signature via secure client link" : "Typed signature by team member"}
+          value={
+            signature.signatureImage
+              ? signature.party === "client"
+                ? "Drawn or uploaded signature via secure client link"
+                : "Drawn or uploaded signature by team member"
+              : signature.party === "client"
+                ? "Typed signature via secure client link"
+                : "Typed signature by team member"
+          }
         />
         {signature.ipAddress ? <MetaRow label="IP address" value={signature.ipAddress} /> : null}
         {signature.contentHash ? <MetaRow label="Fingerprint" value={signature.contentHash} mono /> : null}
@@ -415,6 +428,7 @@ const s = StyleSheet.create({
     padding: 16,
   },
   sigLabel: { fontSize: 8, color: MUTED, fontFamily: "Helvetica-Bold", letterSpacing: 0.8 },
+  sigImage: { height: 48, width: 180, objectFit: "contain", marginTop: 8, objectPosition: "left" },
   sigScript: {
     fontFamily: "Times-Italic",
     fontSize: 28,

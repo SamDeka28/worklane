@@ -8,6 +8,7 @@ export type SignatureView = {
   signerName: string;
   signerEmail: string;
   signatureText: string | null;
+  signatureImage?: string | null;
   signedAt: string;
   contentHash: string | null;
 };
@@ -55,12 +56,20 @@ function SignatureBlock({ signature, label }: { signature: SignatureView; label:
       <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
         {label} · signed electronically
       </p>
-      <p
-        className="mt-3 truncate border-b border-slate-300 pb-1 text-4xl leading-tight text-slate-900"
-        style={{ fontFamily: SIGNATURE_FONT }}
-      >
-        {signature.signatureText ?? signature.signerName}
-      </p>
+      {signature.signatureImage ? (
+        <img
+          src={signature.signatureImage}
+          alt={`Signature of ${signature.signerName}`}
+          className="mt-3 h-16 w-auto max-w-full border-b border-slate-300 object-contain object-left pb-1"
+        />
+      ) : (
+        <p
+          className="mt-3 truncate border-b border-slate-300 pb-1 text-4xl leading-tight text-slate-900"
+          style={{ fontFamily: SIGNATURE_FONT }}
+        >
+          {signature.signatureText ?? signature.signerName}
+        </p>
+      )}
       <div className="mt-2 grid gap-y-1 text-xs text-slate-600">
         <p className="truncate">
           <span className="text-slate-400">Name</span> {signature.signerName}

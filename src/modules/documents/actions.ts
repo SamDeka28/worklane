@@ -14,6 +14,7 @@ import { notifyMentions } from "@/modules/mentions/notify";
 import { deliverDocumentEmail } from "@/modules/documents/records";
 import { isWriteError } from "@/modules/records/mutate";
 import { documentSendToken, documentViewPath } from "@/modules/documents/sends";
+import { readSignature, signatureIntent } from "@/modules/documents/signature";
 import {
   buildSignedDocumentFiles,
   signedContentFor,
@@ -636,14 +637,20 @@ export async function freezeDocumentVersionAction(
   });
 
   if (nextStatus === "signed" && formData) {
-    const signerName = String(formData.get("signer_name") ?? "").trim();
-    const signerEmail = String(formData.get("signer_email") ?? "").trim();
-    const intentText =
-      String(formData.get("intent_text") ?? "").trim() ||
-      "I agree to the terms in this document.";
+    const signerName = String(formData.get("signer_name") ?? "").trim().slice(0, 120);
+    const signerEmail = String(formData.get("signer_email") ?? "").trim().slice(0, 200);
+    const signature = readSignature(formData);
     if (!signerName || !signerEmail) {
       return { error: "Name and email are required to sign" };
     }
+    if ("error" in signature) return signature;
+    const intentText = signatureIntent(
+      signerName,
+      document.title,
+      signature.signatureText,
+      Boolean(signature.signatureImage),
+      ctx.org.name,
+    );
     const { error: sigError } = await ctx.supabase.from("document_signatures").insert({
       organization_id: ctx.org.id,
       document_version_id: versionId,
@@ -651,6 +658,9 @@ export async function freezeDocumentVersionAction(
       signer_email: signerEmail,
       intent_text: intentText,
       user_agent: String(formData.get("user_agent") ?? "").slice(0, 500) || null,
+      method: "studio",
+      signature_text: signature.signatureText,
+      signature_image: signature.signatureImage,
     });
     if (sigError) return { error: sigError.message };
   }
@@ -722,11 +732,20 @@ export async function countersignDocumentVersionAction(
   formData: FormData,
 ) {
   const ctx = await requireWritableOrg(orgSlug);
+  return countersignDocumentForContext(ctx, versionId, formData);
+}
+
+export async function countersignDocumentForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  versionId: string,
+  formData: FormData,
+) {
+  const orgSlug = ctx.org.slug;
   const signerName = String(formData.get("signer_name") ?? "").trim().slice(0, 120);
   const signerEmail = String(formData.get("signer_email") ?? "").trim().slice(0, 200);
-  const signatureText = String(formData.get("signature_text") ?? "").trim().slice(0, 120);
+  const signature = readSignature(formData);
   if (!signerName || !signerEmail) return { error: "Name and email are required to sign" };
-  if (!signatureText) return { error: "Type your signature" };
+  if ("error" in signature) return signature;
   if (formData.get("consent") !== "on") return { error: "Tick the box to confirm you agree" };
 
   const { data: version } = await ctx.supabase
@@ -777,7 +796,7 @@ export async function countersignDocumentVersionAction(
   const title = document?.title ?? signedSend?.title ?? "document";
   const clientRef = document?.clients as { name: string } | { name: string }[] | null | undefined;
   const clientName = (Array.isArray(clientRef) ? clientRef[0]?.name : clientRef?.name) ?? null;
-  const intentText = `I, ${signerName}, on behalf of ${ctx.org.name}, agree to the terms of "${title}" and adopt "${signatureText}" as my electronic signature.`;
+  const intentText = signatureIntent(signerName, title, signature.signatureText, Boolean(signature.signatureImage), ctx.org.name);
 
   const { error: sigError } = await ctx.supabase.from("document_signatures").insert({
     organization_id: ctx.org.id,
@@ -788,7 +807,8 @@ export async function countersignDocumentVersionAction(
     signed_at: signedAt,
     user_agent: requestHeaders.get("user-agent")?.slice(0, 500) ?? null,
     method: "studio",
-    signature_text: signatureText,
+    signature_text: signature.signatureText,
+    signature_image: signature.signatureImage,
     ip_address: ip,
     content_hash: contentHash,
   });
@@ -857,6 +877,14 @@ export async function countersignDocumentVersionAction(
 /** Emails the signed PDF (plus the certificate once both sides signed) to anyone, e.g. to resend it to the client. */
 export async function emailSignedCopyAction(orgSlug: string, versionId: string, formData: FormData) {
   const ctx = await requireWritableOrg(orgSlug);
+  return emailSignedCopyForContext(ctx, versionId, formData);
+}
+
+export async function emailSignedCopyForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  versionId: string,
+  formData: FormData,
+) {
   if (!isEmailConfigured()) {
     return { error: "Email isn't set up on this workspace yet (SMTP_USER and SMTP_PASS)." };
   }

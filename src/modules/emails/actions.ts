@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireOrg, requireWritableOrg } from "@/modules/identity/org";
+import { requireOrg, requireWritableOrg, type OrgContext } from "@/modules/identity/org";
 import { generateShareToken } from "@/modules/portal/token";
 import { TRACKED_EMAIL_COLUMNS, mapTrackedEmail } from "@/modules/emails/queries";
 import type { ComposeEmailInput, TrackedEmail, TrackedEmailOpen } from "@/modules/emails/types";
@@ -183,11 +183,11 @@ const SEND_LIMIT = 40;
 const SEND_WINDOW_MS = 10 * 60_000;
 
 /** Sends a one-to-one email over the studio's SMTP with the pixel built in. */
-export async function sendTrackedEmailAction(
-  orgSlug: string,
+export async function sendTrackedEmailForContext(
+  ctx: OrgContext,
   input: ComposeEmailInput,
-): Promise<{ ok: true; id: string } | { error: string }> {
-  const ctx = await requireWritableOrg(orgSlug);
+): Promise<{ ok: true; id: string; signatureIncluded: boolean } | { error: string }> {
+  const orgSlug = ctx.org.slug;
   const sender = await resolveSender(ctx.org.id, ctx.userId);
   if (!sender.via) {
     return {
@@ -223,10 +223,13 @@ export async function sendTrackedEmailAction(
       .eq("created_by", ctx.userId)
       .gt("sent_at", new Date(Date.now() - SEND_WINDOW_MS).toISOString()),
     matchLead(ctx, to),
-    input.includeSignature ? senderSignature(ctx, "emails") : Promise.resolve(null),
+    input.includeSignature ? senderSignature(ctx, "emails", { force: true }) : Promise.resolve(null),
   ]);
   if ((recent ?? 0) >= SEND_LIMIT) {
     return { error: "You've sent a lot of emails in the last few minutes. Try again shortly." };
+  }
+  if (input.includeSignature && !signature) {
+    return { error: "No email signature is saved. Add one on your profile, then send again." };
   }
 
   const id = crypto.randomUUID();
@@ -294,7 +297,15 @@ export async function sendTrackedEmailAction(
 
   revalidatePath(`/${orgSlug}/emails`);
   if (leadId) revalidatePath(`/${orgSlug}/crm`);
-  return { ok: true, id };
+  return { ok: true, id, signatureIncluded: Boolean(signature) };
+}
+
+export async function sendTrackedEmailAction(
+  orgSlug: string,
+  input: ComposeEmailInput,
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  return sendTrackedEmailForContext(ctx, input);
 }
 
 /** Restarts the window in which hits count as the sender pasting the pixel. */

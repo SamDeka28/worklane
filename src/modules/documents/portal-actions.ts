@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { buildLiveSnapshot } from "@/modules/documents/lock";
 import { documentViewPath, loadSharedDocument } from "@/modules/documents/sends";
+import { readSignature, signatureIntent } from "@/modules/documents/signature";
 import { signedDocumentAttachments } from "@/modules/documents/signed-pdf";
 import { notify } from "@/modules/notifications/service";
 import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
@@ -103,10 +104,10 @@ export async function signPortalDocumentAction(token: string, formData: FormData
   if (!shared.versionId) return { error: "This copy can't be signed. Ask the sender to resend it." };
 
   const signerName = String(formData.get("signer_name") ?? "").trim().slice(0, 120);
-  const signatureText = String(formData.get("signature_text") ?? "").trim().slice(0, 120);
+  const signature = readSignature(formData);
   const consent = formData.get("consent") === "on";
   if (!signerName) return { error: "Enter your full name" };
-  if (!signatureText) return { error: "Type your signature" };
+  if ("error" in signature) return signature;
   if (!consent) return { error: "Tick the box to confirm you agree" };
 
   const requestHeaders = await headers();
@@ -150,7 +151,7 @@ export async function signPortalDocumentAction(token: string, formData: FormData
       ).data;
   if (!lockedVersion) return { error: "This document has already been signed" };
 
-  const intentText = `I, ${signerName}, agree to the terms of "${shared.title}" and adopt "${signatureText}" as my electronic signature.`;
+  const intentText = signatureIntent(signerName, shared.title, signature.signatureText, Boolean(signature.signatureImage));
   const { error: signatureError } = await admin.from("document_signatures").insert({
     organization_id: shared.organizationId,
     document_version_id: shared.versionId,
@@ -161,7 +162,8 @@ export async function signPortalDocumentAction(token: string, formData: FormData
     user_agent: userAgent,
     method: "portal",
     send_id: shared.id,
-    signature_text: signatureText,
+    signature_text: signature.signatureText,
+    signature_image: signature.signatureImage,
     ip_address: ip,
     content_hash: contentHash,
   });

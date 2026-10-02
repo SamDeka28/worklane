@@ -99,10 +99,16 @@ export async function senderSignatureState(
   };
 }
 
-/** The signed-in member's signature for emails sent from a module, or null when it's off there. */
+/**
+ * The signed-in member's signature for emails sent from a module, or null when it's off there.
+ * force attaches the saved signature even when the studio has it turned off for that module.
+ */
 export async function senderSignature(
   ctx: OrgContext,
   module: SignatureModule,
+  options?: { force?: boolean },
 ): Promise<RenderedSignature | null> {
-  return (await senderSignatureState(ctx, module)).signature;
+  if (!options?.force) return (await senderSignatureState(ctx, module)).signature;
+  const { studio, personal } = await getSignatures(ctx.org.id, ctx.userId);
+  return renderSignature(pickSignature(studio, personal), await signatureSender(ctx));
 }

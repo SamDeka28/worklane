@@ -58,7 +58,7 @@ export async function buildSignedDocumentFiles(
     client.from("document_versions").select("version_number").eq("id", input.versionId).maybeSingle(),
     client
       .from("document_signatures")
-      .select("signer_name, signer_email, signature_text, signed_at, content_hash, method, ip_address")
+      .select("signer_name, signer_email, signature_text, signature_image, signed_at, content_hash, method, ip_address")
       .eq("document_version_id", input.versionId)
       .order("signed_at", { ascending: true }),
   ]);
@@ -67,6 +67,7 @@ export async function buildSignedDocumentFiles(
     signerName: row.signer_name,
     signerEmail: row.signer_email,
     signatureText: row.signature_text ?? null,
+    signatureImage: row.signature_image ?? null,
     signedAt: row.signed_at,
     contentHash: row.content_hash ?? null,
     ipAddress: row.ip_address ? String(row.ip_address) : null,
