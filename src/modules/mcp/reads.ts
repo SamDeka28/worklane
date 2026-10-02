@@ -33,7 +33,7 @@ export async function listMemberStudios(reader: Reader): Promise<Studio[]> {
     .filter((row): row is Studio => Boolean(row));
 }
 
-async function studioFor(reader: Reader, slug: string | undefined): Promise<OrgContext | { error: string }> {
+export async function studioFor(reader: Reader, slug: string | undefined): Promise<OrgContext | { error: string }> {
   const studios = await listMemberStudios(reader);
   if (studios.length === 0) return { error: "This account isn't a member of a studio yet." };
   const chosen = slug?.trim() || (studios.length === 1 ? studios[0].org.slug : "");

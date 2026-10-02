@@ -1,11 +1,11 @@
 {
   "name": "worklane",
   "version": "1.0.0",
-  "description": "Read your Worklane studios, clients, projects, invoices, and leads.",
+  "description": "Read your Worklane studio, including totals and questions the screens do not answer.",
   "skills": "./skills/",
   "interface": {
     "displayName": "Worklane",
-    "shortDescription": "Read studios, clients, projects, invoices, and leads.",
+    "shortDescription": "Read studio records, totals, and questions the screens do not answer.",
     "developerName": "Worklane",
     "category": "Productivity",
     "capabilities": [

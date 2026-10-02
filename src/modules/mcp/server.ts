@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { describeStudioData, queryStudio } from "@/modules/mcp/query";
 import {
   readClient,
   readClients,
@@ -64,7 +65,7 @@ export function createWorklaneMcpServer(input: {
     { name: "Worklane", version: "1.0.0" },
     {
       instructions:
-        "Read the signed-in member's Worklane studios. If a tool says authentication is required, ask the user to connect Worklane. Do not invent records, and do not claim you can create or send anything.",
+        "Read the signed-in member's Worklane studios. For totals, periods, or questions that cross records, call describe_studio_data and then query_studio until the question is answered. If a tool says authentication is required, ask the user to connect Worklane. Do not invent records, and do not claim you can create or send anything.",
     },
   );
 
@@ -76,6 +77,82 @@ export function createWorklaneMcpServer(input: {
       ...auth,
     },
     async () => (reader ? result(await readStudios(reader)) : connectRequired(origin)),
+  );
+
+  server.registerTool(
+    "describe_studio_data",
+    {
+      title: "Describe studio data",
+      description: `List every dataset and field this member may read, including what money fields mean. Call this before guessing field names. ${TOOL_NOTE}`,
+      inputSchema: { org: orgField },
+      ...auth,
+    },
+    async (input) => (reader ? result(await describeStudioData(reader, input)) : connectRequired(origin)),
+  );
+
+  server.registerTool(
+    "query_studio",
+    {
+      title: "Query studio",
+      description: `Filter, search, group, aggregate, compare a period, and include a related dataset. Money questions about what was billed, collected, outstanding, overdue, or contracted must set measure. Currencies stay separate. If nextCursor is set, call again with that cursor before treating the list as complete. ${TOOL_NOTE}`,
+      inputSchema: {
+        org: orgField,
+        dataset: z
+          .string()
+          .optional()
+          .describe("Dataset name from describe_studio_data. Omit when measure is set."),
+        measure: z
+          .enum(["billed", "collected", "outstanding", "overdue", "contracted"])
+          .optional()
+          .describe(
+            "Ledger total. billed is charges by charged_on. collected is receipts minus refunds by paid_on. contracted is the project agreement, not cash.",
+          ),
+        fields: z.array(z.string()).optional().describe("Field names to return. Omit for all readable fields."),
+        filters: z
+          .array(
+            z.object({
+              field: z.string(),
+              op: z.enum(["eq", "neq", "gt", "gte", "lt", "lte", "in", "is_null"]),
+              value: z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]).optional(),
+            }),
+          )
+          .optional()
+          .describe("Filters on catalog fields. Measures accept client_id and project_id only."),
+        text: z.string().optional().describe("Search names, notes, and descriptions on this dataset."),
+        period: z
+          .object({
+            relative: z.enum(["this_month", "last_month", "last_30_days"]).optional(),
+            from: z.string().optional().describe("Inclusive YYYY-MM-DD in the studio timezone."),
+            to: z.string().optional().describe("Exclusive YYYY-MM-DD."),
+          })
+          .optional()
+          .describe("Resolved in the studio timezone, not the assistant clock."),
+        groupBy: z
+          .array(z.string())
+          .optional()
+          .describe("Field names, or month to group the dataset date by YYYY-MM."),
+        aggregates: z
+          .array(
+            z.object({
+              fn: z.enum(["count", "sum", "min", "max"]),
+              field: z.string().optional(),
+            }),
+          )
+          .optional(),
+        comparePrevious: z
+          .boolean()
+          .optional()
+          .describe("Also return the previous period of the same length."),
+        include: z
+          .array(z.string())
+          .optional()
+          .describe("Up to 3 directly related dataset names from the catalog."),
+        cursor: z.string().optional().describe("nextCursor from the previous page."),
+        limit: z.number().int().min(1).max(100).optional(),
+      },
+      ...auth,
+    },
+    async (input) => (reader ? result(await queryStudio(reader, input)) : connectRequired(origin)),
   );
 
   server.registerTool(

@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "worklane",
   "version": "1.0.0",
-  "description": "Read your Worklane studios, clients, projects, invoices, and leads.",
+  "description": "Read your Worklane studio, including totals and questions the screens do not answer.",
   "author": {
     "name": "Worklane",
     "url": "http://localhost:3000/connect"
@@ -19,8 +19,8 @@
     "com.openai": {
       "interface": {
         "displayName": "Worklane",
-        "shortDescription": "Read studios, clients, projects, invoices, and leads.",
-        "longDescription": "Connects ChatGPT to Worklane. Signing in on the Connect page shares read access for the studios you belong to. Worklane does not let the assistant create, change, or send anything.",
+        "shortDescription": "Read studio records, totals, and questions the screens do not answer.",
+        "longDescription": "Connects ChatGPT to Worklane. Signing in on the Connect page shares read access for the studios you belong to. The assistant can query the records you can already open. Worklane does not let the assistant create, change, or send anything.",
         "developerName": "Worklane",
         "category": "Productivity",
         "capabilities": [

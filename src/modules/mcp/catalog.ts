@@ -1,0 +1,776 @@
+import type { ModuleKey } from "@/modules/identity/types";
+
+export type FieldType = "text" | "number" | "money" | "date" | "bool" | "id";
+
+export type Field = {
+  name: string;
+  column: string;
+  type: FieldType;
+  meaning: string;
+  searchable?: boolean;
+  /** Amount. Omitted unless this member can see finance. */
+  finance?: boolean;
+};
+
+export type Relation = {
+  dataset: string;
+  /** Column on this dataset. */
+  from: string;
+  /** Column on the related dataset. */
+  to: string;
+};
+
+export type Dataset = {
+  name: string;
+  table: string;
+  description: string;
+  module: ModuleKey | null;
+  /** The dataset is money. Refused without finance access. */
+  financeOnly?: boolean;
+  /** Sums skip rows whose status is void. */
+  excludeVoidFromSums?: boolean;
+  dateField?: string;
+  currencyField?: string;
+  orderField: string;
+  fields: Field[];
+  relations: Relation[];
+  /** Team list is members plus profile names, not a single business table. */
+  members?: boolean;
+};
+
+const id = (name: string, meaning: string): Field => ({
+  name,
+  column: name,
+  type: "id",
+  meaning,
+});
+
+const text = (name: string, meaning: string, searchable = false): Field => ({
+  name,
+  column: name,
+  type: "text",
+  meaning,
+  searchable,
+});
+
+const num = (name: string, meaning: string): Field => ({
+  name,
+  column: name,
+  type: "number",
+  meaning,
+});
+
+const money = (name: string, meaning: string): Field => ({
+  name,
+  column: name,
+  type: "money",
+  meaning,
+  finance: true,
+});
+
+const date = (name: string, meaning: string): Field => ({
+  name,
+  column: name,
+  type: "date",
+  meaning,
+});
+
+const bool = (name: string, meaning: string): Field => ({
+  name,
+  column: name,
+  type: "bool",
+  meaning,
+});
+
+export const DATASETS: Dataset[] = [
+  {
+    name: "clients",
+    table: "clients",
+    description: "Companies and people the studio works with.",
+    module: null,
+    dateField: "created_at",
+    currencyField: "currency",
+    orderField: "name",
+    fields: [
+      id("id", "Client id."),
+      text("name", "Client name.", true),
+      text("kind", "company or person."),
+      text("currency", "Currency of this client's projects and charges. Do not add it to another currency."),
+      text("notes", "Internal notes on the client.", true),
+      date("created_at", "When the client was added."),
+      date("archived_at", "Set when the client is archived. Null means current."),
+    ],
+    relations: [
+      { dataset: "contacts", from: "id", to: "client_id" },
+      { dataset: "projects", from: "id", to: "client_id" },
+      { dataset: "leads", from: "id", to: "client_id" },
+      { dataset: "charges", from: "id", to: "client_id" },
+      { dataset: "payments", from: "id", to: "client_id" },
+      { dataset: "invoices", from: "id", to: "client_id" },
+    ],
+  },
+  {
+    name: "contacts",
+    table: "contacts",
+    description: "People at a client.",
+    module: null,
+    orderField: "name",
+    fields: [
+      id("id", "Contact id."),
+      id("client_id", "Client this person belongs to."),
+      text("name", "Contact name.", true),
+      text("email", "Email.", true),
+      text("phone", "Phone."),
+      text("whatsapp", "WhatsApp number."),
+      bool("is_primary", "True when this is the main contact."),
+    ],
+    relations: [{ dataset: "clients", from: "client_id", to: "id" }],
+  },
+  {
+    name: "projects",
+    table: "projects",
+    description: "Delivery work for a client. Contract amounts are agreements, not cash received.",
+    module: "delivery",
+    dateField: "starts_on",
+    orderField: "name",
+    fields: [
+      id("id", "Project id."),
+      id("client_id", "Client id."),
+      text("name", "Project name.", true),
+      text("status", "planning, active, on_hold, completed, or cancelled."),
+      text("billing_mode", "none, single_charge, milestones, hourly, or manual."),
+      text("scope", "Written scope.", true),
+      money("contracted_amount_minor", "Agreed contract amount in minor units. Not cash received and not an invoice."),
+      money("hourly_rate_minor", "Project hourly rate in minor units. Not hours and not cash received."),
+      date("starts_on", "Start date."),
+      date("due_on", "Due date."),
+      date("created_at", "When the project was created."),
+    ],
+    relations: [
+      { dataset: "clients", from: "client_id", to: "id" },
+      { dataset: "milestones", from: "id", to: "project_id" },
+      { dataset: "tasks", from: "id", to: "project_id" },
+      { dataset: "work_logs", from: "id", to: "project_id" },
+      { dataset: "project_columns", from: "id", to: "project_id" },
+      { dataset: "project_members", from: "id", to: "project_id" },
+      { dataset: "charges", from: "id", to: "project_id" },
+      { dataset: "invoices", from: "id", to: "project_id" },
+    ],
+  },
+  {
+    name: "milestones",
+    table: "milestones",
+    description: "Billable or delivery checkpoints on a project.",
+    module: "delivery",
+    dateField: "due_on",
+    orderField: "due_on",
+    fields: [
+      id("id", "Milestone id."),
+      id("project_id", "Project id."),
+      text("name", "Milestone name.", true),
+      text("status", "planned, in_progress, billed, completed, or cancelled."),
+      money("amount_minor", "Milestone amount in minor units. Not cash received."),
+      date("due_on", "Due date."),
+      text("description", "What this milestone delivers.", true),
+      id("charge_id", "Charge created when this milestone was billed, if any."),
+      date("billed_at", "When it was billed."),
+    ],
+    relations: [
+      { dataset: "projects", from: "project_id", to: "id" },
+      { dataset: "milestone_items", from: "id", to: "milestone_id" },
+      { dataset: "charges", from: "charge_id", to: "id" },
+    ],
+  },
+  {
+    name: "milestone_items",
+    table: "milestone_items",
+    description: "Checklist rows inside a milestone.",
+    module: "delivery",
+    orderField: "position",
+    fields: [
+      id("id", "Item id."),
+      id("milestone_id", "Milestone id."),
+      text("title", "Item title.", true),
+      num("position", "Sort order."),
+      id("task_id", "Linked task, if any."),
+    ],
+    relations: [
+      { dataset: "milestones", from: "milestone_id", to: "id" },
+      { dataset: "tasks", from: "task_id", to: "id" },
+    ],
+  },
+  {
+    name: "project_columns",
+    table: "project_columns",
+    description: "Board columns on a project.",
+    module: "delivery",
+    orderField: "position",
+    fields: [
+      id("id", "Column id."),
+      id("project_id", "Project id."),
+      text("name", "Column name.", true),
+      num("position", "Left-to-right order."),
+      text("system_key", "todo, doing, done, or null for a custom column."),
+    ],
+    relations: [{ dataset: "projects", from: "project_id", to: "id" }],
+  },
+  {
+    name: "tasks",
+    table: "tasks",
+    description: "Board cards. Assignees are user ids, not display names. Use members to resolve names.",
+    module: "delivery",
+    dateField: "due_on",
+    orderField: "created_at",
+    fields: [
+      id("id", "Task id."),
+      id("project_id", "Project id."),
+      id("milestone_id", "Milestone id, if linked."),
+      id("column_id", "Board column id."),
+      text("title", "Task title.", true),
+      text("description", "Task description.", true),
+      text("status", "todo, doing, or done."),
+      text("priority", "low, medium, or high."),
+      date("due_on", "Due date."),
+      id("assignee_user_id", "Primary assignee user id."),
+      text("assignee_user_ids", "All assignee user ids."),
+      date("time_started_at", "When the timer was started."),
+      date("time_stopped_at", "When the timer was stopped."),
+      date("created_at", "When the task was created."),
+    ],
+    relations: [
+      { dataset: "projects", from: "project_id", to: "id" },
+      { dataset: "task_comments", from: "id", to: "task_id" },
+      { dataset: "work_logs", from: "id", to: "task_id" },
+      { dataset: "project_columns", from: "column_id", to: "id" },
+    ],
+  },
+  {
+    name: "task_comments",
+    table: "task_comments",
+    description: "Comments on a task.",
+    module: "delivery",
+    dateField: "created_at",
+    orderField: "created_at",
+    fields: [
+      id("id", "Comment id."),
+      id("task_id", "Task id."),
+      text("body", "Comment text.", true),
+      id("created_by", "Author user id."),
+      date("created_at", "When it was written."),
+    ],
+    relations: [{ dataset: "tasks", from: "task_id", to: "id" }],
+  },
+  {
+    name: "work_logs",
+    table: "work_logs",
+    description: "Time and fixed work recorded on a project. hours_millis is milliseconds, not hours.",
+    module: "delivery",
+    dateField: "worked_on",
+    orderField: "worked_on",
+    fields: [
+      id("id", "Work log id."),
+      id("project_id", "Project id."),
+      id("milestone_id", "Milestone id, if linked."),
+      id("task_id", "Task id, if linked."),
+      date("worked_on", "Date the work counts toward."),
+      num("hours_millis", "Duration in milliseconds. Divide by 3600000 for hours. Not money."),
+      money("hourly_rate_minor", "Rate captured on this log, in minor units. Not cash received."),
+      money("fixed_minor", "Fixed amount on this log, in minor units. Not cash received."),
+      text("description", "What was done.", true),
+      id("charge_id", "Charge created from this log, if any."),
+      date("started_at", "Clock start."),
+      date("ended_at", "Clock end."),
+      date("created_at", "When the log was saved."),
+    ],
+    relations: [
+      { dataset: "projects", from: "project_id", to: "id" },
+      { dataset: "tasks", from: "task_id", to: "id" },
+      { dataset: "charges", from: "charge_id", to: "id" },
+    ],
+  },
+  {
+    name: "project_members",
+    table: "project_members",
+    description: "People assigned to a project, by user id and project role.",
+    module: "delivery",
+    orderField: "created_at",
+    fields: [
+      id("id", "Membership id."),
+      id("project_id", "Project id."),
+      id("user_id", "User id. Resolve the name from members."),
+      text("role", "lead or member on this project."),
+      date("created_at", "When they were added."),
+    ],
+    relations: [{ dataset: "projects", from: "project_id", to: "id" }],
+  },
+  {
+    name: "charges",
+    table: "charges",
+    description: "Amounts billed to a client. Void rows are not billed. This is not cash received.",
+    module: "finance",
+    financeOnly: true,
+    excludeVoidFromSums: true,
+    dateField: "charged_on",
+    currencyField: "currency",
+    orderField: "charged_on",
+    fields: [
+      id("id", "Charge id."),
+      id("client_id", "Client id."),
+      id("project_id", "Project id, if linked."),
+      id("milestone_id", "Milestone id, if linked."),
+      id("work_log_id", "Work log id, if linked."),
+      money("gross_minor", "Billed amount in minor units, before the studio fee split. Not cash received."),
+      num("fee_bps", "Studio fee in basis points. 10000 is 100%."),
+      money("net_minor", "Amount after the fee split, in minor units. Not cash received."),
+      text("currency", "Charge currency. Never add a different currency into this total."),
+      date("charged_on", "Date the charge is billed. Use this for billed-in-a-period, not paid_on."),
+      date("due_on", "Due date."),
+      text("source", "manual, work_log, milestone, invoice, or document."),
+      text("status", "open or void. Void charges are excluded from billed totals."),
+      text("memo", "Note on the charge.", true),
+      date("created_at", "When the charge was recorded."),
+    ],
+    relations: [
+      { dataset: "clients", from: "client_id", to: "id" },
+      { dataset: "projects", from: "project_id", to: "id" },
+      { dataset: "payment_allocations", from: "id", to: "charge_id" },
+    ],
+  },
+  {
+    name: "payments",
+    table: "payments",
+    description: "Receipts and refunds. Collected cash is posted receipts minus posted refunds, by paid_on. Void rows do not count.",
+    module: "finance",
+    financeOnly: true,
+    excludeVoidFromSums: true,
+    dateField: "paid_on",
+    currencyField: "currency",
+    orderField: "paid_on",
+    fields: [
+      id("id", "Payment id."),
+      id("client_id", "Client id."),
+      money("amount_minor", "Payment amount in minor units. A receipt is money in. A refund is money out. Do not add them and call the result collected."),
+      text("currency", "Payment currency. Never add a different currency into this total."),
+      date("paid_on", "Date the cash moved. Use this for collected-in-a-period, not charged_on."),
+      text("method", "upwork, bank, stripe, or other."),
+      text("reference", "External reference.", true),
+      text("kind", "receipt or refund."),
+      text("status", "posted or void. Void payments are excluded from collected totals."),
+      date("created_at", "When the payment was recorded."),
+    ],
+    relations: [
+      { dataset: "clients", from: "client_id", to: "id" },
+      { dataset: "payment_allocations", from: "id", to: "payment_id" },
+    ],
+  },
+  {
+    name: "payment_allocations",
+    table: "payment_allocations",
+    description: "How a receipt was applied to charges.",
+    module: "finance",
+    financeOnly: true,
+    orderField: "payment_id",
+    fields: [
+      id("id", "Allocation id."),
+      id("payment_id", "Payment id."),
+      id("charge_id", "Charge id."),
+      money("amount_minor", "Amount of this payment applied to this charge, in minor units."),
+    ],
+    relations: [
+      { dataset: "payments", from: "payment_id", to: "id" },
+      { dataset: "charges", from: "charge_id", to: "id" },
+    ],
+  },
+  {
+    name: "invoices",
+    table: "invoices",
+    description: "Invoice headers. The total lives on invoice lines. Status is not proof of payment.",
+    module: "finance",
+    financeOnly: true,
+    dateField: "issued_on",
+    currencyField: "currency",
+    orderField: "issued_on",
+    fields: [
+      id("id", "Invoice id."),
+      id("client_id", "Client id."),
+      id("project_id", "Project id, if linked."),
+      text("number", "Invoice number.", true),
+      text("status", "draft, sent, viewed, partially_paid, paid, overdue, or void."),
+      text("currency", "Invoice currency."),
+      date("issued_on", "Issue date."),
+      date("due_on", "Due date."),
+      text("memo", "Note shown on the invoice.", true),
+      date("created_at", "When the invoice was created."),
+    ],
+    relations: [
+      { dataset: "clients", from: "client_id", to: "id" },
+      { dataset: "projects", from: "project_id", to: "id" },
+      { dataset: "invoice_lines", from: "id", to: "invoice_id" },
+    ],
+  },
+  {
+    name: "invoice_lines",
+    table: "invoice_lines",
+    description: "Lines on an invoice. Summing unit amounts ignores quantity, tax, and discount. Prefer the line description plus quantity.",
+    module: "finance",
+    financeOnly: true,
+    orderField: "position",
+    fields: [
+      id("id", "Line id."),
+      id("invoice_id", "Invoice id."),
+      text("description", "Line description.", true),
+      num("quantity", "Quantity."),
+      money("unit_amount_minor", "Unit price in minor units. Not the line total and not cash received."),
+      num("tax_bps", "Tax in basis points."),
+      money("discount_minor", "Discount in minor units."),
+      id("milestone_id", "Linked milestone, if any."),
+      id("work_log_id", "Linked work log, if any."),
+      id("charge_id", "Linked charge, if any."),
+      num("position", "Sort order."),
+    ],
+    relations: [{ dataset: "invoices", from: "invoice_id", to: "id" }],
+  },
+  {
+    name: "leads",
+    table: "leads",
+    description: "Pipeline records. An estimated value is a forecast, not billed and not collected.",
+    module: "crm",
+    dateField: "close_on",
+    currencyField: "currency",
+    orderField: "updated_at",
+    fields: [
+      id("id", "Lead id."),
+      text("name", "Lead name.", true),
+      text("company", "Company.", true),
+      text("contact_name", "Contact name.", true),
+      text("email", "Email.", true),
+      text("stage", "Stage slug. Compare with lead_stages."),
+      money("estimated_value_minor", "Forecast value in minor units. Not billed, not collected, and not a contract."),
+      text("currency", "Forecast currency."),
+      date("close_on", "Expected close date."),
+      id("owner_user_id", "Owner user id."),
+      id("client_id", "Client created from this lead, if any."),
+      text("notes", "Notes.", true),
+      text("next_action", "Next step.", true),
+      date("next_action_on", "When the next step is due."),
+      date("closed_at", "When it was won or lost."),
+      text("lost_reason", "Why it was lost."),
+      text("source", "Where the lead came from."),
+      date("created_at", "When the lead was created."),
+      date("updated_at", "When the lead last changed."),
+    ],
+    relations: [
+      { dataset: "clients", from: "client_id", to: "id" },
+      { dataset: "lead_activities", from: "id", to: "lead_id" },
+      { dataset: "lead_stages", from: "stage", to: "slug" },
+    ],
+  },
+  {
+    name: "lead_stages",
+    table: "lead_stages",
+    description: "Pipeline stages for this studio.",
+    module: "crm",
+    orderField: "position",
+    fields: [
+      id("id", "Stage id."),
+      text("name", "Stage name.", true),
+      text("slug", "Stage slug stored on leads."),
+      num("position", "Left-to-right order."),
+      text("system_key", "won, lost, or null."),
+      num("probability_bps", "Win probability in basis points, if set."),
+    ],
+    relations: [],
+  },
+  {
+    name: "lead_activities",
+    table: "lead_activities",
+    description: "Calls, emails, meetings, and notes logged on a lead. This is the note text, not an email from the mailbox.",
+    module: "crm",
+    dateField: "happened_at",
+    orderField: "happened_at",
+    fields: [
+      id("id", "Activity id."),
+      id("lead_id", "Lead id."),
+      text("kind", "call, email, meeting, message, note, or form."),
+      text("body", "What was logged.", true),
+      date("happened_at", "When it happened."),
+      id("actor_id", "Member who logged it."),
+    ],
+    relations: [{ dataset: "leads", from: "lead_id", to: "id" }],
+  },
+  {
+    name: "partners",
+    table: "partners",
+    description: "People who share in delivery. Payable is derived from allocations and settlements, not stored here.",
+    module: "partners",
+    orderField: "name",
+    fields: [
+      id("id", "Partner id."),
+      text("name", "Partner name.", true),
+      text("kind", "originator, participant, or referral."),
+      id("user_id", "Linked member, if they have a login."),
+      text("notes", "Notes.", true),
+      bool("active", "False when the partner is inactive."),
+    ],
+    relations: [
+      { dataset: "distribution_lines", from: "id", to: "partner_id" },
+      { dataset: "partner_allocations", from: "id", to: "partner_id" },
+      { dataset: "partner_settlements", from: "id", to: "partner_id" },
+    ],
+  },
+  {
+    name: "distribution_lines",
+    table: "distribution_lines",
+    description: "A partner's share of a distribution version, in basis points.",
+    module: "partners",
+    orderField: "partner_id",
+    fields: [
+      id("id", "Line id."),
+      id("version_id", "Distribution version id."),
+      id("partner_id", "Partner id."),
+      num("share_bps", "Share in basis points. 10000 is 100%. Not money."),
+    ],
+    relations: [{ dataset: "partners", from: "partner_id", to: "id" }],
+  },
+  {
+    name: "partner_allocations",
+    table: "partner_allocations",
+    description: "What a partner earned on a charge. Void rows are excluded from sums.",
+    module: "partners",
+    excludeVoidFromSums: true,
+    dateField: "earned_on",
+    currencyField: "currency",
+    orderField: "earned_on",
+    fields: [
+      id("id", "Allocation id."),
+      id("partner_id", "Partner id."),
+      id("charge_id", "Charge id."),
+      id("payment_id", "Receipt this earning waited on, if earn-on-receipt."),
+      money("earned_minor", "Amount the partner earned, in minor units. Not a settlement and not client cash."),
+      text("currency", "Currency. Do not add a different currency."),
+      date("earned_on", "Date earned."),
+      text("status", "posted or void."),
+    ],
+    relations: [
+      { dataset: "partners", from: "partner_id", to: "id" },
+      { dataset: "charges", from: "charge_id", to: "id" },
+    ],
+  },
+  {
+    name: "partner_settlements",
+    table: "partner_settlements",
+    description: "Cash paid out to a partner. Void rows are excluded from sums.",
+    module: "partners",
+    excludeVoidFromSums: true,
+    dateField: "settled_on",
+    currencyField: "currency",
+    orderField: "settled_on",
+    fields: [
+      id("id", "Settlement id."),
+      id("partner_id", "Partner id."),
+      money("amount_minor", "Amount paid to the partner, in minor units. Not client receipts."),
+      text("currency", "Currency. Do not add a different currency."),
+      date("settled_on", "Date paid."),
+      text("method", "upwork, bank, stripe, or other."),
+      text("memo", "Note.", true),
+      text("status", "posted or void."),
+    ],
+    relations: [{ dataset: "partners", from: "partner_id", to: "id" }],
+  },
+  {
+    name: "documents",
+    table: "documents",
+    description: "Proposals and statements of work. File contents and email bodies are not included.",
+    module: "documents",
+    dateField: "updated_at",
+    orderField: "updated_at",
+    fields: [
+      id("id", "Document id."),
+      text("kind", "proposal, sow, or other."),
+      text("title", "Title.", true),
+      text("status", "draft, sent, accepted, signed, or void."),
+      id("client_id", "Client id, if linked."),
+      id("project_id", "Project id, if linked."),
+      date("created_at", "When it was created."),
+      date("updated_at", "When it last changed."),
+    ],
+    relations: [
+      { dataset: "document_versions", from: "id", to: "document_id" },
+      { dataset: "document_sends", from: "id", to: "document_id" },
+      { dataset: "document_feedback", from: "id", to: "document_id" },
+      { dataset: "clients", from: "client_id", to: "id" },
+    ],
+  },
+  {
+    name: "document_versions",
+    table: "document_versions",
+    description: "Version metadata. The document body is not included.",
+    module: "documents",
+    dateField: "created_at",
+    orderField: "version_number",
+    fields: [
+      id("id", "Version id."),
+      id("document_id", "Document id."),
+      num("version_number", "Version number."),
+      text("status", "draft, sent, accepted, signed, or void."),
+      date("created_at", "When this version was saved."),
+      date("locked_at", "When it was locked for sending."),
+    ],
+    relations: [
+      { dataset: "documents", from: "document_id", to: "id" },
+      { dataset: "document_signatures", from: "id", to: "document_version_id" },
+    ],
+  },
+  {
+    name: "document_sends",
+    table: "document_sends",
+    description: "Send metadata: who it went to and whether it was opened. The email body and link token are not included.",
+    module: "documents",
+    dateField: "sent_at",
+    orderField: "sent_at",
+    fields: [
+      id("id", "Send id."),
+      id("document_id", "Document id."),
+      id("document_version_id", "Version that was sent."),
+      text("title", "Title at send time."),
+      text("recipient_email", "Recipient email."),
+      text("recipient_name", "Recipient name."),
+      text("subject", "Email subject."),
+      date("sent_at", "When it was sent."),
+      num("open_count", "How many times the tracking pixel loaded."),
+      date("first_opened_at", "First open."),
+      date("last_opened_at", "Most recent open."),
+      num("view_count", "How many times the link was viewed."),
+      date("revoked_at", "When the link was revoked."),
+    ],
+    relations: [{ dataset: "documents", from: "document_id", to: "id" }],
+  },
+  {
+    name: "document_feedback",
+    table: "document_feedback",
+    description: "Client review comments and signature events on a document.",
+    module: "documents",
+    dateField: "created_at",
+    orderField: "created_at",
+    fields: [
+      id("id", "Feedback id."),
+      id("document_id", "Document id."),
+      id("document_version_id", "Version id."),
+      text("kind", "comment, suggestion, changes_requested, reply, or signed."),
+      text("author_type", "client or studio."),
+      text("author_name", "Author name."),
+      text("quote", "Quoted text.", true),
+      text("body", "Comment.", true),
+      date("resolved_at", "When it was resolved."),
+      date("created_at", "When it was written."),
+    ],
+    relations: [{ dataset: "documents", from: "document_id", to: "id" }],
+  },
+  {
+    name: "document_signatures",
+    table: "document_signatures",
+    description: "Who signed a document version, and when. Not the file bytes.",
+    module: "documents",
+    dateField: "signed_at",
+    orderField: "signed_at",
+    fields: [
+      id("id", "Signature id."),
+      id("document_version_id", "Version id."),
+      text("signer_name", "Signer name.", true),
+      text("signer_email", "Signer email."),
+      date("signed_at", "When they signed."),
+    ],
+    relations: [{ dataset: "document_versions", from: "document_version_id", to: "id" }],
+  },
+  {
+    name: "files",
+    table: "files",
+    description: "File names and sizes attached to records. File bytes are not included.",
+    module: "documents",
+    dateField: "created_at",
+    orderField: "created_at",
+    fields: [
+      id("id", "File id."),
+      text("entity_type", "Record type this file is attached to."),
+      id("entity_id", "Record id."),
+      text("name", "File name.", true),
+      text("mime", "Mime type."),
+      num("size_bytes", "Size in bytes."),
+      text("visibility", "internal or shared."),
+      date("created_at", "When it was uploaded."),
+    ],
+    relations: [],
+  },
+  {
+    name: "members",
+    table: "organization_members",
+    description: "Studio members by name and role. Invitation tokens are not included.",
+    module: null,
+    members: true,
+    orderField: "role",
+    fields: [
+      id("user_id", "User id. This matches assignee and owner ids on other datasets."),
+      text("display_name", "Name.", true),
+      text("job_title", "Job title.", true),
+      text("role", "owner, admin, member, viewer, or partner."),
+      text("status", "invited, active, or disabled."),
+    ],
+    relations: [],
+  },
+  {
+    name: "record_events",
+    table: "record_events",
+    description: "Audit trail of creates, updates, and deletes on leads and tasks.",
+    module: null,
+    dateField: "created_at",
+    orderField: "created_at",
+    fields: [
+      id("id", "Event id."),
+      text("entity_type", "lead or task."),
+      id("entity_id", "Lead or task id."),
+      text("entity_label", "Name at the time of the change."),
+      id("project_id", "Project id for a task event."),
+      id("actor_id", "Who made the change."),
+      text("actor_label", "Their name at the time."),
+      text("action", "created, updated, or deleted."),
+      text("changes", "Fields that changed."),
+      date("created_at", "When it happened."),
+    ],
+    relations: [],
+  },
+];
+
+export const MEASURES = [
+  {
+    name: "billed",
+    meaning:
+      "Non-void charges in the period, by charged_on, split by currency. This is not cash received and not the contract amount.",
+  },
+  {
+    name: "collected",
+    meaning:
+      "Posted receipts minus posted refunds in the period, by paid_on, split by currency. This is not billed and not the contract amount.",
+  },
+  {
+    name: "outstanding",
+    meaning:
+      "Still owed as of the end of the period: non-void charges minus posted receipts plus posted refunds, split by currency.",
+  },
+  {
+    name: "overdue",
+    meaning: "Outstanding charges whose due date is before the as-of date, split by currency.",
+  },
+  {
+    name: "contracted",
+    meaning:
+      "Sum of project contracted_amount_minor, split by the client currency. An agreement, not cash received and not billed.",
+  },
+] as const;
+
+export function datasetByName(name: string) {
+  return DATASETS.find((dataset) => dataset.name === name) ?? null;
+}
+
+export function fieldByName(dataset: Dataset, name: string) {
+  return dataset.fields.find((field) => field.name === name) ?? null;
+}
