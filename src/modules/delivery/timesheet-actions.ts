@@ -14,7 +14,7 @@ export async function sendProjectTimesheetEmailAction(
   projectId: string,
   month: string,
   input: { to: string; cc?: string; subject: string; body: string; attachments?: EmailAttachmentPayload[] },
-) {
+): Promise<{ ok: true } | { error: string }> {
   const ctx = await requireWritableOrg(orgSlug);
   const [project, logs, tasks] = await Promise.all([
     getProject(orgSlug, projectId),
@@ -36,7 +36,7 @@ export async function sendProjectTimesheetEmailAction(
   const body = input.body.trim().slice(0, 20_000);
   if (!body) return { error: "Add a message for your client" };
   const extraAttachments = parseEmailAttachments(input.attachments);
-  if ("error" in extraAttachments) return extraAttachments;
+  if ("error" in extraAttachments) return { error: extraAttachments.error };
 
   const taskNames = new Map(tasks.map((task) => [task.id, task.title]));
   const entries = logs
@@ -50,11 +50,6 @@ export async function sendProjectTimesheetEmailAction(
       hourlyRateMinor: log.hourlyRateMinor,
       fixedMinor: log.fixedMinor,
     }));
-  const monthTitle = new Intl.DateTimeFormat("en", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${month}-01T00:00:00Z`));
   const attachment = await renderTimesheetPdfBuffer({
     organizationName: ctx.org.name,
     projectName: project.name,
@@ -82,7 +77,7 @@ export async function sendProjectTimesheetEmailAction(
       },
     ],
   });
-  if (!mailed.ok) return { error: mailed.error };
+  if (!mailed.ok) return { error: mailed.error || "Couldn't send the timesheet" };
 
   await ctx.supabase.from("activities").insert({
     organization_id: ctx.org.id,
@@ -93,5 +88,5 @@ export async function sendProjectTimesheetEmailAction(
     metadata: { kind: "timesheet", month, to },
   });
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
-  return { ok: true as const, to, month: monthTitle };
+  return { ok: true };
 }
