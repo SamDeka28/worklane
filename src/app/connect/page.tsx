@@ -1,6 +1,8 @@
 import { Download } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
+import { CopyAddress } from "@/app/connect/copy-address";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { approveMcpAccessAction, denyMcpAccessAction } from "@/modules/mcp/actions";
@@ -53,12 +55,109 @@ export default async function ConnectPage({
     Boolean(scope) &&
     clientAllowsRedirect(client!, redirectUri);
 
+  if (!started) {
+    const invalidAppId = value("plugin") === "invalid";
+    return (
+      <main className="min-h-svh px-4 py-16 sm:px-6">
+        <div className="mx-auto w-full max-w-5xl">
+          <div className="mx-auto max-w-lg text-center">
+            <BrandMark size={28} priority className="mx-auto" />
+            <h1 className="mt-4 font-heading text-3xl font-semibold tracking-tight">Connect ChatGPT</h1>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Sign in on this page when ChatGPT asks. Reading is included. Allow changes when you
+              want it to create, send, or update records.
+            </p>
+          </div>
+          <div className="mt-8 grid gap-4 md:grid-cols-2">
+            <section className="rounded-3xl bg-card p-6 shadow-lift ring-1 ring-border/60 sm:p-8">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Step 1</p>
+              <h2 className="mt-2 font-heading text-xl font-semibold tracking-tight">Paste the server address</h2>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                This connects ChatGPT to your studios and creates the app id for your account.
+              </p>
+              <ol className="mt-5 space-y-3">
+                {[
+                  "In ChatGPT, open Settings, then Security and login, and turn on Developer mode.",
+                  "Open Plugins and choose the plus button. Paste the address below and create the plugin.",
+                  "When ChatGPT opens this page, sign in and allow access. Install the plugin under Personal.",
+                  "Switch from Chat to Work. In a new chat, type @ and select Worklane.",
+                ].map((step, index) => (
+                  <li key={step} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-foreground">
+                      {index + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+              {origin ? <CopyAddress value={`${origin}/mcp`} /> : null}
+            </section>
+            <section className="rounded-3xl bg-card p-6 shadow-lift ring-1 ring-border/60 sm:p-8">
+              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Step 2</p>
+              <h2 className="mt-2 font-heading text-xl font-semibold tracking-tight">Add the skill</h2>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                The server address does not include the skill. Build a plugin for the app id on
+                your ChatGPT account.
+              </p>
+              <ol className="mt-5 space-y-3">
+                {[
+                  "Open the Worklane plugin you just created.",
+                  "Copy the app id from the page address. It starts with asdk_app_. Pasting the whole address works.",
+                  <>
+                    Download <span className="whitespace-nowrap">version {PLUGIN_VERSION}</span> as
+                    worklane.zip, then upload it as a new version of that plugin.
+                  </>,
+                ].map((step, index) => (
+                  <li key={index} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-foreground">
+                      {index + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+              <form action="/connect/plugin" className="mt-5 flex flex-col gap-2">
+                <label htmlFor="app_id" className="text-sm font-medium text-foreground">
+                  App id
+                </label>
+                <Input
+                  id="app_id"
+                  name="app_id"
+                  required
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="asdk_app_…"
+                  defaultValue={value("app_id")}
+                  aria-invalid={invalidAppId || undefined}
+                  className="font-mono text-xs font-normal"
+                />
+                {invalidAppId ? (
+                  <p className="text-sm text-destructive">
+                    That is not an app id. Copy the asdk_app_ value from the ChatGPT address.
+                  </p>
+                ) : (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    If the address shows plugin_asdk_app_, paste it as it is.
+                  </p>
+                )}
+                <Button type="submit" className="mt-2">
+                  <Download data-icon="inline-start" />
+                  Download plugin
+                </Button>
+              </form>
+            </section>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex min-h-svh items-center justify-center px-4 py-16">
       <div className="w-full max-w-md rounded-3xl bg-card p-8 shadow-lift ring-1 ring-border/60">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Worklane</p>
         <h1 className="mt-2 font-heading text-2xl font-semibold tracking-tight">Connect using MCP</h1>
-        {started && ready && client ? (
+        {ready && client ? (
           <>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               {client.clientName} is asking to read your studios.{" "}
@@ -87,7 +186,7 @@ export default async function ConnectPage({
               </Button>
             </form>
           </>
-        ) : started ? (
+        ) : (
           <>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
               {client
@@ -111,64 +210,6 @@ export default async function ConnectPage({
                 </Button>
               </div>
             ) : null}
-          </>
-        ) : (
-          <>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Add Worklane in ChatGPT either way below. Then you can mention it in a chat.
-              ChatGPT opens this page, you sign in, and Worklane shares your studios. Reading is
-              included. Changes need you to allow them on this page.
-            </p>
-            <h2 className="mt-6 text-sm font-medium text-foreground">Paste the server address</h2>
-            <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-              <li>In ChatGPT, open Settings, then Security and login, and turn on Developer mode.</li>
-              <li>Open Plugins and choose the plus button. Paste this site&apos;s server address and create the plugin.</li>
-              <li>When ChatGPT opens this page, sign in and allow access.</li>
-              <li>Open the plugin under Personal and install it.</li>
-              <li>On the ChatGPT homepage, switch from Chat to Work. In a new Work chat, type @ and select Worklane.</li>
-            </ol>
-            {origin ? (
-              <p className="mt-3 font-mono text-xs text-foreground">{origin}/mcp</p>
-            ) : null}
-            <h2 className="mt-6 text-sm font-medium text-foreground">Upload the plugin package</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Each ChatGPT account has its own app id. Create the connection above, then build a
-              package for that id.
-            </p>
-            <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-              <li>In ChatGPT, open the Worklane plugin you just created.</li>
-              <li>
-                Copy the app id from the page address. It starts with asdk_app_. If the address
-                shows plugin_asdk_app_, copy from asdk_app_ onward. You can paste the whole address.
-              </li>
-              <li>Paste it below and download version {PLUGIN_VERSION}. The file is named worklane.zip.</li>
-              <li>Upload that file in ChatGPT as a new version of the same plugin.</li>
-            </ol>
-            <form action="/connect/plugin" className="mt-4 flex flex-col gap-2">
-              <label htmlFor="app_id" className="text-sm font-medium text-foreground">
-                App id
-              </label>
-              <Input
-                id="app_id"
-                name="app_id"
-                required
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="asdk_app_…"
-                defaultValue={value("app_id")}
-                aria-invalid={value("plugin") === "invalid" || undefined}
-                className="font-mono text-xs font-normal"
-              />
-              {value("plugin") === "invalid" ? (
-                <p className="text-sm text-destructive">
-                  That is not an app id. Open the plugin in ChatGPT and copy the asdk_app_ value from the address.
-                </p>
-              ) : null}
-              <Button type="submit" className="mt-2">
-                <Download data-icon="inline-start" />
-                Download plugin
-              </Button>
-            </form>
           </>
         )}
       </div>
