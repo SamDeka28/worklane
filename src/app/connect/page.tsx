@@ -1,9 +1,11 @@
-import Link from "next/link";
+import { Download } from "lucide-react";
 import { headers } from "next/headers";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { approveMcpAccessAction, denyMcpAccessAction } from "@/modules/mcp/actions";
 import { clientAllowsRedirect, normalizeScope, resolveOauthClient } from "@/modules/mcp/oauth";
 import { originFromHeaders } from "@/modules/mcp/origin";
+import { PLUGIN_VERSION } from "@/modules/mcp/plugin-package";
 import { oauthAuthorizePath } from "@/modules/mcp/return-path";
 import { getSessionUser } from "@/shared/db/require-user";
 
@@ -112,11 +114,12 @@ export default async function ConnectPage({
         ) : (
           <>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Add Worklane as an app in ChatGPT on the web. Then you can mention it in a chat.
+              Add Worklane in ChatGPT either way below. Then you can mention it in a chat.
               ChatGPT opens this page, you sign in, and Worklane shares your studios. Reading is
               included. Changes need you to allow them on this page.
             </p>
-            <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+            <h2 className="mt-6 text-sm font-medium text-foreground">Paste the server address</h2>
+            <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
               <li>In ChatGPT, open Settings, then Security and login, and turn on Developer mode.</li>
               <li>Open Plugins and choose the plus button. Paste this site&apos;s server address and create the plugin.</li>
               <li>When ChatGPT opens this page, sign in and allow access.</li>
@@ -124,12 +127,18 @@ export default async function ConnectPage({
               <li>On the ChatGPT homepage, switch from Chat to Work. In a new Work chat, type @ and select Worklane.</li>
             </ol>
             {origin ? (
-              <p className="mt-4 font-mono text-xs text-foreground">{origin}/mcp</p>
+              <p className="mt-3 font-mono text-xs text-foreground">{origin}/mcp</p>
             ) : null}
-            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-              The Worklane plugin package uses this server and the Worklane app already installed
-              in ChatGPT. Upload a newer package with the same name worklane to update it.
+            <h2 className="mt-6 text-sm font-medium text-foreground">Upload the plugin package</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              Download version {PLUGIN_VERSION} and upload it in ChatGPT under Plugins. Keep the
+              file named worklane.zip. It uses this server and the Worklane app already installed
+              there. Upload it again whenever you need a newer package.
             </p>
+            <Button className="mt-4" nativeButton={false} render={<a href="/connect/plugin" />}>
+              <Download data-icon="inline-start" />
+              Download plugin
+            </Button>
           </>
         )}
       </div>

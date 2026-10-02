@@ -18,7 +18,7 @@ export async function GET() {
   return new NextResponse(new Uint8Array(body), {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": "attachment; filename=\"worklane-chatgpt-plugin.zip\"",
+      "Content-Disposition": "attachment; filename=\"worklane.zip\"",
     },
   });
 }
