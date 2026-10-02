@@ -929,7 +929,7 @@ export function DocumentEditor({
                         version.id,
                         "accepted",
                       );
-                      if (result.error) toast.error(result.error);
+                      if ("error" in result) toast.error(result.error);
                       else {
                         toast.success("Marked as accepted. This version is now locked");
                         router.refresh();
@@ -1224,7 +1224,7 @@ function SignForm({
             "signed",
             formData,
           );
-          if (result.error) toast.error(result.error);
+          if ("error" in result) toast.error(result.error);
           else {
             toast.success("Signed. A PDF copy has been stored");
             router.refresh();
