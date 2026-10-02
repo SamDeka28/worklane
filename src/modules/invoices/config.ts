@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { requireOrg } from "@/modules/identity/org";
+import { requireOrg, type OrgContext } from "@/modules/identity/org";
 import {
   parseOrgInvoiceSettings,
   type InvoiceBrand,
@@ -12,8 +12,7 @@ export type OrgInvoiceConfig = OrgInvoiceSettings & {
   nextNumber: number;
 };
 
-export const loadOrgInvoiceConfig = cache(async (orgSlug: string): Promise<OrgInvoiceConfig> => {
-  const ctx = await requireOrg(orgSlug);
+export async function loadOrgInvoiceConfigFor(ctx: Pick<OrgContext, "supabase" | "org">): Promise<OrgInvoiceConfig> {
   const { data, error } = await ctx.supabase
     .from("organizations")
     .select("settings, invoice_next_number")
@@ -26,18 +25,23 @@ export const loadOrgInvoiceConfig = cache(async (orgSlug: string): Promise<OrgIn
     ...settings,
     nextNumber: Number(data?.invoice_next_number ?? 1) || 1,
   };
+}
+
+export const loadOrgInvoiceConfig = cache(async (orgSlug: string): Promise<OrgInvoiceConfig> => {
+  return loadOrgInvoiceConfigFor(await requireOrg(orgSlug));
 });
 
 export async function resolveInvoiceBrand(
   orgSlug: string,
   snapshot?: unknown,
+  session?: OrgContext,
 ): Promise<InvoiceBrand> {
-  const ctx = await requireOrg(orgSlug);
+  const ctx = session ?? (await requireOrg(orgSlug));
   const snap = parseBrandSnapshot(snapshot);
   if (snap) {
     let logoUrl: string | null = null;
     if (snap.logoFileId) {
-      logoUrl = await signedLogoUrl(orgSlug, snap.logoFileId);
+      logoUrl = await signedLogoUrl(ctx, snap.logoFileId);
     }
     return {
       accentHex: snap.accentHex,
@@ -50,10 +54,10 @@ export async function resolveInvoiceBrand(
     };
   }
 
-  const config = await loadOrgInvoiceConfig(orgSlug);
+  const config = await loadOrgInvoiceConfigFor(ctx);
   let logoUrl: string | null = null;
   if (config.brand.logoFileId) {
-    logoUrl = await signedLogoUrl(orgSlug, config.brand.logoFileId);
+    logoUrl = await signedLogoUrl(ctx, config.brand.logoFileId);
   }
   return {
     accentHex: config.brand.accentHex,
@@ -77,8 +81,8 @@ export function brandToSnapshot(brand: InvoiceBrand): InvoiceBrandSnapshot {
   };
 }
 
-const signedLogoUrl = cache(async (orgSlug: string, fileId: string): Promise<string | null> => {
-  const { supabase, org } = await requireOrg(orgSlug);
+const signedLogoUrl = cache(async (ctx: Pick<OrgContext, "supabase" | "org">, fileId: string): Promise<string | null> => {
+  const { supabase, org } = ctx;
   const { data } = await supabase
     .from("files")
     .select("storage_path")

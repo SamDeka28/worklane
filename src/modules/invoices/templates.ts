@@ -110,8 +110,9 @@ export async function listInvoiceTemplates(orgSlug: string): Promise<InvoiceTemp
 export async function getInvoiceTemplate(
   orgSlug: string,
   templateId: string,
+  session?: { org: { id: string }; supabase: Awaited<ReturnType<typeof requireOrg>>["supabase"] },
 ): Promise<InvoiceTemplate | null> {
-  const ctx = await requireOrg(orgSlug);
+  const ctx = session ?? (await requireOrg(orgSlug));
   const { data, error } = await ctx.supabase
     .from("invoice_templates")
     .select(TEMPLATE_SELECT)

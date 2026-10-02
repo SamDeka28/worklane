@@ -1,4 +1,5 @@
 import { getClient } from "@/modules/clients/queries";
+import type { OrgContext } from "@/modules/identity/org";
 import { resolveInvoiceBrand } from "@/modules/invoices/config";
 import { renderInvoicePdfBuffer } from "@/modules/invoices/pdf";
 import { listInvoicePayments } from "@/modules/invoices/queries";
@@ -16,10 +17,11 @@ export function invoicePaidMinor(payments: InvoicePayment[]): bigint {
 export async function resolveBrandForInvoice(
   orgSlug: string,
   invoice: Pick<InvoiceRecord, "brandSnapshot" | "templateId">,
+  session?: OrgContext,
 ): Promise<InvoiceBrand> {
-  const brand = await resolveInvoiceBrand(orgSlug, invoice.brandSnapshot);
+  const brand = await resolveInvoiceBrand(orgSlug, invoice.brandSnapshot, session);
   if (invoice.brandSnapshot || !invoice.templateId) return brand;
-  const template = await getInvoiceTemplate(orgSlug, invoice.templateId);
+  const template = await getInvoiceTemplate(orgSlug, invoice.templateId, session);
   if (!template) return brand;
   return {
     ...brand,
@@ -28,11 +30,11 @@ export async function resolveBrandForInvoice(
   };
 }
 
-export async function renderInvoicePdf(orgSlug: string, invoice: InvoiceRecord) {
+export async function renderInvoicePdf(orgSlug: string, invoice: InvoiceRecord, session?: OrgContext) {
   const [client, brand, payments] = await Promise.all([
-    getClient(orgSlug, invoice.clientId),
-    resolveBrandForInvoice(orgSlug, invoice),
-    listInvoicePayments(orgSlug, invoice),
+    getClient(orgSlug, invoice.clientId, session),
+    resolveBrandForInvoice(orgSlug, invoice, session),
+    listInvoicePayments(orgSlug, invoice, session),
   ]);
   const clientName = client?.name ?? "Client";
   const paidMinor = invoicePaidMinor(payments);

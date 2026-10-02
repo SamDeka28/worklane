@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "worklane": {
+      "type": "streamable-http",
+      "url": "https://worklane-nu.vercel.app/mcp",
+      "headers": {}
+    }
+  }
+}

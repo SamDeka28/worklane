@@ -589,31 +589,25 @@ export async function removeProjectMemberAction(
   return { ok: true as const };
 }
 
-export async function recordPartnerSettlementAction(orgSlug: string, formData: FormData) {
-  const ctx = await requireModuleWrite(orgSlug, "partners");
-  const partnerId = String(formData.get("partner_id") ?? "");
-  const method = String(formData.get("method") ?? "other");
-  const settledOn =
-    String(formData.get("settled_on") ?? "") || new Date().toISOString().slice(0, 10);
-  const memo = String(formData.get("memo") ?? "").trim() || null;
-  const currency = asCurrency(
-    String(formData.get("currency") ?? ctx.org.defaultCurrency),
-    ctx.org.defaultCurrency,
-  );
-
+export async function recordPartnerSettlementForContext(
+  ctx: Awaited<ReturnType<typeof requireModuleWrite>>,
+  input: { partnerId: string; amount: string; method?: string; settledOn?: string; memo?: string; currency?: string },
+) {
+  const orgSlug = ctx.org.slug;
+  const partnerId = input.partnerId;
+  const method = input.method || "other";
+  const settledOn = input.settledOn || new Date().toISOString().slice(0, 10);
+  const memo = input.memo?.trim() || null;
+  const currency = asCurrency(input.currency || ctx.org.defaultCurrency, ctx.org.defaultCurrency);
   if (!partnerId) return { error: "Choose a partner" };
-  if (!["upwork", "bank", "stripe", "other"].includes(method)) {
-    return { error: "Unknown method" };
-  }
-
+  if (!["upwork", "bank", "stripe", "other"].includes(method)) return { error: "Unknown method" };
   let amountMinor: bigint;
   try {
-    amountMinor = parseMajorToMinor(String(formData.get("amount") ?? ""), currency);
+    amountMinor = parseMajorToMinor(input.amount, currency);
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Enter a valid amount" };
   }
   if (amountMinor <= BigInt(0)) return { error: "Amount must be greater than zero" };
-
   const { data, error } = await ctx.supabase
     .from("partner_settlements")
     .insert({
@@ -630,7 +624,6 @@ export async function recordPartnerSettlementAction(orgSlug: string, formData: F
     .select("id")
     .single();
   if (error || !data) return { error: error?.message ?? "Could not record settlement" };
-
   await ctx.supabase.from("activities").insert({
     organization_id: ctx.org.id,
     actor_id: ctx.userId,
@@ -639,7 +632,6 @@ export async function recordPartnerSettlementAction(orgSlug: string, formData: F
     entity_id: partnerId,
     metadata: { settlement_id: data.id, amount_minor: amountMinor.toString() },
   });
-
   const { data: partner } = await ctx.supabase
     .from("partners")
     .select("name, user_id")
@@ -662,21 +654,41 @@ export async function recordPartnerSettlementAction(orgSlug: string, formData: F
       body: `Settled on ${settledOn}${memo ? ` · ${memo}` : ""}.`,
     },
   });
-
   revalidatePath(`/${orgSlug}/partners`);
-  return { id: data.id as string };
+  return { id: data.id as string, settled: true as const };
 }
 
-export async function voidPartnerSettlementAction(orgSlug: string, settlementId: string) {
-  const ctx = await requireModuleWrite(orgSlug, "partners");
+export async function voidPartnerSettlementForContext(
+  ctx: Awaited<ReturnType<typeof requireModuleWrite>>,
+  settlementId: string,
+) {
   const { error } = await ctx.supabase
     .from("partner_settlements")
     .update({ status: "void" })
     .eq("id", settlementId)
-    .eq("organization_id", ctx.org.id);
+    .eq("organization_id", ctx.org.id)
+    .eq("status", "posted");
   if (error) return { error: error.message };
-  revalidatePath(`/${orgSlug}/partners`);
-  return { ok: true as const };
+  return { ok: true as const, voided: true as const };
+}
+
+export async function recordPartnerSettlementAction(orgSlug: string, formData: FormData) {
+  const ctx = await requireModuleWrite(orgSlug, "partners");
+  return recordPartnerSettlementForContext(ctx, {
+    partnerId: String(formData.get("partner_id") ?? ""),
+    amount: String(formData.get("amount") ?? ""),
+    method: String(formData.get("method") ?? "other"),
+    settledOn: String(formData.get("settled_on") ?? "") || undefined,
+    memo: String(formData.get("memo") ?? ""),
+    currency: String(formData.get("currency") ?? ""),
+  });
+}
+
+export async function voidPartnerSettlementAction(orgSlug: string, settlementId: string) {
+  const ctx = await requireModuleWrite(orgSlug, "partners");
+  const result = await voidPartnerSettlementForContext(ctx, settlementId);
+  if (!("error" in result)) revalidatePath(`/${orgSlug}/partners`);
+  return result;
 }
 
 export async function deletePartnerAction(

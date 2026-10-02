@@ -3,7 +3,7 @@
   "mcpServers": {
     "worklane": {
       "type": "streamable-http",
-      "url": "http://localhost:3000/mcp"
+      "url": "https://worklane-nu.vercel.app/mcp"
     }
   }
 }

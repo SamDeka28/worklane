@@ -11,6 +11,8 @@ import { buildBasicDocumentTemplate, getDocumentTemplate } from "@/modules/docum
 import { asDocumentKind, DOCUMENT_KIND_LABEL, type DocumentKind } from "@/modules/documents/types";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { notifyMentions } from "@/modules/mentions/notify";
+import { deliverDocumentEmail } from "@/modules/documents/records";
+import { isWriteError } from "@/modules/records/mutate";
 import { documentSendToken, documentViewPath } from "@/modules/documents/sends";
 import {
   buildSignedDocumentFiles,
@@ -1286,96 +1288,29 @@ export async function sendDocumentEmailAction(
   }
   if (content?.type !== "doc") return { error: "Couldn't read the document content" };
 
-  const { data: document } = await ctx.supabase
-    .from("documents")
-    .select("id, title, kind, status")
-    .eq("id", documentId)
-    .eq("organization_id", ctx.org.id)
-    .maybeSingle();
-  if (!document) return { error: "Document not found" };
-
-  const sendId = crypto.randomUUID();
-  const token = documentSendToken(sendId);
-  const { data: send, error: insertError } = await ctx.supabase
-    .from("document_sends")
-    .insert({
-      id: sendId,
-      organization_id: ctx.org.id,
-      document_id: documentId,
-      document_version_id: versionId,
-      token_hash: hashShareToken(token),
-      title: document.title as string,
-      recipient_email: to,
-      recipient_name: recipientName,
-      cc,
-      subject,
-      message,
-      content_doc: content,
-      track_opens: trackOpens,
-      sent_by: ctx.userId,
-    })
-    .select("id")
-    .single();
-  if (insertError || !send) return { error: insertError?.message ?? "Couldn't prepare the email" };
-
-  const appUrl = getAppUrl();
-  const emailInput = {
-    orgName: ctx.org.name,
-    senderName: ctx.user.displayName,
-    kindLabel: DOCUMENT_KIND_LABEL[asKind(String(document.kind ?? ""))],
-    title: document.title as string,
-    message,
-    viewUrl: `${appUrl}${documentViewPath(token)}`,
-    pixelUrl: trackOpens ? mailPixelUrl(token) : null,
-  };
-  const result = await sendDocumentTrackedEmail(ctx, {
+  let sourceDoc: Record<string, unknown> | null = null;
+  try {
+    const parsed = JSON.parse(String(formData.get("source_doc") ?? "")) as JSONContent;
+    if (parsed?.type === "doc") sourceDoc = parsed as Record<string, unknown>;
+  } catch {
+    sourceDoc = null;
+  }
+  const delivered = await deliverDocumentEmail(ctx, {
+    documentId,
     to,
+    recipientName,
     cc,
     subject,
-    fromName: `${ctx.user.displayName ? `${ctx.user.displayName} at ` : ""}${ctx.org.name}`,
-    replyTo: ctx.user.email ?? undefined,
-    html: documentEmailHtml(emailInput),
-    text: documentEmailText(emailInput),
-    smtp: sender.smtp,
+    message,
+    trackOpens,
+    versionId,
+    content,
+    sourceDoc,
   });
-  if (!result.ok) {
-    await ctx.supabase.from("document_sends").delete().eq("id", send.id);
-    return { error: result.error };
-  }
-
-  if (versionId) {
-    let sourceDoc: Record<string, unknown> | null = null;
-    try {
-      const parsed = JSON.parse(String(formData.get("source_doc") ?? "")) as JSONContent;
-      if (parsed?.type === "doc") sourceDoc = parsed as Record<string, unknown>;
-    } catch {
-      sourceDoc = null;
-    }
-    await ctx.supabase
-      .from("document_versions")
-      .update({
-        ...(sourceDoc ? { content_doc: sourceDoc } : {}),
-        status: "sent",
-        snapshot: buildLiveSnapshot({
-          contentDoc: content as Record<string, unknown>,
-          frozenAt: new Date().toISOString(),
-        }),
-      })
-      .eq("id", versionId)
-      .eq("organization_id", ctx.org.id)
-      .eq("status", "draft");
-  }
-
-  if (document.status === "draft") {
-    await ctx.supabase
-      .from("documents")
-      .update({ status: "sent" })
-      .eq("id", documentId)
-      .eq("organization_id", ctx.org.id);
-  }
+  if (isWriteError(delivered)) return { error: delivered.error };
   revalidatePath(`/${orgSlug}/documents/${documentId}`);
   revalidatePath(`/${orgSlug}/documents`);
-  return { ok: true as const, viewUrl: emailInput.viewUrl };
+  return { ok: true as const, viewUrl: String(delivered.viewUrl ?? "") };
 }
 
 export async function revokeDocumentSendAction(orgSlug: string, sendId: string) {

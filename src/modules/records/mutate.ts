@@ -1,6 +1,7 @@
 import type { OrgContext } from "@/modules/identity/org";
 import { canAccessModule, canDeleteModule, canWriteModule } from "@/modules/identity/permissions";
 import type { ModuleKey } from "@/modules/identity/types";
+import { proseFromDoc, proseToDoc } from "@/modules/documents/prose";
 import { getDocumentTemplate } from "@/modules/documents/templates";
 import { invoiceLayoutSpec, INVOICE_LAYOUT_SPECS } from "@/modules/invoices/layouts";
 import { INVOICE_LAYOUTS, type InvoiceLayout } from "@/modules/invoices/settings";
@@ -792,16 +793,19 @@ export async function logLeadNoteRecord(ctx: OrgContext, leadId: string, body: s
 
 export async function createDocumentRecord(
   ctx: OrgContext,
-  input: { title: string; templateId?: string; clientId?: string; projectId?: string },
+  input: { title: string; templateId?: string; clientId?: string; projectId?: string; body?: string },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "documents");
   if (blocked) return blocked;
   const title = input.title.trim();
   if (!title) return { error: "Title is required" };
+  const supplied = input.body?.trim() ?? "";
   const template = getDocumentTemplate(input.templateId || "proposal");
-  const content = template
-    ? template.build({ title, orgName: ctx.org.name, client: null, project: null })
-    : { type: "doc", content: [{ type: "paragraph" }] };
+  const content = supplied
+    ? proseToDoc(supplied)
+    : template
+      ? template.build({ title, orgName: ctx.org.name, client: null, project: null })
+      : { type: "doc", content: [{ type: "paragraph" }] };
   const { data: document, error } = await ctx.supabase
     .from("documents")
     .insert({
@@ -825,7 +829,12 @@ export async function createDocumentRecord(
     created_by: ctx.userId,
   });
   if (versionError) return { error: versionError.message };
-  return { id: document.id as string, title, template: template?.id ?? "blank" };
+  return {
+    id: document.id as string,
+    title,
+    template: supplied ? "custom" : template?.id ?? "blank",
+    text: proseFromDoc(content),
+  };
 }
 
 export function previewDocumentText(input: { title: string; templateId?: string; orgName: string }) {

@@ -127,8 +127,8 @@ export default async function ConnectPage({
               <p className="mt-4 font-mono text-xs text-foreground">{origin}/mcp</p>
             ) : null}
             <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-              A downloaded plugin zip only opens in the ChatGPT desktop app. It does not add an
-              app you can mention in chat.
+              The Worklane plugin package uses this server and the Worklane app already installed
+              in ChatGPT. Upload a newer package with the same name worklane to update it.
             </p>
           </>
         )}

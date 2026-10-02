@@ -7,6 +7,7 @@ import { allocatePartnersForReceipt } from "@/modules/partners/allocate";
 import {
   brandToSnapshot,
   loadOrgInvoiceConfig,
+  loadOrgInvoiceConfigFor,
   resolveInvoiceBrand,
 } from "@/modules/invoices/config";
 import { asInvoiceLayout } from "@/modules/invoices/layouts";
@@ -295,6 +296,103 @@ export async function addInvoiceLineAction(
   if (error) return { error: error.message };
   revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
   return { ok: true as const };
+}
+
+export async function createDraftInvoiceForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  input: { clientId: string; projectId?: string; description?: string; amount?: string; dueOn?: string; memo?: string },
+) {
+  if (!ctx.org.modules.finance) return { error: "Finance is disabled" };
+  const clientId = input.clientId.trim();
+  if (!clientId) return { error: "Choose a client" };
+  const { data: client } = await ctx.supabase
+    .from("clients")
+    .select("id, name, currency, billing")
+    .eq("id", clientId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!client) return { error: "Client not found" };
+  const config = await loadOrgInvoiceConfigFor(ctx);
+  const currency = asCurrency(client.currency, ctx.org.defaultCurrency);
+  const draftNumber = `DRAFT-${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`;
+  const dueOn = input.dueOn?.trim() || (config.defaultDueDays > 0 ? dueOnFromDays(config.defaultDueDays) : null);
+  const memo = input.memo?.trim() || config.defaultMemo || null;
+  const billTo = await defaultBillTo(ctx.supabase, ctx.org.id, {
+    id: client.id as string,
+    name: client.name as string,
+    billing: client.billing,
+  });
+  const { data: invoice, error } = await ctx.supabase
+    .from("invoices")
+    .insert({
+      organization_id: ctx.org.id,
+      client_id: clientId,
+      project_id: input.projectId?.trim() || null,
+      number: draftNumber,
+      status: "draft",
+      currency,
+      due_on: dueOn,
+      terms: config.defaultTerms || null,
+      memo,
+      bill_to: billTo,
+      payment_instructions: config.defaultPaymentInstructions.trim() || null,
+      created_by: ctx.userId,
+    })
+    .select("id")
+    .single();
+  if (error || !invoice) return { error: error?.message ?? "Could not create invoice" };
+  if (input.description?.trim() && input.amount?.trim()) {
+    const line = await addInvoiceLineForContext(ctx, invoice.id as string, {
+      description: input.description,
+      amount: input.amount,
+    });
+    if ("error" in line && line.error) return { error: line.error, id: invoice.id as string };
+  }
+  return { id: invoice.id as string, number: draftNumber, status: "draft" as const };
+}
+
+export async function addInvoiceLineForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  invoiceId: string,
+  input: { description: string; amount: string; quantity?: string },
+) {
+  const { data: invoice } = await ctx.supabase
+    .from("invoices")
+    .select("id, status, currency, issued_at")
+    .eq("id", invoiceId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!invoice) return { error: "Invoice not found" };
+  if (invoice.status !== "draft" || invoice.issued_at) return { error: "Only draft invoices can be edited" };
+  const description = input.description.trim();
+  if (!description) return { error: "Description is required" };
+  const currency = asCurrency(String(invoice.currency), ctx.org.defaultCurrency);
+  let unitAmountMinor: bigint;
+  try {
+    unitAmountMinor = parseMajorToMinor(input.amount, currency);
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Invalid amount" };
+  }
+  const config = await loadOrgInvoiceConfigFor(ctx);
+  const { data: last } = await ctx.supabase
+    .from("invoice_lines")
+    .select("position")
+    .eq("invoice_id", invoiceId)
+    .order("position", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await ctx.supabase.from("invoice_lines").insert({
+    organization_id: ctx.org.id,
+    invoice_id: invoiceId,
+    description,
+    quantity: Number(input.quantity ?? 1) || 1,
+    unit_amount_minor: unitAmountMinor.toString(),
+    tax_bps: config.defaultTaxBps,
+    discount_minor: "0",
+    position: (last?.position ?? -1) + 1,
+  });
+  if (error) return { error: error.message };
+  return { ok: true as const, invoiceId };
 }
 
 export async function updateInvoiceLineAction(
@@ -644,24 +742,20 @@ export async function applyInvoiceTemplateAction(
   return { ok: true as const };
 }
 
-export async function issueInvoiceAction(
-  orgSlug: string,
+export async function issueInvoiceForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
   invoiceId: string,
-  formData?: FormData,
+  confirmDouble = false,
 ) {
-  const ctx = await requireWritableOrg(orgSlug);
-  const confirmDouble =
-    String(formData?.get("confirm_double") ?? "") === "1" ||
-    String(formData?.get("confirm_double") ?? "") === "on";
-
-  const invoice = await getInvoice(orgSlug, invoiceId);
+  const orgSlug = ctx.org.slug;
+  const invoice = await getInvoice(orgSlug, invoiceId, ctx);
   if (!invoice) return { error: "Invoice not found" };
   if (invoice.status !== "draft" || invoice.issuedAt) {
     return { error: "Invoice already issued" };
   }
   if (invoice.lines.length === 0) return { error: "Add at least one line before issuing" };
 
-  const config = await loadOrgInvoiceConfig(orgSlug);
+  const config = await loadOrgInvoiceConfigFor(ctx);
   const { data: orgRow, error: orgError } = await ctx.supabase
     .from("organizations")
     .select("invoice_next_number")
@@ -759,9 +853,9 @@ export async function issueInvoiceAction(
       .eq("organization_id", ctx.org.id);
   }
 
-  let brand = await resolveInvoiceBrand(orgSlug);
+  let brand = await resolveInvoiceBrand(orgSlug, undefined, ctx);
   if (invoice.templateId) {
-    const template = await getInvoiceTemplate(orgSlug, invoice.templateId);
+    const template = await getInvoiceTemplate(orgSlug, invoice.templateId, ctx);
     if (template) {
       brand = {
         ...brand,
@@ -806,9 +900,9 @@ export async function issueInvoiceAction(
     .eq("id", ctx.org.id);
 
   try {
-    const fresh = await getInvoice(orgSlug, invoiceId);
+    const fresh = await getInvoice(orgSlug, invoiceId, ctx);
     if (fresh) {
-      const { buffer } = await renderInvoicePdf(orgSlug, fresh);
+      const { buffer } = await renderInvoicePdf(orgSlug, fresh, ctx);
       const storagePath = `${ctx.org.id}/invoice/${invoiceId}/${crypto.randomUUID()}.pdf`;
       const { error: uploadError } = await ctx.supabase.storage
         .from("org-files")
@@ -869,8 +963,22 @@ export async function issueInvoiceAction(
   return { ok: true as const, number };
 }
 
-export async function markInvoiceSentAction(orgSlug: string, invoiceId: string) {
+export async function issueInvoiceAction(
+  orgSlug: string,
+  invoiceId: string,
+  formData?: FormData,
+) {
   const ctx = await requireWritableOrg(orgSlug);
+  const confirmDouble =
+    String(formData?.get("confirm_double") ?? "") === "1" ||
+    String(formData?.get("confirm_double") ?? "") === "on";
+  return issueInvoiceForContext(ctx, invoiceId, confirmDouble);
+}
+
+export async function markInvoiceSentForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  invoiceId: string,
+) {
   const { data: invoice } = await ctx.supabase
     .from("invoices")
     .select("id, status, issued_at")
@@ -890,10 +998,15 @@ export async function markInvoiceSentAction(orgSlug: string, invoiceId: string) 
     })
     .eq("id", invoiceId)
     .eq("organization_id", ctx.org.id);
-
   if (error) return { error: error.message };
-  revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
   return { ok: true as const };
+}
+
+export async function markInvoiceSentAction(orgSlug: string, invoiceId: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const result = await markInvoiceSentForContext(ctx, invoiceId);
+  if (!("error" in result)) revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
+  return result;
 }
 
 export async function voidInvoiceAction(orgSlug: string, invoiceId: string) {
@@ -1093,18 +1206,22 @@ export async function deleteInvoiceTemplateAction(orgSlug: string, templateId: s
   return { ok: true as const };
 }
 
-export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string, formData?: FormData) {
-  const ctx = await requireWritableOrg(orgSlug);
-  const invoice = await getInvoice(orgSlug, invoiceId);
+export async function sendInvoiceForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  invoiceId: string,
+  input: { to?: string; message?: string; reminder?: boolean } = {},
+) {
+  const orgSlug = ctx.org.slug;
+  const invoice = await getInvoice(orgSlug, invoiceId, ctx);
   if (!invoice) return { error: "Invoice not found" };
   if (!invoice.issuedAt) return { error: "Issue the invoice before sending" };
   if (invoice.status === "void") return { error: "Void invoice cannot be sent" };
 
   if (invoice.status === "paid") return { error: "This invoice is already paid" };
 
-  const reminder = String(formData?.get("kind") ?? "") === "reminder";
+  const reminder = input.reminder === true;
   const to =
-    String(formData?.get("to") ?? "").trim() ||
+    input.to?.trim() ||
     invoice.billTo?.email?.trim() ||
     (await (async () => {
       const { data } = await ctx.supabase
@@ -1122,7 +1239,7 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
   if (!to) return { error: "Add an email under Billed to, or enter a recipient" };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { error: "Enter a valid recipient email" };
 
-  const { buffer, clientName, brand, paidMinor } = await renderInvoicePdf(orgSlug, invoice);
+  const { buffer, clientName, brand, paidMinor } = await renderInvoicePdf(orgSlug, invoice, ctx);
   const balance = invoiceSubtotalMinor(invoice.lines) - paidMinor;
 
   const { invoiceEmailHtml, invoiceEmailText } = await import("@/shared/email");
@@ -1133,7 +1250,7 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
     amountLabel: invoiceMoneyLabel(balance > BigInt(0) ? balance : BigInt(0), invoice.currency),
     issuedOn: invoice.issuedOn,
     dueOn: invoice.dueOn,
-    memo: String(formData?.get("message") ?? "").trim() || invoice.memo,
+    memo: input.message?.trim() || invoice.memo,
     paymentInstructions: invoice.paymentInstructions,
     reminder,
   };
@@ -1156,7 +1273,8 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
 
   if (!mailed.ok) return { error: mailed.error };
 
-  await markInvoiceSentAction(orgSlug, invoiceId);
+  const marked = await markInvoiceSentForContext(ctx, invoiceId);
+  if ("error" in marked) return { error: marked.error };
   await ctx.supabase.from("activities").insert({
     organization_id: ctx.org.id,
     actor_id: ctx.userId,
@@ -1180,5 +1298,14 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
     actionLabel: "Open invoice",
   });
   revalidatePath(`/${orgSlug}/invoices/${invoiceId}`);
-  return { ok: true as const, to };
+  return { ok: true as const, to, sent: true as const };
+}
+
+export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string, formData?: FormData) {
+  const ctx = await requireWritableOrg(orgSlug);
+  return sendInvoiceForContext(ctx, invoiceId, {
+    to: String(formData?.get("to") ?? ""),
+    message: String(formData?.get("message") ?? ""),
+    reminder: String(formData?.get("kind") ?? "") === "reminder",
+  });
 }

@@ -126,10 +126,29 @@ export async function listPendingInvitations(orgSlug: string): Promise<OrgInvita
   });
 }
 
-export async function inviteOrgMemberAction(orgSlug: string, formData: FormData) {
-  const gate = await requireTeamManager(orgSlug);
-  if ("error" in gate) return { error: gate.error };
+export async function inviteMemberForContext(
+  ctx: Awaited<ReturnType<typeof requireOrg>>,
+  input: { email: string; role?: string; projectId?: string; name?: string },
+) {
+  if (!canManageTeam(ctx)) return { error: "You don’t have permission to manage the team" };
+  const elevated = ctx.role === "owner" || ctx.role === "admin";
+  const admin = elevated ? null : createAdminSupabaseClient();
+  if (!elevated && !admin) return { error: "Team management for members needs the service key configured" };
+  const db = (elevated ? ctx.supabase : admin) as typeof ctx.supabase;
+  const formData = new FormData();
+  formData.set("email", input.email);
+  formData.set("role", input.role || "member");
+  if (input.projectId) formData.set("project_id", input.projectId);
+  if (input.name) formData.set("display_name", input.name);
+  return inviteWithGate({ ctx, db, elevated }, formData);
+}
+
+async function inviteWithGate(
+  gate: Exclude<TeamGate, { error: string }>,
+  formData: FormData,
+) {
   const { ctx, db, elevated } = gate;
+  const orgSlug = ctx.org.slug;
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const roleRaw = String(formData.get("role") ?? "member");
@@ -338,6 +357,12 @@ export async function inviteOrgMemberAction(orgSlug: string, formData: FormData)
     emailed: mailed.ok,
     acceptUrl: !mailed.ok && mailed.skipped ? acceptUrl : undefined,
   };
+}
+
+export async function inviteOrgMemberAction(orgSlug: string, formData: FormData) {
+  const gate = await requireTeamManager(orgSlug);
+  if ("error" in gate) return { error: gate.error };
+  return inviteWithGate(gate, formData);
 }
 
 export async function revokeInvitationAction(orgSlug: string, invitationId: string) {

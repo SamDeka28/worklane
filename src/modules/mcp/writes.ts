@@ -2,6 +2,30 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { sendLeadEmailForContext } from "@/modules/crm/email-actions";
+import {
+  billMilestoneForContext,
+  createMilestoneForContext,
+  setMilestoneStatusForContext,
+} from "@/modules/delivery/actions";
+import {
+  addInvoiceLineForContext,
+  createDraftInvoiceForContext,
+  issueInvoiceForContext,
+  sendInvoiceForContext,
+} from "@/modules/invoices/actions";
+import {
+  recordPartnerSettlementForContext,
+  voidPartnerSettlementForContext,
+} from "@/modules/partners/actions";
+import { inviteMemberForContext } from "@/modules/team/actions";
+import {
+  createSowRecord,
+  fillDocumentRecord,
+  linkDocumentRecord,
+  sendDocumentRecord,
+  writeDocumentRecord,
+} from "@/modules/documents/records";
+import { parseEmailAttachments } from "@/shared/email/attachments";
 import type { OrgContext } from "@/modules/identity/org";
 import { studioFor } from "@/modules/mcp/reads";
 import { WRITE_SCOPE } from "@/modules/mcp/origin";
@@ -9,6 +33,7 @@ import {
   addContactRecord,
   archiveClientRecord,
   commentOnTaskRecord,
+  assertWrite,
   createChargeRecord,
   createClientRecord,
   createDocumentRecord,
@@ -45,7 +70,7 @@ const inputSchema = {
   leadId: z.string().optional(),
   name: z.string().optional(),
   title: z.string().optional(),
-  body: z.string().optional(),
+  body: z.string().optional().describe("Document text, email body, or note. For a document, this is saved as the content."),
   status: z.string().optional(),
   amount: z.string().optional().describe("Amount in major units, such as 1500."),
   gross: z.string().optional().describe("Charge amount in major units."),
@@ -67,6 +92,10 @@ const inputSchema = {
   scope: z.string().optional(),
   phone: z.string().optional(),
   dueOn: z.string().optional(),
+  attachments: z
+    .string()
+    .optional()
+    .describe("JSON array of email files: filename, contentType, and contentBase64. Up to 5 files, 5 MB each."),
 };
 
 type ToolInput = {
@@ -99,7 +128,21 @@ type ToolInput = {
   scope?: string;
   phone?: string;
   dueOn?: string;
+  attachments?: string;
 };
+
+function emailFiles(raw: string | undefined) {
+  if (!raw?.trim()) {
+    return { attachments: [] as { filename: string; content: Buffer; contentType: string }[] };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { error: "Attachments must be a JSON array of filename, contentType, and contentBase64." };
+  }
+  return parseEmailAttachments(parsed);
+}
 
 const writeMeta = {
   securitySchemes: [{ type: "oauth2", scopes: [WRITE_SCOPE] }],
@@ -263,8 +306,10 @@ export function registerStudioActions(
       note: "This is the message. Sending is a separate step.",
     }),
   );
-  add("send_lead_email", "Send an email to an existing lead. Preview the body first. This sends.", true, true, (input) =>
-    run(input, (ctx) =>
+  add("send_lead_email", "Send an email to an existing lead. Preview the body first. This sends. attachments is a JSON array of filename, contentType, and contentBase64.", true, true, async (input) => {
+    const files = emailFiles(input.attachments);
+    if ("error" in files) return result(files);
+    return run(input, (ctx) =>
       sendLeadEmailForContext(ctx, input.leadId || input.id || "", {
         to: input.to || input.email || "",
         cc: "",
@@ -276,11 +321,109 @@ export function registerStudioActions(
         replyToId: null,
         followUp: null,
         moveToStage: input.stage || null,
+        attachments: files.attachments.map((file) => ({
+          filename: file.filename,
+          contentType: file.contentType,
+          contentBase64: file.content.toString("base64").replace(/=+$/, ""),
+        })),
       }),
-    ),
+    );
+  });
+  add("create_document", "Create a draft. When body is set, that text is the document and the template is not used. The result text is what was stored. Omit body only to start from a template. This does not send it.", false, true, (input) =>
+    run(input, (ctx) => createDocumentRecord(ctx, { title: input.title || input.name || "", templateId: input.templateId, clientId: input.clientId, projectId: input.projectId, body: input.body })),
   );
-  add("create_document", "Create a document from a template and save the first version. Preview it first.", false, true, (input) =>
-    run(input, (ctx) => createDocumentRecord(ctx, { title: input.title || input.name || "", templateId: input.templateId, clientId: input.clientId, projectId: input.projectId })),
+  add("write_document", "Replace a draft with the supplied body. The result text is exactly what was stored. Use this when a template saved the wrong content. Does not send or sign.", false, true, (input) =>
+    run(input, (ctx) => writeDocumentRecord(ctx, { id: input.id || "", body: input.body || "", title: input.title })),
+  );
+  add("fill_document", "Replace [Placeholder] labels in a draft. body is one line per fill, such as Client name: Rentique. Does not send or sign.", false, true, (input) =>
+    run(input, (ctx) => fillDocumentRecord(ctx, { id: input.id || "", body: input.body || input.notes || "", title: input.title })),
+  );
+  add("link_document", "Attach a client or project to a draft and fill Client name and Project name when those records exist.", false, true, (input) =>
+    run(input, (ctx) => linkDocumentRecord(ctx, { id: input.id || "", clientId: input.clientId, projectId: input.projectId })),
+  );
+  add("create_sow", "Create a draft statement of work from a proposal. Does not send it.", false, true, (input) =>
+    run(input, (ctx) => createSowRecord(ctx, input.id || "")),
+  );
+  add("send_document", "Email the current document version for signature. Refuses while placeholders remain. Marks the document sent only after the email is accepted. Do not claim it was sent or signed unless this result says sent. notes may list CC addresses separated by commas. attachments is a JSON array of filename, contentType, and contentBase64.", true, true, async (input) => {
+    const files = emailFiles(input.attachments);
+    if ("error" in files) return result(files);
+    return run(input, (ctx) =>
+      sendDocumentRecord(ctx, {
+        id: input.id || "",
+        to: input.to || input.email || "",
+        subject: input.subject || "",
+        message: input.body || "",
+        cc: input.notes,
+        name: input.name,
+        attachments: files.attachments,
+      }),
+    );
+  });
+  add("create_invoice", "Start a draft invoice for a client. amount is major units for the first line. This does not issue or email it.", false, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "finance");
+      if (blocked) return blocked;
+      return createDraftInvoiceForContext(ctx, { clientId: input.clientId || "", projectId: input.projectId, description: input.description, amount: input.amount, dueOn: input.dueOn, memo: input.memo });
+    }),
+  );
+  add("add_invoice_line", "Add a line to a draft invoice. amount is the unit price in major units.", false, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "finance");
+      if (blocked) return blocked;
+      return addInvoiceLineForContext(ctx, input.id || "", { description: input.description || input.title || "", amount: input.amount || input.gross || "" });
+    }),
+  );
+  add("issue_invoice", "Issue a draft invoice, assign its number, and post the charges. If the result says already charged, call again with confirmName confirm only after the member agrees to bill those items again. This does not email it.", true, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "finance");
+      if (blocked) return blocked;
+      return issueInvoiceForContext(ctx, input.id || "", input.confirmName === "confirm");
+    }),
+  );
+  add("send_invoice", "Email an issued invoice PDF. Marks it sent only after the email is accepted. kind reminder sends a reminder. Do not claim it was sent unless the result says sent.", true, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "finance");
+      if (blocked) return blocked;
+      return sendInvoiceForContext(ctx, input.id || "", { to: input.to || input.email, message: input.body, reminder: input.kind === "reminder" });
+    }),
+  );
+  add("create_milestone", "Add a milestone to a project. amount is major units. status is planned, in_progress, completed, or cancelled.", false, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "delivery");
+      if (blocked) return blocked;
+      return createMilestoneForContext(ctx, input.projectId || "", { name: input.name || input.title || "", amount: input.amount, dueOn: input.dueOn, description: input.description || input.body, status: input.status });
+    }),
+  );
+  add("set_milestone_status", "Set a milestone status: planned, in_progress, completed, or cancelled.", false, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "delivery");
+      if (blocked) return blocked;
+      return setMilestoneStatusForContext(ctx, input.id || "", input.status || "");
+    }),
+  );
+  add("bill_milestone", "Post the milestone amount as a charge and partner earnings. dueOn is the charge date, YYYY-MM-DD. This is billed, not cash received.", true, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "delivery");
+      if (blocked) return blocked;
+      return billMilestoneForContext(ctx, input.id || "", input.dueOn);
+    }),
+  );
+  add("invite_member", "Invite someone to the studio by email. kind is member, admin, viewer, or partner. Returns emailed true when the invite email went out. Share acceptUrl only when email could not be sent.", true, true, (input) =>
+    run(input, (ctx) => inviteMemberForContext(ctx, { email: input.email || input.to || "", role: input.kind, projectId: input.projectId, name: input.name })),
+  );
+  add("record_settlement", "Record a partner payout. id is the partner. amount is major units. kind is upwork, bank, stripe, or other. This is a settlement, not studio income.", true, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "partners");
+      if (blocked) return blocked;
+      return recordPartnerSettlementForContext(ctx, { partnerId: input.id || "", amount: input.amount || "", method: input.kind, settledOn: input.dueOn, memo: input.memo, currency: input.currency });
+    }),
+  );
+  add("void_settlement", "Void a posted partner settlement.", true, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "partners");
+      if (blocked) return blocked;
+      return voidPartnerSettlementForContext(ctx, input.id || "");
+    }),
   );
   add("create_partner", "Create a partner. The app still sends the login invite; this tool saves the partner record.", false, true, (input) =>
     run(input, (ctx) => createPartnerRecord(ctx, { name: input.name || "", email: input.email || "", kind: input.kind, notes: input.notes })),

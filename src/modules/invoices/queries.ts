@@ -1,4 +1,4 @@
-import { requireOrg } from "@/modules/identity/org";
+import { requireOrg, type OrgContext } from "@/modules/identity/org";
 import {
   isInvoiceStatus,
   parseBillTo,
@@ -153,8 +153,9 @@ export async function listInvoices(orgSlug: string): Promise<InvoiceRecord[]> {
 export async function getInvoice(
   orgSlug: string,
   invoiceId: string,
+  session?: OrgContext,
 ): Promise<InvoiceRecord | null> {
-  const ctx = await requireOrg(orgSlug);
+  const ctx = session ?? (await requireOrg(orgSlug));
   const [{ data, error }, { data: lines, error: linesError }] = await Promise.all([
     ctx.supabase
       .from("invoices")
@@ -211,13 +212,14 @@ type AllocationRow = {
 export async function listInvoicePayments(
   orgSlug: string,
   invoice: Pick<InvoiceRecord, "lines">,
+  session?: OrgContext,
 ): Promise<InvoicePayment[]> {
   const chargeIds = invoice.lines
     .map((line) => line.chargeId)
     .filter((id): id is string => Boolean(id));
   if (chargeIds.length === 0) return [];
 
-  const ctx = await requireOrg(orgSlug);
+  const ctx = session ?? (await requireOrg(orgSlug));
   const { data, error } = await ctx.supabase
     .from("payment_allocations")
     .select("amount_minor, payment:payments(id, paid_on, method, reference, status, kind)")

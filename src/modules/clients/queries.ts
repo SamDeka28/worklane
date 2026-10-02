@@ -72,8 +72,8 @@ export const listClients = cache(async (orgSlug: string, query = "") => {
   return (data ?? []).map(mapClient);
 });
 
-export async function getClient(orgSlug: string, clientId: string) {
-  const { org, supabase } = await requireOrg(orgSlug);
+export async function getClient(orgSlug: string, clientId: string, session?: { org: { id: string }; supabase: Awaited<ReturnType<typeof requireOrg>>["supabase"] }) {
+  const { org, supabase } = session ?? (await requireOrg(orgSlug));
   const { data, error } = await supabase
     .from("clients")
     .select(

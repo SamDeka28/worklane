@@ -1290,12 +1290,12 @@ export async function unlinkMilestoneItemTaskAction(orgSlug: string, itemId: str
   return { ok: true as const };
 }
 
-export async function billMilestoneAction(
-  orgSlug: string,
+export async function billMilestoneForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
   milestoneId: string,
   chargedOn = new Date().toISOString().slice(0, 10),
 ) {
-  const ctx = await requireWritableOrg(orgSlug);
+  const orgSlug = ctx.org.slug;
   const parsedChargedOn = new Date(`${chargedOn}T00:00:00.000Z`);
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(chargedOn) ||
@@ -1397,6 +1397,76 @@ export async function billMilestoneAction(
     chargeId: charge.id as string,
     projectId: project.id as string,
   };
+}
+
+export async function billMilestoneAction(
+  orgSlug: string,
+  milestoneId: string,
+  chargedOn = new Date().toISOString().slice(0, 10),
+) {
+  const ctx = await requireWritableOrg(orgSlug);
+  return billMilestoneForContext(ctx, milestoneId, chargedOn);
+}
+
+export async function createMilestoneForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  projectId: string,
+  input: { name: string; amount?: string; dueOn?: string; description?: string; status?: string },
+) {
+  const project = await loadProjectRow(ctx, projectId);
+  if (!project) return { error: "Project not found" };
+  const name = input.name.trim();
+  if (!name) return { error: "Milestone name is required" };
+  const status = parseEnum(input.status ?? "planned", MILESTONE_STATUSES, "planned");
+  const currency = await loadClientCurrency(ctx, project.client_id);
+  if (!currency) return { error: "Client not found" };
+  let amountMinor: string | null = null;
+  if (input.amount?.trim()) {
+    try {
+      amountMinor = parseMajorToMinor(input.amount, currency).toString();
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : "Enter a valid amount" };
+    }
+  }
+  const description = input.description?.trim() || null;
+  const dueOn = input.dueOn?.trim() || null;
+  let milestone: { id: string } | null = null;
+  let errorMessage: string | null = null;
+  for (const payload of [
+    { organization_id: ctx.org.id, project_id: projectId, name, status, amount_minor: amountMinor, due_on: dueOn, description },
+    { organization_id: ctx.org.id, project_id: projectId, name, status, amount_minor: amountMinor, due_on: dueOn, deliverables: description },
+  ] as Record<string, unknown>[]) {
+    const { data, error } = await ctx.supabase.from("milestones").insert(payload).select("id").single();
+    if (!error && data) {
+      milestone = data as { id: string };
+      break;
+    }
+    errorMessage = error?.message ?? "Could not create milestone";
+  }
+  if (!milestone) return { error: errorMessage ?? "Could not create milestone" };
+  await syncProjectContractedFromMilestones(ctx, projectId);
+  await recordActivity(ctx, "created", "project", projectId, { milestone_id: milestone.id, name });
+  return { id: milestone.id, name, status };
+}
+
+export async function setMilestoneStatusForContext(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  milestoneId: string,
+  status: string,
+) {
+  if (!MILESTONE_STATUSES.includes(status as (typeof MILESTONE_STATUSES)[number])) {
+    return { error: "Unknown milestone status" };
+  }
+  const { data: milestone, error } = await ctx.supabase
+    .from("milestones")
+    .update({ status })
+    .eq("id", milestoneId)
+    .eq("organization_id", ctx.org.id)
+    .select("project_id")
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!milestone) return { error: "Milestone not found" };
+  return { ok: true as const, projectId: milestone.project_id as string, status };
 }
 
 export async function addProjectDeductionAction(orgSlug: string, name: string, percent: string) {

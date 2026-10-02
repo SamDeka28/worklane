@@ -1,17 +1,42 @@
 {
-  "name": "worklane",
-  "version": "1.0.0",
-  "description": "Read and change your Worklane studio, including notes, documents, and the records the screens do not add up.",
-  "skills": "./skills/",
+  "apps": "./.app.json",
   "interface": {
     "displayName": "Worklane",
-    "shortDescription": "Read and change studio records you already have access to.",
+    "shortDescription": "Work with your Worklane studio directly in ChatGPT.",
+    "longDescription": "Connects ChatGPT to Worklane using your existing Worklane access. If you are not authenticated, ChatGPT can prompt you to authenticate before using protected actions.",
     "developerName": "Worklane",
     "category": "Productivity",
     "capabilities": [
       "Read",
       "Write"
     ],
-    "websiteURL": "http://localhost:3000/connect"
-  }
+    "websiteURL": "https://worklane-nu.vercel.app",
+    "privacyPolicyURL": "https://worklane-nu.vercel.app/privacy",
+    "termsOfServiceURL": "https://worklane-nu.vercel.app/terms",
+    "logo": "./assets/logo.png",
+    "composerIcon": "./assets/logo.png",
+    "defaultPrompt": [
+      "What studios can I see in Worklane?",
+      "Which invoices are still open?",
+      "Summarize my active projects."
+    ],
+    "brandColor": "#4F46E5"
+  },
+  "name": "worklane",
+  "version": "1.2.0",
+  "description": "Read and change your Worklane studio, including notes, documents, and records you have access to.",
+  "author": {
+    "name": "Worklane",
+    "url": "https://worklane-nu.vercel.app/connect"
+  },
+  "keywords": [
+    "worklane",
+    "studio",
+    "invoices",
+    "projects",
+    "leads"
+  ],
+  "license": "UNLICENSED",
+  "skills": "./skills",
+  "mcpServers": "./.mcp.json"
 }
