@@ -2,6 +2,7 @@ import { Download } from "lucide-react";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { approveMcpAccessAction, denyMcpAccessAction } from "@/modules/mcp/actions";
 import { clientAllowsRedirect, normalizeScope, resolveOauthClient } from "@/modules/mcp/oauth";
 import { originFromHeaders } from "@/modules/mcp/origin";
@@ -131,14 +132,43 @@ export default async function ConnectPage({
             ) : null}
             <h2 className="mt-6 text-sm font-medium text-foreground">Upload the plugin package</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Download version {PLUGIN_VERSION} and upload it in ChatGPT under Plugins. Keep the
-              file named worklane.zip. It uses this server and the Worklane app already installed
-              there. Upload it again whenever you need a newer package.
+              Each ChatGPT account has its own app id. Create the connection above, then build a
+              package for that id.
             </p>
-            <Button className="mt-4" nativeButton={false} render={<a href="/connect/plugin" />}>
-              <Download data-icon="inline-start" />
-              Download plugin
-            </Button>
+            <ol className="mt-2 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+              <li>In ChatGPT, open the Worklane plugin you just created.</li>
+              <li>
+                Copy the app id from the page address. It starts with asdk_app_. If the address
+                shows plugin_asdk_app_, copy from asdk_app_ onward. You can paste the whole address.
+              </li>
+              <li>Paste it below and download version {PLUGIN_VERSION}. The file is named worklane.zip.</li>
+              <li>Upload that file in ChatGPT as a new version of the same plugin.</li>
+            </ol>
+            <form action="/connect/plugin" className="mt-4 flex flex-col gap-2">
+              <label htmlFor="app_id" className="text-sm font-medium text-foreground">
+                App id
+              </label>
+              <Input
+                id="app_id"
+                name="app_id"
+                required
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="asdk_app_…"
+                defaultValue={value("app_id")}
+                aria-invalid={value("plugin") === "invalid" || undefined}
+                className="font-mono text-xs font-normal"
+              />
+              {value("plugin") === "invalid" ? (
+                <p className="text-sm text-destructive">
+                  That is not an app id. Open the plugin in ChatGPT and copy the asdk_app_ value from the address.
+                </p>
+              ) : null}
+              <Button type="submit" className="mt-2">
+                <Download data-icon="inline-start" />
+                Download plugin
+              </Button>
+            </form>
           </>
         )}
       </div>

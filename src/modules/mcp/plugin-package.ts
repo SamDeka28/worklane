@@ -1,7 +1,12 @@
 export const PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
 export const MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
-export const WORKLANE_APP_ID = "asdk_app_6abf94cdb7488191bd2b8c01efbf2977";
 export const PLUGIN_VERSION = "1.2.0";
+
+/** Pulls `asdk_app_…` out of an id or a ChatGPT address that contains `plugin_asdk_app_…`. */
+export function parseWorklaneAppId(value: string): string | null {
+  const match = value.trim().match(/asdk_app_[a-f0-9]{16,}/i);
+  return match ? match[0].toLowerCase() : null;
+}
 
 const DESCRIPTION =
   "Read and change your Worklane studio, including notes, documents, and records you have access to.";
@@ -50,11 +55,11 @@ function interfaceBlock(origin: string) {
   };
 }
 
-export function appManifest() {
+export function appManifest(appId: string) {
   return {
     apps: {
       worklane: {
-        id: WORKLANE_APP_ID,
+        id: appId,
         required: true,
       },
     },
@@ -118,9 +123,9 @@ export function codexManifest(origin: string) {
   };
 }
 
-export function pluginEntries(origin: string) {
+export function pluginEntries(origin: string, appId: string) {
   return [
-    { name: ".app.json", text: `${JSON.stringify(appManifest(), null, 2)}\n` },
+    { name: ".app.json", text: `${JSON.stringify(appManifest(appId), null, 2)}\n` },
     { name: ".mcp.json", text: `${JSON.stringify(dotMcpManifest(origin), null, 2)}\n` },
     { name: "mcp.json", text: `${JSON.stringify(mcpManifest(origin), null, 2)}\n` },
     { name: "plugin.json", text: `${JSON.stringify(pluginManifest(origin), null, 2)}\n` },
