@@ -12,14 +12,14 @@ function u32(value: number) {
   return buf;
 }
 
-/** Stored (uncompressed) zip of a few text files. */
-export function zipTextFiles(files: { name: string; text: string }[]) {
+/** Stored (uncompressed) zip. */
+export function zipFiles(files: { name: string; data: Buffer }[]) {
   const locals: Buffer[] = [];
   const centrals: Buffer[] = [];
   let offset = 0;
   for (const file of files) {
     const name = Buffer.from(file.name);
-    const data = Buffer.from(file.text);
+    const data = file.data;
     const crc = crc32(data);
     const local = Buffer.concat([
       u32(0x04034b50),

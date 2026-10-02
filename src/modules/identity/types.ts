@@ -56,6 +56,8 @@ export const RESERVED_ORG_SLUGS = new Set([
   "mcp",
   "oauth",
   "connect",
+  "privacy",
+  "terms",
   ".well-known",
 ]);
 

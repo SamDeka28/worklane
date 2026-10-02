@@ -57,6 +57,8 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/mcp") ||
     pathname.startsWith("/oauth") ||
     pathname.startsWith("/connect") ||
+    pathname.startsWith("/privacy") ||
+    pathname.startsWith("/terms") ||
     pathname.startsWith("/.well-known");
 
   const firstSegment = pathname.split("/").filter(Boolean)[0];

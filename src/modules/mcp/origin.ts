@@ -26,6 +26,8 @@ export function protectedResourceMetadata(origin: string) {
     scopes_supported: [READ_SCOPE, OFFLINE_SCOPE],
     bearer_methods_supported: ["header"],
     resource_documentation: `${origin}/connect`,
+    resource_policy_uri: `${origin}/privacy`,
+    resource_tos_uri: `${origin}/terms`,
   };
 }
 

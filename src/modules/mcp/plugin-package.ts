@@ -34,7 +34,11 @@ export function pluginManifest(origin: string) {
           developerName: "Worklane",
           category: "Productivity",
           capabilities: ["Read"],
-          websiteURL: `${origin}/connect`,
+          websiteURL: origin,
+          privacyPolicyURL: `${origin}/privacy`,
+          termsOfServiceURL: `${origin}/terms`,
+          logo: "./assets/logo.png",
+          composerIcon: "./assets/logo.png",
           defaultPrompt: [
             "What studios can I see in Worklane?",
             "Which invoices are still open?",

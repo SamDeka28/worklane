@@ -29,16 +29,53 @@ function result(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data) }] };
 }
 
-export function createWorklaneMcpServer(reader: { supabase: SupabaseClient; userId: string }) {
-  const server = new McpServer({ name: "worklane", version: "1.0.0" });
+/** Tells ChatGPT to show the Connect button instead of answering without an account. */
+export function connectRequired(origin: string) {
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: "Authentication required: no access token provided.",
+      },
+    ],
+    isError: true as const,
+    _meta: {
+      "mcp/www_authenticate": [
+        `'Bearer realm="worklane", resource_metadata="${origin}/.well-known/oauth-protected-resource", error="insufficient_scope", error_description="You need to login to continue", scope="worklane:read"'`,
+      ],
+    },
+  };
+}
+
+const auth = {
+  annotations: { readOnlyHint: true },
+  _meta: {
+    securitySchemes: [{ type: "oauth2", scopes: ["worklane:read"] }],
+  },
+};
+
+export function createWorklaneMcpServer(input: {
+  origin: string;
+  reader?: { supabase: SupabaseClient; userId: string } | null;
+}) {
+  const reader = input.reader;
+  const origin = input.origin;
+  const server = new McpServer(
+    { name: "Worklane", version: "1.0.0" },
+    {
+      instructions:
+        "Read the signed-in member's Worklane studios. If a tool says authentication is required, ask the user to connect Worklane. Do not invent records, and do not claim you can create or send anything.",
+    },
+  );
 
   server.registerTool(
     "list_studios",
     {
+      title: "List studios",
       description: `List the studios you belong to. ${TOOL_NOTE}`,
-      annotations: { readOnlyHint: true },
+      ...auth,
     },
-    async () => result(await readStudios(reader)),
+    async () => (reader ? result(await readStudios(reader)) : connectRequired(origin)),
   );
 
   server.registerTool(
@@ -46,9 +83,9 @@ export function createWorklaneMcpServer(reader: { supabase: SupabaseClient; user
     {
       description: `Search clients by name, with currency and primary contact. ${TOOL_NOTE}`,
       inputSchema: { org: orgField, query: z.string().optional().describe("Name to search for.") },
-      annotations: { readOnlyHint: true },
+      ...auth,
     },
-    async (input) => result(await readClients(reader, input)),
+    async (input) => (reader ? result(await readClients(reader, input)) : connectRequired(origin)),
   );
 
   server.registerTool(
@@ -56,9 +93,9 @@ export function createWorklaneMcpServer(reader: { supabase: SupabaseClient; user
     {
       description: `Read one client: name, currency, and primary contact. ${TOOL_NOTE}`,
       inputSchema: { org: orgField, id: z.string().describe("Client id.") },
-      annotations: { readOnlyHint: true },
+      ...auth,
     },
-    async (input) => result(await readClient(reader, input)),
+    async (input) => (reader ? result(await readClient(reader, input)) : connectRequired(origin)),
   );
 
   server.registerTool(
@@ -66,9 +103,9 @@ export function createWorklaneMcpServer(reader: { supabase: SupabaseClient; user
     {
       description: `List projects with status, billing mode, and client. Money is included only when you can see finance. ${TOOL_NOTE}`,
       inputSchema: { org: orgField },
-      annotations: { readOnlyHint: true },
+      ...auth,
     },
-    async (input) => result(await readProjects(reader, input)),
+    async (input) => (reader ? result(await readProjects(reader, input)) : connectRequired(origin)),
   );
 
   server.registerTool(
@@ -76,9 +113,9 @@ export function createWorklaneMcpServer(reader: { supabase: SupabaseClient; user
     {
       description: `Read one project. Money is included only when you can see finance. ${TOOL_NOTE}`,
       inputSchema: { org: orgField, id: z.string().describe("Project id.") },
-      annotations: { readOnlyHint: true },
+      ...auth,
     },
-    async (input) => result(await readProject(reader, input)),
+    async (input) => (reader ? result(await readProject(reader, input)) : connectRequired(origin)),
   );
 
   server.registerTool(
@@ -86,9 +123,9 @@ export function createWorklaneMcpServer(reader: { supabase: SupabaseClient; user
     {
       description: `List invoices with status, due date, total, and balance. ${TOOL_NOTE}`,
       inputSchema: { org: orgField },
-      annotations: { readOnlyHint: true },
+      ...auth,
     },
-    async (input) => result(await readInvoices(reader, input)),
+    async (input) => (reader ? result(await readInvoices(reader, input)) : connectRequired(origin)),
   );
 
   server.registerTool(
@@ -96,9 +133,9 @@ export function createWorklaneMcpServer(reader: { supabase: SupabaseClient; user
     {
       description: `Read one invoice: status, due date, total, and balance. ${TOOL_NOTE}`,
       inputSchema: { org: orgField, id: z.string().describe("Invoice id.") },
-      annotations: { readOnlyHint: true },
+      ...auth,
     },
-    async (input) => result(await readInvoice(reader, input)),
+    async (input) => (reader ? result(await readInvoice(reader, input)) : connectRequired(origin)),
   );
 
   server.registerTool(
@@ -106,9 +143,9 @@ export function createWorklaneMcpServer(reader: { supabase: SupabaseClient; user
     {
       description: `List leads with stage, company, and estimated value. ${TOOL_NOTE}`,
       inputSchema: { org: orgField, query: z.string().optional().describe("Name or company to search for.") },
-      annotations: { readOnlyHint: true },
+      ...auth,
     },
-    async (input) => result(await readLeads(reader, input)),
+    async (input) => (reader ? result(await readLeads(reader, input)) : connectRequired(origin)),
   );
 
   server.registerTool(
@@ -116,9 +153,9 @@ export function createWorklaneMcpServer(reader: { supabase: SupabaseClient; user
     {
       description: `Read one lead: stage, company, and estimated value. ${TOOL_NOTE}`,
       inputSchema: { org: orgField, id: z.string().describe("Lead id.") },
-      annotations: { readOnlyHint: true },
+      ...auth,
     },
-    async (input) => result(await readLead(reader, input)),
+    async (input) => (reader ? result(await readLead(reader, input)) : connectRequired(origin)),
   );
 
   return server;
