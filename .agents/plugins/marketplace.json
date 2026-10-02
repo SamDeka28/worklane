@@ -1,0 +1,20 @@
+{
+  "name": "worklane",
+  "interface": {
+    "displayName": "Worklane"
+  },
+  "plugins": [
+    {
+      "name": "worklane",
+      "source": {
+        "source": "local",
+        "path": "./plugins/worklane"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

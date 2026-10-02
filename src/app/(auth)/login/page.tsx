@@ -1,5 +1,6 @@
 import { AuthCard } from "@/components/auth/auth-card";
 import { SwitchAccountCard } from "@/components/auth/switch-account-card";
+import { oauthAuthorizePath } from "@/modules/mcp/return-path";
 import { createServerSupabaseClient } from "@/shared/db/supabase/server";
 import { inviteTokenFromQuery } from "@/shared/auth/invite-params";
 
@@ -14,6 +15,7 @@ export default async function LoginPage({
 }) {
   const query = await searchParams;
   const inviteToken = inviteTokenFromQuery(query);
+  const returnTo = oauthAuthorizePath(typeof query.next === "string" ? query.next : null);
   const defaultEmail = typeof query.email === "string" ? query.email : undefined;
   const authError = typeof query.error === "string" ? query.error : undefined;
   const confirmed = query.confirmed === "1";
@@ -47,6 +49,7 @@ export default async function LoginPage({
       defaultEmail={defaultEmail}
       confirmed={confirmed}
       initialError={authError}
+      returnTo={returnTo ?? undefined}
     />
   );
 }

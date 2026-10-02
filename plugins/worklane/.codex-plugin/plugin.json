@@ -1,0 +1,16 @@
+{
+  "name": "worklane",
+  "version": "1.0.0",
+  "description": "Read your Worklane studios, clients, projects, invoices, and leads.",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Worklane",
+    "shortDescription": "Read studios, clients, projects, invoices, and leads.",
+    "developerName": "Worklane",
+    "category": "Productivity",
+    "capabilities": [
+      "Read"
+    ],
+    "websiteURL": "http://localhost:3000/connect"
+  }
+}

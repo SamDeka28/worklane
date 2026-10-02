@@ -22,6 +22,8 @@ type AuthCardProps = {
   defaultEmail?: string;
   confirmed?: boolean;
   initialError?: string;
+  /** Safe in-app path to open after sign-in, used by assistant connections. */
+  returnTo?: string;
 };
 
 export function AuthCard({
@@ -32,6 +34,7 @@ export function AuthCard({
   defaultEmail,
   confirmed,
   initialError,
+  returnTo,
 }: AuthCardProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(initialError ?? null);
@@ -61,12 +64,13 @@ export function AuthCard({
       return;
     }
     const origin = window.location.origin;
+    const afterAuth = returnTo ?? "/onboarding";
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         redirectTo: isInvite
           ? inviteCallbackUrl(origin)
-          : `${origin}/auth/callback?next=${encodeURIComponent("/onboarding")}`,
+          : `${origin}/auth/callback?next=${encodeURIComponent(afterAuth)}`,
         queryParams: {
           access_type: "offline",
           prompt: "select_account",
@@ -104,6 +108,7 @@ export function AuthCard({
     }
 
     const origin = window.location.origin;
+    const afterAuth = returnTo ?? "/onboarding";
     const result =
       mode === "login"
         ? await supabase.auth.signInWithPassword({ email, password })
@@ -114,7 +119,7 @@ export function AuthCard({
               emailRedirectTo: `${
                 isInvite
                   ? inviteCallbackUrl(origin)
-                  : `${origin}/auth/callback?next=${encodeURIComponent("/onboarding")}`
+                  : `${origin}/auth/callback?next=${encodeURIComponent(afterAuth)}`
               }&email=${encodeURIComponent(email)}`,
               data: isInvite
                 ? {
@@ -149,7 +154,7 @@ export function AuthCard({
       if (inviteToken) {
         router.replace(`/invite/${inviteToken}`);
       } else {
-        router.replace("/onboarding");
+        router.replace(returnTo ?? "/onboarding");
       }
       router.refresh();
       return;
@@ -174,8 +179,8 @@ export function AuthCard({
       ? `/signup?invite=${encodeURIComponent(inviteToken!)}&email=${encodeURIComponent(defaultEmail ?? "")}`
       : `/login?invite=${encodeURIComponent(inviteToken!)}&email=${encodeURIComponent(defaultEmail ?? "")}`
     : mode === "login"
-      ? "/signup"
-      : "/login";
+      ? `/signup${returnTo ? `?next=${encodeURIComponent(returnTo)}` : ""}`
+      : `/login${returnTo ? `?next=${encodeURIComponent(returnTo)}` : ""}`;
 
   if (resetEmail !== null) {
     return (
@@ -188,6 +193,7 @@ export function AuthCard({
       <VerifyCodeCard
         email={verifyEmail}
         inviteToken={inviteToken}
+        returnTo={returnTo}
         onBack={() => setVerifyEmail(null)}
       />
     );

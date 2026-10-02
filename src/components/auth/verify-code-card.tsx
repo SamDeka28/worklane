@@ -14,10 +14,12 @@ const RESEND_COOLDOWN = 60;
 export function VerifyCodeCard({
   email,
   inviteToken,
+  returnTo,
   onBack,
 }: {
   email: string;
   inviteToken?: string;
+  returnTo?: string;
   onBack: () => void;
 }) {
   const router = useRouter();
@@ -57,7 +59,7 @@ export function VerifyCodeCard({
       // Non-blocking — onboarding works without profile sync.
     }
     toast.success("Email confirmed");
-    router.replace(inviteToken ? `/invite/${inviteToken}` : "/onboarding");
+    router.replace(inviteToken ? `/invite/${inviteToken}` : returnTo ?? "/onboarding");
     router.refresh();
   }
 

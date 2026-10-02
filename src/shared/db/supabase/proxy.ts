@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { RESERVED_ORG_SLUGS } from "@/modules/identity/types";
+import { oauthAuthorizePath } from "@/modules/mcp/return-path";
 import { getSupabasePublishableKey, getSupabaseUrl, isSupabaseConfigured } from "@/shared/db/env";
 
 function invitePathFromSearch(url: URL): string | null {
@@ -52,7 +53,11 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/brand") ||
     pathname.startsWith("/portal") ||
     pathname.startsWith("/docs") ||
-    pathname.startsWith("/invite");
+    pathname.startsWith("/invite") ||
+    pathname.startsWith("/mcp") ||
+    pathname.startsWith("/oauth") ||
+    pathname.startsWith("/connect") ||
+    pathname.startsWith("/.well-known");
 
   const firstSegment = pathname.split("/").filter(Boolean)[0];
   const isOrgRoute = Boolean(firstSegment && !RESERVED_ORG_SLUGS.has(firstSegment));
@@ -72,6 +77,10 @@ export async function updateSession(request: NextRequest) {
       url.pathname = invitePath;
       url.search = "";
       return NextResponse.redirect(url);
+    }
+    const connect = oauthAuthorizePath(url.searchParams.get("next"));
+    if (connect) {
+      return NextResponse.redirect(new URL(connect, url.origin));
     }
     url.pathname = "/onboarding";
     url.search = "";

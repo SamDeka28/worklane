@@ -187,6 +187,80 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
   };
 });
 
+/**
+ * Same membership and permissions as requireOrg, for a caller that already
+ * has a Supabase client (the MCP server). Returns null when the user is not
+ * an active member of the studio.
+ */
+export async function requireOrgForClient(
+  supabase: SupabaseClient,
+  userId: string,
+  slug: string,
+): Promise<OrgContext | null> {
+  const [{ data: membership, error }, { data: profile }] = await Promise.all([
+    supabase
+      .from("organization_members")
+      .select(
+        "role, status, permissions, welcomed_at, organizations!inner ( id, slug, name, default_currency, timezone, settings )",
+      )
+      .eq("organizations.slug", slug)
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select(
+        "email, display_name, avatar_url, theme, surface_style, component_style, interface_style, job_title, phone, location, address",
+      )
+      .eq("id", userId)
+      .maybeSingle(),
+  ]);
+
+  if (error) throw new Error(error.message);
+  const joined = membership?.organizations as unknown as OrgRow | OrgRow[] | null | undefined;
+  const orgRow = Array.isArray(joined) ? joined[0] : joined;
+  if (!membership || !orgRow) return null;
+
+  const role = membership.role as OrgRole;
+  const org = mapOrganization(orgRow);
+  const permissions = resolveMemberPermissions({
+    role,
+    stored: parseMemberPermissions(membership.permissions),
+    orgModules: org.modules,
+  });
+  const roleCanWrite = role === "owner" || role === "admin" || role === "member";
+  const moduleWrite =
+    canWriteModule(permissions, "delivery") ||
+    canWriteModule(permissions, "finance") ||
+    canWriteModule(permissions, "crm") ||
+    canWriteModule(permissions, "documents") ||
+    canWriteModule(permissions, "partners");
+
+  return {
+    org,
+    role,
+    userId,
+    canWrite: roleCanWrite && (role === "owner" || role === "admin" || moduleWrite),
+    needsWelcome: !membership.welcomed_at,
+    permissions,
+    supabase,
+    theme: (profile?.theme as string | null) ?? null,
+    surfaceStyle: resolveSurface(profile?.surface_style),
+    componentStyle: resolveComponent(profile?.component_style),
+    interfaceStyle: resolveInterface(profile?.interface_style),
+    user: {
+      email: (profile?.email as string | null) ?? null,
+      displayName: (profile?.display_name as string | null) ?? null,
+      avatarUrl: (profile?.avatar_url as string | null) ?? null,
+      jobTitle: (profile?.job_title as string | null) ?? null,
+      phone: (profile?.phone as string | null) ?? null,
+      location: (profile?.location as string | null) ?? null,
+      address: (profile?.address as string | null) ?? null,
+    },
+    deductions: parseCustomDeductions(orgRow.settings),
+  };
+}
+
 export function requireModuleAccess(ctx: OrgContext, module: ModuleKey) {
   if (!canAccessModule(ctx.permissions, module)) {
     notFound();

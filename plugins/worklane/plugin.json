@@ -1,0 +1,39 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "worklane",
+  "version": "1.0.0",
+  "description": "Read your Worklane studios, clients, projects, invoices, and leads.",
+  "author": {
+    "name": "Worklane",
+    "url": "http://localhost:3000/connect"
+  },
+  "license": "UNLICENSED",
+  "keywords": [
+    "worklane",
+    "studio",
+    "invoices",
+    "projects",
+    "leads"
+  ],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Worklane",
+        "shortDescription": "Read studios, clients, projects, invoices, and leads.",
+        "longDescription": "Connects ChatGPT to Worklane. Signing in on the Connect page shares read access for the studios you belong to. Worklane does not let the assistant create, change, or send anything.",
+        "developerName": "Worklane",
+        "category": "Productivity",
+        "capabilities": [
+          "Read"
+        ],
+        "websiteURL": "http://localhost:3000/connect",
+        "defaultPrompt": [
+          "What studios can I see in Worklane?",
+          "Which invoices are still open?",
+          "Summarize my active projects."
+        ],
+        "brandColor": "#4F46E5"
+      }
+    }
+  }
+}

@@ -53,6 +53,10 @@ export const RESERVED_ORG_SLUGS = new Set([
   "invite",
   "docs",
   "t",
+  "mcp",
+  "oauth",
+  "connect",
+  ".well-known",
 ]);
 
 export const DEMO_ORGANIZATION: Organization = {

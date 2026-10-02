@@ -383,4 +383,37 @@ export const ACCOUNT: DocArticle[] = [
       },
     ],
   },
+  {
+    slug: "assistants",
+    title: "Connect an assistant",
+    summary: "Let ChatGPT, Claude, or Cursor read your studios after you sign in to Worklane.",
+    category: "account",
+    kind: "how-to",
+    related: ["notifications"],
+    blocks: [
+      {
+        type: "p",
+        text: "Worklane can answer an assistant's questions about your studios, clients, projects, invoices, and leads. Connecting one opens the same Worklane sign-in or sign-up you already use. After you allow it, Worklane shares a token with that assistant. You never paste a secret.",
+      },
+      { type: "h2", text: "Install the ChatGPT plugin" },
+      {
+        type: "p",
+        text: "Open [Connect using MCP](/connect) and download the Worklane plugin. Install that zip in ChatGPT. The plugin already knows this site's server address, so you do not paste a URL or a secret.",
+      },
+      { type: "h2", text: "What happens when you connect" },
+      {
+        type: "list",
+        items: [
+          "ChatGPT opens the Connect page on Worklane.",
+          "Sign in, or create an account, on the same screens you already use.",
+          "Allow read access. Worklane sends you back to ChatGPT.",
+        ],
+      },
+      {
+        type: "callout",
+        tone: "note",
+        text: "An assistant cannot create clients, post charges, or send email. Disconnect it any time from Profile → Connected assistants. The next request has to sign in again.",
+      },
+    ],
+  },
 ];

@@ -1,4 +1,5 @@
 import { AuthCard } from "@/components/auth/auth-card";
+import { oauthAuthorizePath } from "@/modules/mcp/return-path";
 import { inviteTokenFromQuery } from "@/shared/auth/invite-params";
 
 export const metadata = {
@@ -12,6 +13,7 @@ export default async function SignupPage({
 }) {
   const query = await searchParams;
   const inviteToken = inviteTokenFromQuery(query);
+  const returnTo = oauthAuthorizePath(typeof query.next === "string" ? query.next : null);
   const defaultEmail = typeof query.email === "string" ? query.email : undefined;
 
   return (
@@ -25,6 +27,7 @@ export default async function SignupPage({
       mode="signup"
       inviteToken={inviteToken}
       defaultEmail={defaultEmail}
+      returnTo={returnTo ?? undefined}
     />
   );
 }

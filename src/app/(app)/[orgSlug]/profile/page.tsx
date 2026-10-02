@@ -3,6 +3,8 @@ import { ProfileSettingsForm } from "@/modules/identity/components/profile-setti
 import { requireOrg } from "@/modules/identity/org";
 import { PersonalSignatureForm } from "@/modules/email-signatures/components/signature-forms";
 import { getSignatures, signatureSender } from "@/modules/email-signatures/server";
+import { ConnectedAssistants } from "@/modules/mcp/components/connected-assistants";
+import { listGrantsForUser } from "@/modules/mcp/oauth";
 
 export default async function ProfilePage({
   params,
@@ -14,6 +16,7 @@ export default async function ProfilePage({
     ctx.user.email?.split("@")[0] ||
     "You";
   const signatures = ctx.canWrite ? await getSignatures(ctx.org.id, ctx.userId) : null;
+  const assistants = await listGrantsForUser(ctx.userId).catch(() => []);
 
   return (
     <WorkSurface variant="panel">
@@ -56,6 +59,7 @@ export default async function ProfilePage({
               />
             </section>
           ) : null}
+          <ConnectedAssistants grants={assistants} />
         </div>
       </div>
     </WorkSurface>
