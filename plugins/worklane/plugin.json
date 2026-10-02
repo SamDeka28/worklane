@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "app-6abf94cdb7488191bd2b8c01efbf2977",
+  "name": "worklane",
   "version": "1.3.0",
   "description": "Read and change your Worklane studio, including notes, documents, and records you have access to.",
   "author": {

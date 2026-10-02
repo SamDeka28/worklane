@@ -4,7 +4,7 @@ import { Download } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { pluginPackageName } from "@/modules/mcp/plugin-package";
+import { parseWorklaneAppId } from "@/modules/mcp/plugin-package";
 
 export function PluginDownloadForm({
   defaultAppId,
@@ -18,11 +18,11 @@ export function PluginDownloadForm({
     invalid ? "That is not an app id. Copy the asdk_app_ value from the ChatGPT address." : "",
   );
   const [pending, setPending] = useState(false);
-  const packageName = pluginPackageName(appId);
+  const appIdOk = Boolean(parseWorklaneAppId(appId));
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!packageName) {
+    if (!parseWorklaneAppId(appId)) {
       setError("That is not an app id. Copy the asdk_app_ value from the ChatGPT address.");
       return;
     }
@@ -39,7 +39,7 @@ export function PluginDownloadForm({
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${packageName}.zip`;
+      link.download = "worklane.zip";
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -73,12 +73,10 @@ export function PluginDownloadForm({
       />
       {error ? (
         <p className="text-sm text-destructive">{error}</p>
-      ) : packageName ? (
+      ) : appIdOk ? (
         <p className="text-xs leading-relaxed text-muted-foreground">
-          ChatGPT names this plugin{" "}
-          <span className="font-mono text-foreground">{packageName}</span>. The file is{" "}
-          <span className="font-mono text-foreground">{packageName}.zip</span>. Upload it without
-          renaming. If the browser adds (1), delete the older file and download again.
+          The package name stays <span className="font-mono text-foreground">worklane</span>, which
+          is the plugin already in ChatGPT. Only the app id changes.
         </p>
       ) : (
         <p className="text-xs leading-relaxed text-muted-foreground">

@@ -1,13 +1,7 @@
 export const PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
 export const MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
+export const PLUGIN_NAME = "worklane";
 export const PLUGIN_VERSION = "1.3.0";
-
-/** ChatGPT names the plugin `app-` plus the id after `asdk_app_`. An update must use that name. */
-export function pluginPackageName(value: string): string | null {
-  const appId = parseWorklaneAppId(value);
-  if (!appId) return null;
-  return `app-${appId.slice("asdk_app_".length)}`;
-}
 
 /** Pulls `asdk_app_…` out of an id or a ChatGPT address that contains `plugin_asdk_app_…`. */
 export function parseWorklaneAppId(value: string): string | null {
@@ -73,10 +67,10 @@ export function appManifest(appId: string) {
   };
 }
 
-export function pluginManifest(origin: string, packageName: string) {
+export function pluginManifest(origin: string) {
   return {
     $schema: PLUGIN_SCHEMA,
-    name: packageName,
+    name: PLUGIN_NAME,
     version: PLUGIN_VERSION,
     description: DESCRIPTION,
     author: { name: "Worklane", url: `${origin}/connect` },
@@ -115,11 +109,11 @@ export function dotMcpManifest(origin: string) {
   };
 }
 
-export function codexManifest(origin: string, packageName: string) {
+export function codexManifest(origin: string) {
   return {
     apps: "./.app.json",
     interface: interfaceBlock(origin),
-    name: packageName,
+    name: PLUGIN_NAME,
     version: PLUGIN_VERSION,
     description: DESCRIPTION,
     author: { name: "Worklane", url: `${origin}/connect` },
@@ -131,13 +125,12 @@ export function codexManifest(origin: string, packageName: string) {
 }
 
 export function pluginEntries(origin: string, appId: string) {
-  const packageName = pluginPackageName(appId) ?? "worklane";
   return [
     { name: ".app.json", text: `${JSON.stringify(appManifest(appId), null, 2)}\n` },
     { name: ".mcp.json", text: `${JSON.stringify(dotMcpManifest(origin), null, 2)}\n` },
     { name: "mcp.json", text: `${JSON.stringify(mcpManifest(origin), null, 2)}\n` },
-    { name: "plugin.json", text: `${JSON.stringify(pluginManifest(origin, packageName), null, 2)}\n` },
-    { name: ".codex-plugin/plugin.json", text: `${JSON.stringify(codexManifest(origin, packageName), null, 2)}\n` },
+    { name: "plugin.json", text: `${JSON.stringify(pluginManifest(origin), null, 2)}\n` },
+    { name: ".codex-plugin/plugin.json", text: `${JSON.stringify(codexManifest(origin), null, 2)}\n` },
     { name: "skills/read-worklane/SKILL.md", text: WORKLANE_SKILL },
   ];
 }

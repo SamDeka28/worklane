@@ -398,7 +398,7 @@ export const ACCOUNT: DocArticle[] = [
       { type: "h2", text: "Add the ChatGPT app" },
       {
         type: "p",
-        text: "On [Connect using MCP](/connect), paste the server address into ChatGPT. Open Settings → Security and login, turn on Developer mode, open Plugins, choose the plus button, and paste that address. Sign in when ChatGPT opens the Connect page, then install the plugin from Personal. Each ChatGPT account gets its own app id. Open that plugin, copy the asdk_app_ value from the page address, and paste it on the Connect page. The download is named app- followed by that id, which is the name ChatGPT already gave the plugin. Upload that file as a new version without renaming it. On the ChatGPT homepage, switch from Chat to Work, start a new chat, type @, and select Worklane.",
+        text: "On [Connect using MCP](/connect), paste the server address into ChatGPT. Open Settings → Security and login, turn on Developer mode, open Plugins, choose the plus button, and paste that address. Sign in when ChatGPT opens the Connect page, then install the plugin from Personal. Each ChatGPT account gets its own app id. Open that plugin, copy the asdk_app_ value from the page address, and paste it on the Connect page. The downloaded package keeps the name worklane so it can update the plugin already there. Upload it as a new version. On the ChatGPT homepage, switch from Chat to Work, start a new chat, type @, and select Worklane.",
       },
       { type: "h2", text: "What happens when you connect" },
       {

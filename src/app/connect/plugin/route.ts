@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import path from "path";
 import { NextResponse } from "next/server";
 import { originFromHeaders } from "@/modules/mcp/origin";
-import { parseWorklaneAppId, pluginEntries, pluginPackageName } from "@/modules/mcp/plugin-package";
+import { parseWorklaneAppId, pluginEntries } from "@/modules/mcp/plugin-package";
 import { zipFiles } from "@/modules/mcp/zip";
 
 export const runtime = "nodejs";
@@ -17,7 +17,6 @@ export async function GET(request: Request) {
     if (submitted.trim()) back.searchParams.set("app_id", submitted.trim().slice(0, 240));
     return NextResponse.redirect(back);
   }
-  const packageName = pluginPackageName(appId) ?? "worklane";
   const origin = originFromHeaders(await headers()) ?? "http://localhost:3000";
   const logo = readFileSync(path.join(process.cwd(), "public/brand/worklane-email-mark.png"));
   const body = zipFiles([
@@ -27,7 +26,7 @@ export async function GET(request: Request) {
   return new NextResponse(new Uint8Array(body), {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${packageName}.zip"`,
+      "Content-Disposition": "attachment; filename=\"worklane.zip\"",
     },
   });
 }
