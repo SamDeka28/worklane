@@ -395,10 +395,10 @@ export const ACCOUNT: DocArticle[] = [
         type: "p",
         text: "Worklane can answer an assistant's questions about your studios, clients, projects, invoices, and leads. Connecting one opens the same Worklane sign-in or sign-up you already use. After you allow it, Worklane shares a token with that assistant. You never paste a secret.",
       },
-      { type: "h2", text: "Install the ChatGPT plugin" },
+      { type: "h2", text: "Add the ChatGPT app" },
       {
         type: "p",
-        text: "Open [Connect using MCP](/connect) and download the Worklane plugin. Install that zip in ChatGPT. The plugin already knows this site's server address, so you do not paste a URL or a secret.",
+        text: "In ChatGPT, open Settings → Security and login and turn on Developer mode. Open Plugins, choose the plus button, and paste the server address from [Connect using MCP](/connect). Sign in when ChatGPT opens that page, then install the plugin from Personal. On the ChatGPT homepage, switch from Chat to Work, start a new chat, type @, and select Worklane. A plugin zip does not create that connection.",
       },
       { type: "h2", text: "What happens when you connect" },
       {
@@ -425,7 +425,7 @@ export const ACCOUNT: DocArticle[] = [
     blocks: [
       {
         type: "p",
-        text: "ChatGPT uses the same access you already have in the studio. Open [Connect using MCP](/connect), sign in, and install the plugin from that page.",
+        text: "ChatGPT uses the same access you already have in the studio. Add the app from [Connect using MCP](/connect), sign in, and mention Worklane in a new chat.",
       },
       { type: "h2", text: "Read access and change access" },
       {

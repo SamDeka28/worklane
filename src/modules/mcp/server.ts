@@ -68,7 +68,7 @@ export function writeRequired(origin: string) {
 }
 
 const auth = {
-  annotations: { readOnlyHint: true },
+  annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
   _meta: {
     securitySchemes: [{ type: "oauth2", scopes: ["worklane:read"] }],
   },
@@ -84,7 +84,47 @@ export function createWorklaneMcpServer(input: {
     { name: "Worklane", version: "1.0.0" },
     {
       instructions:
-        "Read the signed-in member's Worklane studios. For totals, periods, or questions that cross records, call describe_studio_data and then query_studio until the question is answered. If a tool says authentication is required, ask the user to connect Worklane. Do not invent records, and do not claim you can create or send anything.",
+        "Call Worklane tools for this member's studios. If a tool requires authentication, ask them to connect. If changes are not allowed, ask them to connect again and allow changes. Use describe_studio_data, then query_studio, until a cross-record question is answered. Do not invent records. Claim a create, change, send, void, or delete only when the tool result says it happened.",
+    },
+  );
+
+  server.registerTool(
+    "get_profile",
+    {
+      title: "Get profile",
+      description:
+        "Return the profile represented by this request's authenticated credentials. The opaque id is unique within Worklane and remains unchanged across token refresh, reconnection, and display-metadata changes.",
+      inputSchema: {},
+      outputSchema: {
+        id: z.string().describe("Stable Worklane user id."),
+        name: z.string().optional(),
+        email: z.string().optional(),
+        nickname: z.string().optional(),
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      _meta: {
+        ...auth._meta,
+        "openai/profile": true,
+      },
+    },
+    async () => {
+      if (!reader) return connectRequired(origin);
+      const { data } = await reader.supabase
+        .from("profiles")
+        .select("email, display_name")
+        .eq("id", reader.userId)
+        .maybeSingle();
+      const name = typeof data?.display_name === "string" && data.display_name.trim() ? data.display_name.trim() : undefined;
+      const email = typeof data?.email === "string" && data.email.trim() ? data.email.trim() : undefined;
+      const profile = {
+        id: reader.userId,
+        ...(name ? { name, nickname: name } : {}),
+        ...(email ? { email } : {}),
+      };
+      return {
+        structuredContent: profile,
+        content: [{ type: "text" as const, text: JSON.stringify(profile) }],
+      };
     },
   );
 

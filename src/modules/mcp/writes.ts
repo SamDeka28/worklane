@@ -156,7 +156,7 @@ export function registerStudioActions(
       {
         description,
         inputSchema,
-        annotations: { readOnlyHint: !writing, destructiveHint: destructive },
+        annotations: { readOnlyHint: !writing, destructiveHint: destructive, openWorldHint: false },
         _meta: writing ? writeMeta : readMeta,
       },
       async (input) => {

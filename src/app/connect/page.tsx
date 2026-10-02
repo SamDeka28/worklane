@@ -112,24 +112,24 @@ export default async function ConnectPage({
         ) : (
           <>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Install the Worklane plugin in ChatGPT. ChatGPT opens this page, you sign in, and
-              Worklane shares your studios. Reading is included. Changes need you to allow them on this page. Nothing is pasted by hand.
+              Add Worklane as an app in ChatGPT on the web. Then you can mention it in a chat.
+              ChatGPT opens this page, you sign in, and Worklane shares your studios. Reading is
+              included. Changes need you to allow them on this page.
             </p>
             <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-              <li>Download the plugin. It already points at this site.</li>
-              <li>In ChatGPT, install it from your plugins folder or submit the zip.</li>
-              <li>ChatGPT returns here. Sign in, then allow access.</li>
+              <li>In ChatGPT, open Settings, then Security and login, and turn on Developer mode.</li>
+              <li>Open Plugins and choose the plus button. Paste this site&apos;s server address and create the plugin.</li>
+              <li>When ChatGPT opens this page, sign in and allow access.</li>
+              <li>Open the plugin under Personal and install it.</li>
+              <li>On the ChatGPT homepage, switch from Chat to Work. In a new Work chat, type @ and select Worklane.</li>
             </ol>
-            <div className="mt-6">
-              <Button nativeButton={false} render={<Link href="/connect/plugin" />}>
-                Download ChatGPT plugin
-              </Button>
-            </div>
             {origin ? (
-              <p className="mt-4 text-xs text-muted-foreground">
-                Server address in the plugin: {origin}/mcp
-              </p>
+              <p className="mt-4 font-mono text-xs text-foreground">{origin}/mcp</p>
             ) : null}
+            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+              A downloaded plugin zip only opens in the ChatGPT desktop app. It does not add an
+              app you can mention in chat.
+            </p>
           </>
         )}
       </div>
