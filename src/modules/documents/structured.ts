@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import { getAppUrl } from "@/shared/email";
+import { documentTables } from "@/modules/documents/template-fill";
 import { DOCUMENT_TEMPLATES, type DocumentTemplate } from "@/modules/documents/templates";
 
 export type TemplateFieldValue = string | string[];
@@ -24,11 +25,17 @@ export function collectPlaceholders(doc: JSONContent): { label: string; count: n
 }
 
 /**
- * Fills template placeholders from structured field values.
- * A string replaces every copy of that label. An array replaces copies in order
- * and leaves any extra copy untouched.
+ * Fills template placeholders.
+ * A string replaces a label that appears once, such as the client name.
+ * It does not copy one string into every row of a table.
+ * An array fills copies of that label in order and leaves any extra copy untouched.
  */
-export function applyStructuredFills(doc: JSONContent, data: Record<string, TemplateFieldValue>): JSONContent {
+export function applyStructuredFills(
+  doc: JSONContent,
+  data: Record<string, TemplateFieldValue>,
+  options?: { rowLabels?: Set<string> },
+): JSONContent {
+  const rowLabels = options?.rowLabels;
   const repeated = new Map<string, string[]>();
   const shared = new Map<string, string>();
   for (const [label, value] of Object.entries(data)) {
@@ -51,7 +58,7 @@ export function applyStructuredFills(doc: JSONContent, data: Record<string, Temp
           return next;
         }
         const value = shared.get(label);
-        if (!value) return full;
+        if (!value || rowLabels?.has(label)) return full;
         changed = true;
         return value;
       });
@@ -69,11 +76,13 @@ export function applyStructuredFills(doc: JSONContent, data: Record<string, Temp
 
 export function documentWarnings(
   doc: JSONContent,
-  meta: { title?: string | null; clientId?: string | null; projectId?: string | null },
+  meta: { title?: string | null; clientId?: string | null; projectId?: string | null; leadId?: string | null },
 ) {
   const warnings = collectPlaceholders(doc).map((field) => `${field.label} is not filled in`);
   if (!meta.title?.trim()) warnings.unshift("Document title is missing");
-  if (!meta.clientId) warnings.push("No client is linked");
+  if (!meta.clientId && meta.leadId) {
+    warnings.push("No client is linked. This lead has not been converted to a client.");
+  } else if (!meta.clientId) warnings.push("No client is linked");
   if (!meta.projectId) warnings.push("No project is linked");
   return {
     readyForSignature: warnings.length === 0,
@@ -94,6 +103,7 @@ export function describeTemplate(template: DocumentTemplate) {
     description: template.description,
     outline: template.outline,
     fields: collectPlaceholders(content),
+    tables: documentTables(content),
   };
 }
 

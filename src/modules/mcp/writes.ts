@@ -4,7 +4,7 @@ import { z } from "zod";
 import { sendLeadEmailForContext } from "@/modules/crm/email-actions";
 import { countersignDocumentForContext, emailSignedCopyForContext } from "@/modules/documents/actions";
 import { previewDocumentsForContext, validateDocumentForContext } from "@/modules/documents/preview";
-import { listDocumentTemplates, type TemplateFieldValue } from "@/modules/documents/structured";
+import { listDocumentTemplates } from "@/modules/documents/structured";
 import { sendTrackedEmailForContext } from "@/modules/emails/actions";
 import {
   billMilestoneForContext,
@@ -96,9 +96,10 @@ const toolShapes: Record<string, z.ZodRawShape> = {
     title: z.string().describe("Document title."),
     templateId: z.string().optional().describe("Template id from list_document_templates. Defaults from kind, or proposal."),
     kind: z.string().optional().describe("proposal, sow, contract, nda, brief, change_order, report, or other."),
-    data: z.string().optional().describe("JSON object of template field labels to plain-text values. Repeated labels are arrays in order. Leave unknown amounts out."),
-    clientId: z.string().optional(),
+    data: z.string().optional().describe("JSON. For an SOW, pass deliverables, milestones, roles, and paymentSchedule as arrays of row objects. Do not copy one string into every row. Omit unknown fees and dates."),
+    clientId: z.string().optional().describe("Client id. A lead id is not a client."),
     projectId: z.string().optional(),
+    leadId: z.string().optional().describe("Lead id. Stored as a lead, and does not create a client."),
     body: z.string().optional().describe("Legacy plain text only. Ignored when templateId, kind, or data is set. Do not use for a proposal or SOW."),
   },
   create_proposal: {
@@ -115,21 +116,24 @@ const toolShapes: Record<string, z.ZodRawShape> = {
   },
   fill_document: {
     id: recordId,
-    body: z.string().describe("One fill per line, such as Client name: Rentique."),
+    data: z.string().optional().describe("JSON rows: deliverables, milestones, roles, paymentSchedule, workstreams. One string is not copied into every row."),
+    body: z.string().optional().describe("JSON object, or one scalar placeholder per line. Do not repeat one deliverable for every row."),
     title: z.string().optional(),
   },
   link_document: {
     id: recordId,
-    clientId: z.string().optional().describe("Client to attach. On a signed document, only if none is set."),
-    projectId: z.string().optional().describe("Project to attach. On a signed document, only if none is set."),
+    clientId: z.string().optional().describe("Client id. A lead id is not stored as a client."),
+    projectId: z.string().optional().describe("Project id. On a signed document, only if none is set."),
+    leadId: z.string().optional().describe("Lead id. If the lead has no client, the document stays unlinked."),
   },
   create_sow: {
     id: z.string().optional().describe("Proposal id, when the SOW should start from that proposal."),
     title: z.string().optional().describe("Document title. Defaults from the proposal or to Statement of work."),
     templateId: z.string().optional().describe("Defaults to sow."),
-    clientId: z.string().optional(),
+    clientId: z.string().optional().describe("Client id. Do not pass a lead id here."),
     projectId: z.string().optional(),
-    data: z.string().optional().describe("JSON object of SOW template field labels to plain-text values. Repeated labels are arrays in order. Do not invent fees or dates."),
+    leadId: z.string().optional().describe("Lead id when no client exists yet."),
+    data: z.string().optional().describe("JSON rows for deliverables, milestones, roles, workstreams, and paymentSchedule. Omit unknown fees, dates, and the MSA."),
   },
   send_document: {
     id: recordId,
@@ -394,20 +398,14 @@ type ToolInput = {
   data?: string;
 };
 
-function documentFields(raw?: string): { data: Record<string, TemplateFieldValue> } | { error: string } {
+function documentFields(raw?: string): { data: Record<string, unknown> } | { error: string } {
   if (!raw?.trim()) return { data: {} };
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return { error: "data must be a JSON object of template fields." };
+      return { error: "data must be a JSON object. Pass deliverables, milestones, roles, and paymentSchedule as arrays of rows." };
     }
-    const data: Record<string, TemplateFieldValue> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (typeof value === "string") data[key] = value;
-      else if (Array.isArray(value) && value.every((item) => typeof item === "string")) data[key] = value;
-      else return { error: `Field ${key} must be a string or an array of strings.` };
-    }
-    return { data };
+    return { data: parsed as Record<string, unknown> };
   } catch {
     return { error: "data must be JSON." };
   }
@@ -508,7 +506,7 @@ export function registerStudioActions(
     pending.push({ name, description, destructive, writing, handle });
   };
 
-  add("list_document_templates", "List the studio document templates: id, name, kind, and field labels with how many times each label appears. When count is greater than 1, pass that field in data as an array in document order. Use these ids with create_document, create_sow, and create_proposal.", false, false, async () =>
+  add("list_document_templates", "List the studio document templates: id, name, kind, scalar fields, and tables with their columns and row ids. Fill tables with row objects such as deliverables, milestones, roles, and paymentSchedule. Do not copy one string into every row.", false, false, async () =>
     result({ templates: listDocumentTemplates() }),
   );
   add("preview_document", "Preview a saved document, the documents on a project, or the documents on a client. Pass id for one document. The result includes previewUrl and pdfUrl for the current version PDF. With none of those, preview a template and its fields before saving. Does not save or send.", false, false, (input) =>
@@ -638,7 +636,7 @@ export function registerStudioActions(
       }),
     );
   });
-  add("create_document", "Create a draft from an existing template. Pass templateId or kind, and data as JSON of that template's field labels. Do not put the document in body, and do not send Markdown. body is only a legacy plain-text note and is ignored when templateId, kind, or data is set. Returns previewUrl. Does not send.", false, true, async (input) => {
+  add("create_document", "Create a draft from an existing template. Pass templateId or kind, and data as JSON. For an SOW, pass deliverables, milestones, roles, workstreams, and paymentSchedule as row objects. Do not copy one string into every row, and do not invent fees or dates. A lead id is not a client. Returns previewUrl. Does not send.", false, true, async (input) => {
     const fields = documentFields(input.data);
     if ("error" in fields) return result(fields);
     return run(input, (ctx) =>
@@ -648,6 +646,7 @@ export function registerStudioActions(
         kind: input.kind,
         clientId: input.clientId,
         projectId: input.projectId,
+        leadId: input.leadId,
         data: fields.data,
         body: input.body,
       }),
@@ -670,9 +669,18 @@ export function registerStudioActions(
   add("write_document", "Legacy. Replaces a draft with plain text and drops the template layout. Prefer create_document with templateId and data, or fill_document. Does not send or sign.", false, true, (input) =>
     run(input, (ctx) => writeDocumentRecord(ctx, { id: input.id || "", body: input.body || "", title: input.title })),
   );
-  add("fill_document", "Replace [Placeholder] labels in a draft. body is one line per fill, such as Deliverable: Public storefront. Repeat a label to fill each copy in order. Returns previewUrl. Does not send or sign.", false, true, (input) =>
-    run(input, (ctx) => fillDocumentRecord(ctx, { id: input.id || "", body: input.body || input.notes || "", title: input.title })),
-  );
+  add("fill_document", "Fill a draft from the template's own tables. data is JSON with deliverables, milestones, roles, workstreams, and paymentSchedule rows. Each row is written into its own cells. A single string is not copied into every row. Returns previewUrl. Does not send or sign.", false, true, async (input) => {
+    const fields = documentFields(input.data);
+    if ("error" in fields) return result(fields);
+    return run(input, (ctx) =>
+      fillDocumentRecord(ctx, {
+        id: input.id || "",
+        body: input.body || input.notes || "",
+        title: input.title,
+        data: input.data ? fields.data : undefined,
+      }),
+    );
+  });
   add("get_document", "Read one document: status, version, client, project, previewUrl, validation, sends, and signatures. Does not send or sign.", false, false, (input) =>
     run(input, (ctx) => readDocumentForContext(ctx, input.id || "")),
   );
@@ -682,10 +690,10 @@ export function registerStudioActions(
   add("validate_document", "Check a document for unfilled template fields and a missing client, project, or title. Does not invent values and does not send.", false, false, (input) =>
     run(input, (ctx) => validateDocumentForContext(ctx, input.id || "")),
   );
-  add("link_document", "Attach a client or project. On a signed or accepted document, only a missing client or project can be set. A link that is already set stays. Does not rewrite a locked version.", false, true, (input) =>
-    run(input, (ctx) => linkDocumentRecord(ctx, { id: input.id || "", clientId: input.clientId, projectId: input.projectId })),
+  add("link_document", "Attach a client, project, or lead using their real ids. A lead id is not a client. If the lead has no client, the document stays unlinked and the result says so. On a signed document, only a missing client or project can be set. Does not rewrite a locked version.", false, true, (input) =>
+    run(input, (ctx) => linkDocumentRecord(ctx, { id: input.id || "", clientId: input.clientId, projectId: input.projectId, leadId: input.leadId })),
   );
-  add("create_sow", "Create a draft statement of work from the SOW template. Pass clientId, projectId, and data as JSON of the template's field labels. Pass id only to start from a proposal. Do not put the SOW in body or Markdown. Returns previewUrl. Does not send.", false, true, async (input) => {
+  add("create_sow", "Create a draft statement of work from the existing SOW template. Pass data with deliverables, milestones, roles, workstreams, and paymentSchedule as row objects. Do not copy one string into every row, and do not invent fees, dates, or an MSA. Pass leadId when the client does not exist yet. Returns previewUrl. Does not send.", false, true, async (input) => {
     const fields = documentFields(input.data);
     if ("error" in fields) return result(fields);
     return run(input, (ctx) => {
@@ -696,6 +704,7 @@ export function registerStudioActions(
         kind: "sow",
         clientId: input.clientId,
         projectId: input.projectId,
+        leadId: input.leadId,
         data: fields.data,
       });
     });

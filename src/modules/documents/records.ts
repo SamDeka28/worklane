@@ -3,8 +3,10 @@ import { docToPlainText } from "@/components/editor/doc-text";
 import { proseFromDoc, proseToDoc } from "@/modules/documents/prose";
 import { buildLiveSnapshot } from "@/modules/documents/lock";
 import { documentSendToken, documentViewPath } from "@/modules/documents/sends";
+import { resolveDocumentLinks } from "@/modules/documents/parties";
 import { renderStoredDocumentPdf } from "@/modules/documents/render-pdf";
-import { applyStructuredFills, documentPreviewUrl, documentWarnings, type TemplateFieldValue } from "@/modules/documents/structured";
+import { documentPreviewUrl, documentWarnings, type TemplateFieldValue } from "@/modules/documents/structured";
+import { applyDocumentData } from "@/modules/documents/template-fill";
 import { buildBasicDocumentTemplate } from "@/modules/documents/templates";
 import { asDocumentKind, DOCUMENT_KIND_LABEL } from "@/modules/documents/types";
 import { resolveSender } from "@/modules/email-senders/server";
@@ -30,23 +32,16 @@ type VersionRow = {
   version_number: number;
 };
 
-function fillText(text: string, replacements: Map<string, string>) {
-  let next = text;
-  for (const [label, value] of replacements) {
-    next = next.replaceAll(`[${label}]`, value);
+function parseJsonData(raw: string): Record<string, unknown> | { error: string } {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { error: "data must be a JSON object." };
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return { error: "data must be JSON." };
   }
-  return next;
-}
-
-function fillNode(node: JSONContent, replacements: Map<string, string>): JSONContent {
-  if (node.type === "text" && typeof node.text === "string") {
-    const text = fillText(node.text, replacements);
-    if (text === node.text) return node;
-    const marks = (node.marks ?? []).filter((mark) => mark.type !== "highlight");
-    return marks.length > 0 ? { ...node, text, marks } : { type: "text", text };
-  }
-  if (!node.content) return node;
-  return { ...node, content: node.content.map((child) => fillNode(child, replacements)) };
 }
 
 export function parseDocumentFills(body: string): Record<string, TemplateFieldValue> {
@@ -118,13 +113,15 @@ export async function writeDocumentRecord(
 
 export async function fillDocumentRecord(
   ctx: OrgContext,
-  input: { id: string; body: string; title?: string },
+  input: { id: string; body?: string; title?: string; data?: Record<string, unknown> },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "documents");
   if (blocked) return blocked;
-  const replacements = parseDocumentFills(input.body);
-  if (Object.keys(replacements).length === 0) {
-    return { error: "Pass one placeholder per line, such as Client name: Rentique. Repeat a label to fill each copy in order." };
+  const parsedBody = input.body?.trim().startsWith("{") ? parseJsonData(input.body) : parseDocumentFills(input.body ?? "");
+  if ("error" in parsedBody && parsedBody.error) return parsedBody;
+  const data = input.data ?? (parsedBody as Record<string, unknown>);
+  if (Object.keys(data).length === 0) {
+    return { error: "Pass deliverables, milestones, roles, and paymentSchedule as JSON rows. A single label is not copied into every row." };
   }
   const loaded = await latestVersion(ctx, input.id);
   if ("error" in loaded) return loaded;
@@ -135,7 +132,7 @@ export async function fillDocumentRecord(
   if (version.status === "sent") {
     return { error: "This version was already sent. Start a new revision before changing it." };
   }
-  const content = applyStructuredFills((version.content_doc ?? { type: "doc" }) as JSONContent, replacements);
+  const content = applyDocumentData((version.content_doc ?? { type: "doc" }) as JSONContent, data);
   const { error } = await ctx.supabase
     .from("document_versions")
     .update({ content_doc: content })
@@ -154,7 +151,7 @@ export async function fillDocumentRecord(
     id: input.id,
     versionId: version.id,
     version: version.version_number,
-    filled: Object.keys(replacements),
+    filled: Object.keys(data),
     previewUrl,
     pdfUrl: previewUrl,
     text: docToPlainText(content),
@@ -163,13 +160,13 @@ export async function fillDocumentRecord(
 
 export async function linkDocumentRecord(
   ctx: OrgContext,
-  input: { id: string; clientId?: string; projectId?: string },
+  input: { id: string; clientId?: string; projectId?: string; leadId?: string },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "documents");
   if (blocked) return blocked;
   const { data: document } = await ctx.supabase
     .from("documents")
-    .select("id, status, client_id, project_id")
+    .select("id, title, status, client_id, project_id, lead_id")
     .eq("id", input.id)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -184,50 +181,34 @@ export async function linkDocumentRecord(
     }
   }
 
-  let clientId = input.clientId?.trim() || document.client_id;
-  let projectId = input.projectId?.trim() || (locked ? document.project_id : null);
-  let clientName: string | null = null;
-  let projectName: string | null = null;
-  if (input.projectId?.trim()) {
-    const { data: project } = await ctx.supabase
-      .from("projects")
-      .select("id, name, client_id")
-      .eq("id", input.projectId.trim())
-      .eq("organization_id", ctx.org.id)
-      .maybeSingle();
-    if (!project) return { error: "Project not found" };
-    if (locked && document.client_id && project.client_id !== document.client_id) {
-      return { error: "That project belongs to a different client." };
-    }
-    projectId = project.id as string;
-    projectName = project.name as string;
-    clientId = project.client_id as string;
+  const resolved = await resolveDocumentLinks(ctx, {
+    clientId: input.clientId?.trim() || (document.client_id as string | null),
+    projectId: input.projectId?.trim() || (document.project_id as string | null),
+    leadId: input.leadId?.trim() || (document.lead_id as string | null),
+  });
+  if ("error" in resolved) return resolved;
+  if (locked && document.client_id && resolved.clientId && resolved.clientId !== document.client_id) {
+    return { error: "That project belongs to a different client." };
   }
-  if (clientId) {
-    const { data: client } = await ctx.supabase
-      .from("clients")
-      .select("id, name")
-      .eq("id", clientId)
-      .eq("organization_id", ctx.org.id)
-      .maybeSingle();
-    if (!client) return { error: "Client not found" };
-    clientName = client.name as string;
-  }
+  const clientId = resolved.clientId ?? (document.client_id as string | null);
+  const projectId = resolved.projectId ?? (document.project_id as string | null);
+  const leadId = resolved.leadId ?? (document.lead_id as string | null);
+  const warning = clientId ? undefined : resolved.warning;
 
   const { error } = await ctx.supabase
     .from("documents")
-    .update({ client_id: clientId, project_id: projectId })
+    .update({ client_id: clientId, project_id: projectId, lead_id: leadId })
     .eq("id", input.id)
     .eq("organization_id", ctx.org.id);
   if (error) return { error: error.message };
 
-  const fills = new Map<string, string>();
-  if (clientName) fills.set("Client name", clientName);
-  if (projectName) fills.set("Project name", projectName);
-  if (fills.size > 0) {
+  const fills: Record<string, string> = {};
+  if (resolved.clientName) fills.clientName = resolved.clientName;
+  if (resolved.projectName) fills.projectName = resolved.projectName;
+  if (Object.keys(fills).length > 0) {
     const loaded = await latestVersion(ctx, input.id);
     if (!("error" in loaded) && loaded.version.status === "draft" && !loaded.version.locked_at) {
-      const content = fillNode(loaded.version.content_doc, fills);
+      const content = applyDocumentData(loaded.version.content_doc, fills);
       await ctx.supabase
         .from("document_versions")
         .update({ content_doc: content })
@@ -235,13 +216,21 @@ export async function linkDocumentRecord(
         .eq("organization_id", ctx.org.id);
     }
   }
-  return { id: input.id, clientId, projectId, clientName, projectName };
+  return {
+    id: input.id,
+    clientId,
+    projectId,
+    leadId,
+    clientName: resolved.clientName,
+    projectName: resolved.projectName,
+    ...(warning ? { warning } : {}),
+  };
 }
 
 export async function createSowRecord(
   ctx: OrgContext,
   documentId: string,
-  options?: { title?: string; data?: Record<string, TemplateFieldValue> },
+  options?: { title?: string; data?: Record<string, unknown> },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "documents");
   if (blocked) return blocked;
@@ -271,7 +260,7 @@ export async function createSowRecord(
     project: project ? { id: project.id as string, label: project.name as string, type: "project" } : null,
   });
   if (options?.data && Object.keys(options.data).length > 0) {
-    sowDoc = applyStructuredFills(sowDoc, options.data);
+    sowDoc = applyDocumentData(sowDoc, options.data);
   }
   const { data: sow, error } = await ctx.supabase
     .from("documents")

@@ -59,7 +59,7 @@ async function namesFor(ctx: OrgContext, clientId: string | null, projectId: str
 async function previewOne(ctx: OrgContext, id: string) {
   const { data: document } = await ctx.supabase
     .from("documents")
-    .select("id, title, kind, status, client_id, project_id")
+    .select("id, title, kind, status, client_id, project_id, lead_id")
     .eq("organization_id", ctx.org.id)
     .eq("id", id)
     .maybeSingle();
@@ -81,10 +81,12 @@ async function previewOne(ctx: OrgContext, id: string) {
     version: versionNumber,
     ...names,
     ...previewLinks(ctx, document.id as string, versionNumber),
+    leadId: (document.lead_id as string | null) ?? null,
     validation: documentWarnings(version?.content ?? { type: "doc", content: [] }, {
       title: document.title as string,
       clientId: (document.client_id as string | null) ?? null,
       projectId: (document.project_id as string | null) ?? null,
+      leadId: (document.lead_id as string | null) ?? null,
     }),
     text: body.text,
     truncated: body.truncated,

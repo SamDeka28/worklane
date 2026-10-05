@@ -9,7 +9,7 @@ export async function readDocumentForContext(ctx: OrgContext, id: string) {
   }
   const { data: document } = await ctx.supabase
     .from("documents")
-    .select("id, title, kind, status, client_id, project_id, updated_at")
+    .select("id, title, kind, status, client_id, project_id, lead_id, updated_at")
     .eq("organization_id", ctx.org.id)
     .eq("id", id)
     .maybeSingle();
@@ -51,12 +51,14 @@ export async function readDocumentForContext(ctx: OrgContext, id: string) {
     status: document.status,
     clientId: document.client_id,
     projectId: document.project_id,
+    leadId: document.lead_id,
     previewUrl,
     pdfUrl: previewUrl,
     validation: documentWarnings((version?.content_doc as JSONContent) ?? { type: "doc", content: [] }, {
       title: document.title as string,
       clientId: (document.client_id as string | null) ?? null,
       projectId: (document.project_id as string | null) ?? null,
+      leadId: (document.lead_id as string | null) ?? null,
     }),
     version: version
       ? {

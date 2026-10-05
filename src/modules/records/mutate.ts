@@ -3,7 +3,9 @@ import type { OrgContext } from "@/modules/identity/org";
 import { canAccessModule, canDeleteModule, canWriteModule } from "@/modules/identity/permissions";
 import type { ModuleKey } from "@/modules/identity/types";
 import { proseFromDoc, proseToDoc } from "@/modules/documents/prose";
-import { applyStructuredFills, collectPlaceholders, documentPreviewUrl, documentWarnings, type TemplateFieldValue } from "@/modules/documents/structured";
+import { resolveDocumentLinks } from "@/modules/documents/parties";
+import { applyDocumentData } from "@/modules/documents/template-fill";
+import { collectPlaceholders, documentPreviewUrl, documentWarnings } from "@/modules/documents/structured";
 import { getDocumentTemplate, type DocumentTemplate } from "@/modules/documents/templates";
 import { invoiceLayoutSpec, INVOICE_LAYOUT_SPECS } from "@/modules/invoices/layouts";
 import { INVOICE_LAYOUTS, type InvoiceLayout } from "@/modules/invoices/settings";
@@ -841,7 +843,8 @@ export async function createDocumentRecord(
     projectId?: string;
     /** Plain text kept for older callers. Ignored when a template, kind, or field data is set. */
     body?: string;
-    data?: Record<string, TemplateFieldValue>;
+    leadId?: string;
+    data?: Record<string, unknown>;
   },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "documents");
@@ -861,15 +864,20 @@ export async function createDocumentRecord(
     (input.templateId ? getDocumentTemplate(input.templateId) : null) ??
     (input.kind ? templateForKind(input.kind) : null) ??
     (structured || !supplied ? getDocumentTemplate("proposal") : null);
+  const links = await resolveDocumentLinks(ctx, {
+    clientId: input.clientId,
+    projectId: input.projectId,
+    leadId: input.leadId,
+  });
+  if ("error" in links) return links;
   let content: JSONContent;
   let templateId = "custom";
-  let clientId = input.clientId || null;
-  const projectId = input.projectId || null;
+  const clientId = links.clientId;
+  const projectId = links.projectId;
   if (!structured && supplied) {
     content = proseToDoc(supplied);
   } else if (template) {
     const project = await projectMention(ctx, projectId);
-    if (!clientId && project?.clientId) clientId = project.clientId;
     const client = await clientMention(ctx, clientId);
     content = template.build({
       title,
@@ -877,7 +885,7 @@ export async function createDocumentRecord(
       client,
       project: project ? { id: project.id, label: project.label, type: "project" } : null,
     });
-    if (hasFields && input.data) content = applyStructuredFills(content, input.data);
+    if (hasFields && input.data) content = applyDocumentData(content, input.data);
     templateId = template.id;
   } else {
     return { error: "That document template does not exist." };
@@ -891,6 +899,7 @@ export async function createDocumentRecord(
       status: "draft",
       client_id: clientId,
       project_id: projectId,
+      lead_id: links.leadId,
       created_by: ctx.userId,
     })
     .select("id")
@@ -914,10 +923,12 @@ export async function createDocumentRecord(
     status: "draft",
     previewUrl,
     pdfUrl: previewUrl,
+    ...(links.warning ? { warning: links.warning } : {}),
     validation: documentWarnings(content, {
       title,
       clientId,
       projectId,
+      leadId: links.leadId,
     }),
     text: proseFromDoc(content),
   };
