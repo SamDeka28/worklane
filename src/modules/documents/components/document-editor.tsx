@@ -64,7 +64,7 @@ import {
 import type { IsoCurrency } from "@/shared/money";
 import { SignatureCapture } from "@/modules/documents/components/signature-capture";
 import { SignatureBlocks } from "@/modules/documents/components/signature-blocks";
-import { TemplateGallery } from "@/modules/documents/components/template-gallery";
+import { TemplateGallery, type GalleryTemplate } from "@/modules/documents/components/template-gallery";
 import {
   DocumentSendDialog,
   DocumentSendHistory,
@@ -77,7 +77,7 @@ import {
   DocumentReviewPanel,
   openFeedbackCount,
 } from "@/modules/documents/components/document-review-panel";
-import type { DocumentTemplate } from "@/modules/documents/templates";
+import { getDocumentTemplate } from "@/modules/documents/templates";
 import {
   DOCUMENT_KIND_LABEL,
   type DocumentKind,
@@ -316,8 +316,9 @@ export function DocumentEditor({
     editor.chain().focus().insertContent(table).run();
   }
 
-  function applyTemplate(template: DocumentTemplate) {
-    if (!canWrite || editLocked) return;
+  function applyTemplate(picked: GalleryTemplate) {
+    const template = getDocumentTemplate(picked.id);
+    if (!template || !canWrite || editLocked) return;
     const client = clients.find((c) => c.id === clientId);
     const project = projects.find((p) => p.id === projectId);
     const next = template.build({
