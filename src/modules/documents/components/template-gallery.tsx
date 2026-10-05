@@ -24,8 +24,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { DOCUMENT_TEMPLATES, type DocumentTemplate } from "@/modules/documents/templates";
-import { DOCUMENT_KIND_SHORT, type DocumentKind } from "@/modules/documents/types";
+import { COMPOSITION_TEMPLATES } from "@/modules/documents/composition/templates";
+import { DOCUMENT_TEMPLATES } from "@/modules/documents/templates";
+import { asDocumentKind, DOCUMENT_KIND_SHORT, type DocumentKind } from "@/modules/documents/types";
 
 const TEMPLATE_ICON: Record<string, LucideIcon> = {
   proposal: Presentation,
@@ -37,6 +38,26 @@ const TEMPLATE_ICON: Record<string, LucideIcon> = {
   status_report: FileSignature,
   meeting_notes: NotebookPen,
   blank: FileText,
+  "professional-proposal": Presentation,
+  "professional-sow": ClipboardList,
+  "professional-contract": Handshake,
+  "professional-nda": ShieldCheck,
+  "professional-brief": PenLine,
+  "professional-change-order": Repeat,
+  "professional-report": FileSignature,
+  "professional-prs": ClipboardList,
+  "professional-srs": ClipboardList,
+  "professional-invoice": FileText,
+  "meeting-notes": NotebookPen,
+  general: FileText,
+};
+
+export type GalleryTemplate = {
+  id: string;
+  kind: DocumentKind;
+  name: string;
+  description: string;
+  outline: string[];
 };
 
 export function TemplateGallery({
@@ -44,20 +65,41 @@ export function TemplateGallery({
   onOpenChange,
   currentKind,
   pending,
+  composition = false,
   onApply,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentKind: DocumentKind;
   pending?: boolean;
-  onApply: (template: DocumentTemplate) => void;
+  composition?: boolean;
+  onApply: (template: GalleryTemplate) => void;
 }) {
+  const source = useMemo<GalleryTemplate[]>(
+    () =>
+      composition
+        ? COMPOSITION_TEMPLATES.map((template) => ({
+            id: template.id,
+            kind: asDocumentKind(template.kind),
+            name: template.name,
+            description: template.description,
+            outline: template.outline,
+          }))
+        : DOCUMENT_TEMPLATES.map((template) => ({
+            id: template.id,
+            kind: template.kind,
+            name: template.name,
+            description: template.description,
+            outline: template.outline,
+          })),
+    [composition],
+  );
   const ordered = useMemo(
     () => [
-      ...DOCUMENT_TEMPLATES.filter((t) => t.kind === currentKind),
-      ...DOCUMENT_TEMPLATES.filter((t) => t.kind !== currentKind),
+      ...source.filter((t) => t.kind === currentKind),
+      ...source.filter((t) => t.kind !== currentKind),
     ],
-    [currentKind],
+    [currentKind, source],
   );
   const [selectedId, setSelectedId] = useState<string>(ordered[0]?.id ?? "blank");
   const selected = ordered.find((t) => t.id === selectedId) ?? ordered[0];
@@ -72,8 +114,9 @@ export function TemplateGallery({
             Template library
           </DialogTitle>
           <DialogDescription>
-            Industry-standard layouts with numbered sections, tables and signature blocks.
-            Highlighted fields are placeholders to fill in.
+            {composition
+              ? "Layouts built from the same blocks as the page. Click the page to edit after you apply one."
+              : "Industry-standard layouts with numbered sections, tables and signature blocks. Highlighted fields are placeholders to fill in."}
           </DialogDescription>
         </DialogHeader>
 

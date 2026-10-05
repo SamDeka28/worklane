@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { createDocumentAction } from "@/modules/documents/actions";
+import { COMPOSITION_TEMPLATES, getCompositionTemplate } from "@/modules/documents/composition/templates";
 import { DOCUMENT_TEMPLATES, getDocumentTemplate } from "@/modules/documents/templates";
 import { DOCUMENT_KIND_LABEL, DOCUMENT_KINDS } from "@/modules/documents/types";
 
@@ -37,7 +38,7 @@ export function CreateDocumentDialog({
   const [open, setOpen] = useState(defaultOpen);
   const [pending, start] = useTransition();
   const [templateId, setTemplateId] = useState("proposal");
-  const selectedTemplate = getDocumentTemplate(templateId);
+  const selectedTemplate = getDocumentTemplate(templateId) ?? getCompositionTemplate(templateId);
 
   return (
     <ActionSheet
@@ -76,7 +77,10 @@ export function CreateDocumentDialog({
             onChange={(event) => setTemplateId(event.target.value)}
           >
             {DOCUMENT_KINDS.map((kind) => {
-              const options = DOCUMENT_TEMPLATES.filter((t) => t.kind === kind);
+              const options = [
+                ...COMPOSITION_TEMPLATES.filter((template) => template.kind === kind),
+                ...DOCUMENT_TEMPLATES.filter((template) => template.kind === kind),
+              ];
               if (options.length === 0) return null;
               return (
                 <optgroup key={kind} label={DOCUMENT_KIND_LABEL[kind]}>

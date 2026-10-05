@@ -6,6 +6,9 @@ export const DOCUMENT_KINDS = [
   "brief",
   "change_order",
   "report",
+  "prs",
+  "srs",
+  "invoice",
   "other",
 ] as const;
 
@@ -19,6 +22,9 @@ export const DOCUMENT_KIND_LABEL: Record<DocumentKind, string> = {
   brief: "Project brief",
   change_order: "Change order",
   report: "Status report",
+  prs: "Product requirements",
+  srs: "Software requirements",
+  invoice: "Invoice",
   other: "Document",
 };
 
@@ -30,6 +36,9 @@ export const DOCUMENT_KIND_SHORT: Record<DocumentKind, string> = {
   brief: "Brief",
   change_order: "Change order",
   report: "Report",
+  prs: "PRS",
+  srs: "SRS",
+  invoice: "Invoice",
   other: "Document",
 };
 

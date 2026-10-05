@@ -16,12 +16,15 @@ export function StudioDrawer({
   className,
   bodyClassName,
   children,
+  overlay = false,
 }: {
   label: string;
   summary?: ReactNode;
   className?: string;
   bodyClassName?: string;
   children: ReactNode;
+  /** Keep the panel closed on desktop until it is opened, so the artboard can fill the screen. */
+  overlay?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -52,12 +55,23 @@ export function StudioDrawer({
           open ? "opacity-100" : "pointer-events-none opacity-0",
         )}
       />
+      {overlay && !open ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="fixed top-24 right-3 z-40 hidden rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs font-medium shadow-sm lg:inline-flex"
+        >
+          Document
+        </button>
+      ) : null}
       <aside
         className={cn(
           "fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-50 flex max-h-[85dvh] flex-col overflow-hidden rounded-[1.75rem] bg-card shadow-lift ring-1 ring-border/60",
           "transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
           open ? "translate-y-0" : "translate-y-[calc(100%-3.5rem)]",
-          "lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:min-w-0 lg:translate-y-0 lg:overflow-hidden lg:rounded-none lg:bg-transparent lg:shadow-none lg:ring-0 lg:transition-none",
+          overlay
+            ? cn("lg:fixed lg:inset-y-0 lg:right-0 lg:left-auto lg:z-50 lg:max-h-none lg:w-96 lg:translate-y-0 lg:rounded-none lg:bg-card lg:shadow-lift lg:ring-1", open ? "lg:translate-x-0" : "lg:translate-x-full")
+            : "lg:static lg:inset-auto lg:z-auto lg:max-h-none lg:min-w-0 lg:translate-y-0 lg:overflow-hidden lg:rounded-none lg:bg-transparent lg:shadow-none lg:ring-0 lg:transition-none",
           className,
         )}
       >
@@ -65,7 +79,7 @@ export function StudioDrawer({
           type="button"
           onClick={() => setOpen((value) => !value)}
           aria-expanded={open}
-          className="relative flex h-14 shrink-0 items-center gap-3 px-5 text-left lg:hidden"
+          className={cn("relative flex h-14 shrink-0 items-center gap-3 px-5 text-left lg:hidden", overlay && "lg:flex")}
         >
           <span className="absolute top-1.5 left-1/2 h-1 w-9 -translate-x-1/2 rounded-full bg-muted-foreground/25" />
           <span className="min-w-0 flex-1">
