@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import type { JSONContent } from "@tiptap/core";
 import { hashShareToken } from "@/modules/portal/token";
 import { notify } from "@/modules/notifications/service";
+import { refreshDocumentFileUrls } from "@/modules/documents/assets";
 import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
 
 export type DocumentSend = {
@@ -262,9 +263,11 @@ export async function loadSharedDocument(
     displayedSendId: displayed.id,
     isLatest: (displayed.document_version_id ?? displayed.id) === (latest.document_version_id ?? latest.id),
     sentAt: displayed.sent_at,
-    content: displayed.content_doc,
+    content: await refreshDocumentFileUrls(admin, displayed.content_doc, entry.organization_id as string),
     versionNumber: displayed.document_versions?.version_number ?? null,
-    previousContent: previous?.content_doc ?? null,
+    previousContent: previous?.content_doc
+      ? await refreshDocumentFileUrls(admin, previous.content_doc, entry.organization_id as string)
+      : null,
     previousVersionNumber: previous?.document_versions?.version_number ?? null,
     revisions: revisions.map((row) => ({
       sendId: row.id,

@@ -21,6 +21,7 @@ import {
   ListOrdered,
   Minus,
   PanelTop,
+  Workflow,
   Paperclip,
   PenLine,
   Quote,
@@ -200,12 +201,27 @@ function InsertTableMenu({ editor }: { editor: Editor }) {
   );
 }
 
+function insertShape(editor: Editor, type: "cover" | "facts" | "callout" | "signatures" | "diagram") {
+  const node = shapeNode(type);
+  if (editor.isActive("table")) {
+    const from = editor.state.selection.$from;
+    for (let depth = from.depth; depth > 0; depth -= 1) {
+      if (from.node(depth).type.name === "table") {
+        editor.chain().focus().insertContentAt(from.after(depth), node).run();
+        return;
+      }
+    }
+  }
+  editor.chain().focus().insertContent(node).run();
+}
+
 function InsertShapeMenu({ editor }: { editor: Editor }) {
   const shapes = [
     { type: "cover" as const, label: "Cover band", icon: PanelTop },
     { type: "facts" as const, label: "Fact grid", icon: LayoutGrid },
     { type: "callout" as const, label: "Callout", icon: Quote },
     { type: "signatures" as const, label: "Signature block", icon: PenLine },
+    { type: "diagram" as const, label: "Diagram", icon: Workflow },
   ];
   return (
     <>
@@ -215,7 +231,7 @@ function InsertShapeMenu({ editor }: { editor: Editor }) {
           <ToolbarButton
             key={shape.type}
             label={shape.label}
-            onClick={() => editor.chain().focus().insertContent(shapeNode(shape.type)).run()}
+            onClick={() => insertShape(editor, shape.type)}
           >
             <Icon className="size-3.5" />
           </ToolbarButton>

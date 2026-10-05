@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { sendLeadEmailForContext } from "@/modules/crm/email-actions";
 import { countersignDocumentForContext, emailSignedCopyForContext } from "@/modules/documents/actions";
+import { uploadDocumentAsset } from "@/modules/documents/assets";
 import { documentBlockGuide } from "@/modules/documents/blocks";
 import { previewDocumentsForContext, validateDocumentForContext } from "@/modules/documents/preview";
 import { listDocumentTemplates } from "@/modules/documents/structured";
@@ -95,9 +96,15 @@ const toolShapes: Record<string, z.ZodRawShape> = {
   validate_document: { id: recordId },
   list_document_templates: {},
   list_document_blocks: {},
+  upload_asset: {
+    id: recordId.describe("Document id the file belongs to."),
+    filename: z.string().describe("File name, such as mark.png."),
+    contentType: z.string().describe("image/png, image/jpeg, image/webp, image/gif, or image/svg+xml."),
+    contentBase64: z.string().describe("Base64 file bytes, up to 4 MB. Do not use a data URL."),
+  },
   compose_document: {
     id: recordId,
-    content: z.string().describe("JSON array of layout blocks from list_document_blocks: paragraph, heading, bullets, numbered, checklist, quote, divider, image, table, cover, facts, callout, signatures."),
+    content: z.string().describe("JSON array of layout blocks from list_document_blocks: paragraph, heading, bullets, numbered, checklist, quote, divider, image, diagram, table, cover, facts, callout, signatures."),
     placement: z.string().optional().describe("append, start, or replace. append keeps the current document and adds the blocks."),
     title: z.string().optional(),
   },
@@ -368,6 +375,7 @@ const toolTitles: Record<string, string> = {
   reply_document: "Email the client",
   get_document: "Get document",
   list_document_blocks: "List document blocks",
+  upload_asset: "Upload document asset",
   compose_document: "Compose document",
 };
 
@@ -404,6 +412,9 @@ type ToolInput = {
   phone?: string;
   dueOn?: string;
   attachments?: string;
+  filename?: string;
+  contentType?: string;
+  contentBase64?: string;
   sendId?: string;
   emailClient?: boolean | string;
   data?: string;
@@ -522,8 +533,18 @@ export function registerStudioActions(
   add("list_document_templates", "List the studio document templates. Each result includes design, the layout to keep: cover, sections, and tables. Fill that design with data. Do not replace it with Markdown or write_document.", false, false, async () =>
     result({ templates: listDocumentTemplates() }),
   );
-  add("list_document_blocks", "Describe the layout blocks the document editor can place: cover, fact grid, table formatting, images, callouts, and signature blocks. Use compose_document with this content. Does not save.", false, false, async () =>
+  add("list_document_blocks", "Describe the layout blocks the document editor can place: cover, fact grid, table formatting, images, diagrams, callouts, and signature blocks. A diagram is native boxes and lines. An image can use fileId from upload_asset. Use compose_document with this content. Does not save.", false, false, async () =>
     result(documentBlockGuide()),
+  );
+  add("upload_asset", "Upload an image into a document. Pass the document id, filename, contentType, and contentBase64. Returns fileId and url. Use fileId on an image block in compose_document. Does not change the document text.", false, true, (input) =>
+    run(input, (ctx) =>
+      uploadDocumentAsset(ctx, {
+        documentId: input.id || "",
+        filename: input.filename || "image.png",
+        contentType: input.contentType || "",
+        contentBase64: input.contentBase64 || "",
+      }),
+    ),
   );
   add("preview_document", "Preview a saved document. Pass id. previewUrl is the current saved document, the same one the editor opens. Without an id this returns the blank template, not a saved document. Does not save or send.", false, false, (input) =>
     run(input, (ctx) =>
@@ -682,7 +703,7 @@ export function registerStudioActions(
       }),
     );
   });
-  add("compose_document", "Place editor blocks into a draft: cover, facts, tables with cell fill and borders, images, lists, callouts, and signature blocks. content is the JSON from list_document_blocks. placement append adds them, start puts them first, replace rewrites the draft. Does not send or sign.", false, true, (input) =>
+  add("compose_document", "Place editor blocks into a draft: cover, facts, tables with cell fill and borders, images, diagrams, lists, callouts, and signature blocks. An image uses fileId from upload_asset or an https src. A diagram uses layout row, stack, hub, or timeline, plus nodes and edges. content is the JSON from list_document_blocks. placement append adds them, start puts them first, replace rewrites the draft. Does not send or sign.", false, true, (input) =>
     run(input, (ctx) =>
       composeDocumentRecord(ctx, {
         id: input.id || "",
@@ -908,6 +929,7 @@ export function registerStudioActions(
     "create_proposal",
     "create_sow",
     "list_document_blocks",
+    "upload_asset",
     "compose_document",
     "write_document",
     "fill_document",

@@ -41,6 +41,31 @@ describe("document blocks", () => {
     expect(built.doc.content?.some((node) => node.type === "image")).toBe(true);
   });
 
+  it("keeps an uploaded file id on an image and draws a diagram as its own block", () => {
+    const built = blocksToDoc([
+      { type: "image", fileId: "11111111-1111-1111-1111-111111111111", alt: "Mark" },
+      {
+        type: "diagram",
+        layout: "hub",
+        nodes: [
+          { id: "hub", label: "Studio" },
+          { id: "client", label: "Client" },
+        ],
+        edges: [{ from: "hub", to: "client" }],
+      },
+    ]);
+    expect("error" in built).toBe(false);
+    if ("error" in built) return;
+    const image = built.doc.content?.find((node) => node.type === "image");
+    const diagram = built.doc.content?.find((node) => node.type === "diagram");
+    expect(image?.attrs?.fileId).toBe("11111111-1111-1111-1111-111111111111");
+    expect(diagram?.attrs?.layout).toBe("hub");
+    expect(diagram?.attrs?.nodes).toEqual([
+      { id: "hub", label: "Studio" },
+      { id: "client", label: "Client" },
+    ]);
+  });
+
   it("rejects an image that is not https", () => {
     const built = blocksToDoc([{ type: "image", src: "http://example.com/a.png" }]);
     expect(built).toEqual({ error: "An image src must be an https URL." });

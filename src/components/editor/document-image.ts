@@ -5,6 +5,14 @@ export const DocumentImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
+      fileId: {
+        default: null as string | null,
+        parseHTML: (element: HTMLElement) => element.getAttribute("data-file-id"),
+        renderHTML: (attributes: { fileId?: string | null }) => {
+          if (!attributes.fileId) return {};
+          return { "data-file-id": attributes.fileId };
+        },
+      },
       width: {
         default: null as number | null,
         parseHTML: (element: HTMLElement) => {

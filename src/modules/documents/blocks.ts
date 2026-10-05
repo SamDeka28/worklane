@@ -42,6 +42,10 @@ export type BlockInput = {
   src?: unknown;
   alt?: unknown;
   width?: unknown;
+  fileId?: unknown;
+  layout?: unknown;
+  nodes?: unknown;
+  edges?: unknown;
   columns?: unknown;
   rows?: unknown;
   header?: unknown;
@@ -58,7 +62,8 @@ const BLOCK_GUIDE = [
   "paragraph and heading: text is a string or an array of runs {text, bold, italic, underline, strike, color, size, highlight, link}. align is left, center, right, or justify. heading level is 1, 2, or 3.",
   "bullets and numbered: items are strings or runs. checklist: items are {text, checked}.",
   "quote: text. divider: no fields. spacer: an empty line.",
-  "image: src must be https, plus optional alt and width in pixels.",
+  "image: src is an https URL, or fileId from upload_asset. Optional alt and width in pixels.",
+  "diagram: layout is row, stack, hub, or timeline. nodes are {id, label, caption}. edges are {from, to}. The editor and the PDF draw this as boxes and lines, not as a table or an image.",
   "table: columns are header labels. rows are cells. A cell is a string or {text, header, fill, border, align}. border is grid, none, line, or band. fill is a #hex color.",
   "cover: kicker, title, subtitle. A full-width dark band.",
   "facts: items are {label, value}, laid out in rows of three.",
@@ -70,7 +75,7 @@ const BLOCK_GUIDE = [
 export function documentBlockGuide() {
   return {
     guide: BLOCK_GUIDE,
-    blocks: ["paragraph", "heading", "bullets", "numbered", "checklist", "quote", "divider", "spacer", "image", "table", "cover", "facts", "callout", "signatures"],
+    blocks: ["paragraph", "heading", "bullets", "numbered", "checklist", "quote", "divider", "spacer", "image", "diagram", "table", "cover", "facts", "callout", "signatures"],
     example: [
       { type: "cover", kicker: "Statement of work", title: "Rentique", subtitle: "Prepared for Rentique" },
       { type: "facts", items: [{ label: "Client", value: "Rentique" }, { label: "SOW number", value: "RNTQ-SOW-001" }] },
@@ -81,7 +86,16 @@ export function documentBlockGuide() {
         columns: ["#", "Deliverable", "Due"],
         rows: [["D1", "Discovery & UX", "To be agreed"]],
       },
-      { type: "image", src: "https://example.com/mark.png", alt: "Mark", width: 160 },
+      { type: "image", fileId: "file-id-from-upload_asset", alt: "Mark", width: 160 },
+      {
+        type: "diagram",
+        layout: "row",
+        nodes: [
+          { id: "discover", label: "Discover" },
+          { id: "earn", label: "Earn" },
+        ],
+        edges: [{ from: "discover", to: "earn" }],
+      },
       { type: "signatures", left: "Provider", right: "Client" },
     ],
   };
@@ -148,6 +162,8 @@ function blockToNodes(block: BlockInput): JSONContent[] | { error: string } {
       return [{ type: "paragraph" }];
     case "image":
       return image(block);
+    case "diagram":
+      return diagram(block);
     case "table":
       return [tableBlock(block)];
     case "cover":
@@ -249,18 +265,50 @@ function checklist(items: unknown): JSONContent {
 
 function image(block: BlockInput): JSONContent[] | { error: string } {
   const src = typeof block.src === "string" ? block.src.trim() : "";
-  if (!HTTPS.test(src)) return { error: "An image src must be an https URL." };
+  const fileId = typeof block.fileId === "string" ? block.fileId.trim() : "";
+  if (src && !HTTPS.test(src)) return { error: "An image src must be an https URL." };
+  if (!fileId && !HTTPS.test(src)) return { error: "An image src must be an https URL, or pass fileId from upload_asset." };
   const width = typeof block.width === "number" && block.width > 0 ? Math.min(Math.round(block.width), 1200) : null;
   return [
     {
       type: "image",
       attrs: {
-        src,
+        src: HTTPS.test(src) ? src : null,
         alt: typeof block.alt === "string" ? block.alt.slice(0, 180) : null,
         width,
+        fileId: fileId || null,
       },
     },
   ];
+}
+
+function diagram(block: BlockInput): JSONContent[] | { error: string } {
+  const layout = block.layout === "stack" || block.layout === "hub" || block.layout === "timeline" ? block.layout : "row";
+  const nodes = Array.isArray(block.nodes)
+    ? block.nodes.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const record = item as { id?: unknown; label?: unknown; caption?: unknown };
+        const id = typeof record.id === "string" ? record.id.trim().slice(0, 40) : "";
+        const label = typeof record.label === "string" ? record.label.trim().slice(0, 80) : "";
+        if (!id || !label) return [];
+        const caption = typeof record.caption === "string" ? record.caption.trim().slice(0, 120) : "";
+        return [{ id, label, ...(caption ? { caption } : {}) }];
+      })
+    : [];
+  if (nodes.length === 0) return { error: "A diagram needs nodes, each with an id and a label." };
+  if (nodes.length > 24) return { error: "A diagram accepts up to 24 nodes." };
+  const known = new Set(nodes.map((node) => node.id));
+  const edges = Array.isArray(block.edges)
+    ? block.edges.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const record = item as { from?: unknown; to?: unknown };
+        const from = typeof record.from === "string" ? record.from : "";
+        const to = typeof record.to === "string" ? record.to : "";
+        if (!known.has(from) || !known.has(to) || from === to) return [];
+        return [{ from, to }];
+      }).slice(0, 40)
+    : [];
+  return [{ type: "diagram", attrs: { layout, nodes, edges } }];
 }
 
 function borderOf(value: unknown): "none" | "bottom" | "band" | null {
@@ -410,7 +458,7 @@ export function appendBlocks(doc: JSONContent, blocks: JSONContent[], placement:
   };
 }
 
-export function shapeNode(type: "cover" | "facts" | "callout" | "signatures"): JSONContent {
+export function shapeNode(type: "cover" | "facts" | "callout" | "signatures" | "diagram"): JSONContent {
   const built = blockToNodes(
     type === "cover"
       ? { type: "cover", kicker: "Document", title: "Title", subtitle: "One line under the title" }
@@ -425,7 +473,17 @@ export function shapeNode(type: "cover" | "facts" | "callout" | "signatures"): J
           }
         : type === "callout"
           ? { type: "callout", text: "A short note set apart from the body." }
-          : { type: "signatures", left: "Provider", right: "Client" },
+          : type === "diagram"
+            ? {
+                type: "diagram",
+                layout: "row",
+                nodes: [
+                  { id: "a", label: "Start" },
+                  { id: "b", label: "Next" },
+                ],
+                edges: [{ from: "a", to: "b" }],
+              }
+            : { type: "signatures", left: "Provider", right: "Client" },
   );
   if ("error" in built) return { type: "paragraph" };
   return built[0] ?? { type: "paragraph" };

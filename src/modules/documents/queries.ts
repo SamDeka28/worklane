@@ -1,4 +1,6 @@
 import { cache } from "react";
+import type { JSONContent } from "@tiptap/core";
+import { refreshDocumentFileUrls } from "@/modules/documents/assets";
 import { requireOrg, type OrgContext } from "@/modules/identity/org";
 import {
   FEEDBACK_COLUMNS,
@@ -212,17 +214,26 @@ export async function listDocumentVersions(
     .eq("document_id", documentId)
     .order("version_number", { ascending: false });
   if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => ({
+  return Promise.all((data ?? []).map(async (row) => {
+    const contentDoc = await refreshDocumentFileUrls(ctx.supabase, (row.content_doc as JSONContent) ?? { type: "doc" }, ctx.org.id);
+    const snapshot = (row.snapshot as Record<string, unknown> | null) ?? null;
+    const snapshotDoc = snapshot?.contentDoc;
+    const refreshedSnapshot =
+      snapshot && snapshotDoc && typeof snapshotDoc === "object"
+        ? { ...snapshot, contentDoc: await refreshDocumentFileUrls(ctx.supabase, snapshotDoc as JSONContent, ctx.org.id) }
+        : snapshot;
+    return {
     id: row.id,
     documentId: row.document_id,
     versionNumber: row.version_number,
-    contentDoc: (row.content_doc as Record<string, unknown>) ?? {},
-    snapshot: (row.snapshot as Record<string, unknown> | null) ?? null,
+    contentDoc: contentDoc as Record<string, unknown>,
+    snapshot: refreshedSnapshot,
     status: asStatus(row.status),
     pdfFileId: row.pdf_file_id,
     createdAt: row.created_at,
     lockedAt: row.locked_at,
     createdBy: row.created_by,
+    };
   }));
 }
 

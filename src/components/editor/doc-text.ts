@@ -8,6 +8,13 @@ export function docToPlainText(doc: JSONContent | null | undefined): string {
     if (node.type === "mention" && typeof node.attrs?.label === "string") {
       parts.push(`@${node.attrs.label}`);
     }
+    if (node.type === "diagram" && Array.isArray(node.attrs?.nodes)) {
+      for (const item of node.attrs.nodes) {
+        if (item && typeof item === "object" && typeof (item as { label?: unknown }).label === "string") {
+          parts.push((item as { label: string }).label);
+        }
+      }
+    }
     node.content?.forEach(walk);
   };
   walk(doc);

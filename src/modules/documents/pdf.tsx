@@ -1,6 +1,7 @@
-import { Document, Image, Link, Page, StyleSheet, Text, View, pdf } from "@react-pdf/renderer";
+import { Document, Image, Line, Link, Page, Rect, StyleSheet, Svg, Text, View, pdf } from "@react-pdf/renderer";
 import type { Style } from "@react-pdf/types";
 import type { JSONContent } from "@tiptap/core";
+import { layoutDiagramData } from "@/modules/documents/composition/diagram";
 
 export type DocumentPdfSignature = {
   party: "client" | "studio";
@@ -182,6 +183,8 @@ function Block({ node, depth = 0 }: { node: JSONContent; depth?: number }) {
       // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf images have no alt attribute
       return <Image src={src} style={width ? [s.image, { width }] : s.image} />;
     }
+    case "diagram":
+      return <PdfDiagram node={node} />;
     case "table":
       return <Table node={node} />;
     default:
@@ -193,6 +196,53 @@ function Block({ node, depth = 0 }: { node: JSONContent; depth?: number }) {
         </View>
       ) : null;
   }
+}
+
+function PdfDiagram({ node }: { node: JSONContent }) {
+  const layoutName = node.attrs?.layout;
+  const layout = layoutName === "stack" || layoutName === "hub" || layoutName === "timeline" ? layoutName : "row";
+  const nodes = Array.isArray(node.attrs?.nodes)
+    ? node.attrs.nodes.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const record = item as { id?: unknown; label?: unknown; caption?: unknown };
+        if (typeof record.id !== "string") return [];
+        return [{
+          id: record.id,
+          label: typeof record.label === "string" ? record.label : record.id,
+          caption: typeof record.caption === "string" ? record.caption : undefined,
+        }];
+      })
+    : [];
+  const edges = Array.isArray(node.attrs?.edges)
+    ? node.attrs.edges.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const record = item as { from?: unknown; to?: unknown };
+        if (typeof record.from !== "string" || typeof record.to !== "string") return [];
+        return [{ from: record.from, to: record.to }];
+      })
+    : [];
+  if (nodes.length === 0) return null;
+  const drawn = layoutDiagramData(layout, nodes, edges);
+  const width = Math.min(drawn.width, 460);
+  const height = Math.max(24, (drawn.height * width) / drawn.width);
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${drawn.width} ${drawn.height}`} style={{ marginBottom: 10 }}>
+      {drawn.edges.map((edge, index) => (
+        <Line key={`e-${index}`} x1={edge.x1} y1={edge.y1} x2={edge.x2} y2={edge.y2} stroke="#1d4ed8" strokeWidth={1.2} />
+      ))}
+      {drawn.boxes.flatMap((box) => [
+        <Rect key={box.id} x={box.x} y={box.y} width={box.w} height={box.h} rx={6} fill={box.hub ? "#dbeafe" : "#f8fafc"} stroke="#1d4ed8" strokeWidth={1} />,
+        <Text key={`${box.id}-label`} x={box.x + 8} y={box.y + 16} style={{ fontSize: 9, fontFamily: "Helvetica-Bold" }}>
+          {clean(box.label)}
+        </Text>,
+        box.caption ? (
+          <Text key={`${box.id}-caption`} x={box.x + 8} y={box.y + 28} style={{ fontSize: 8 }} fill="#64748b">
+            {clean(box.caption)}
+          </Text>
+        ) : null,
+      ])}
+    </Svg>
+  );
 }
 
 function Table({ node }: { node: JSONContent }) {

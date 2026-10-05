@@ -1429,10 +1429,27 @@
   user-select: none;
 }
 
+/* Page breaks are floats. A table wrapper is a block, so those floats push
+   the table to the bottom and the wrapper stretches across every page. The
+   editor then keeps inserting blank pages. display: contents lets the table
+   sit in the page flow. overflow: visible keeps the text at full width. */
+.ProseMirror.rm-with-pagination .tableWrapper {
+  display: contents;
+}
+
+.ProseMirror.rm-with-pagination table {
+  display: table;
+  width: 100%;
+  max-width: 100%;
+  margin: 1rem 0;
+}
+
 .ProseMirror.rm-with-pagination table tbody {
+  display: table-row-group;
   width: 100%;
   table-layout: fixed;
   max-height: none;
+  overflow: visible;
 }
 
 .ProseMirror.rm-with-pagination table tr td,

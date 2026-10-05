@@ -6,6 +6,7 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import { DocumentDiagram } from "@/components/editor/document-diagram";
 import { DocumentImage } from "@/components/editor/document-image";
 import TextAlign from "@tiptap/extension-text-align";
 import Highlight from "@tiptap/extension-highlight";
@@ -115,6 +116,7 @@ export function DocumentStudioEditor({
       IndentableHeading.configure({ levels: [1, 2, 3] }),
       IndentShortcuts,
       DocumentImage,
+      DocumentDiagram,
       Placeholder.configure({ placeholder }),
       TextStyleKit.configure({
         fontSize: false,
@@ -207,11 +209,19 @@ export function DocumentStudioEditor({
   useEffect(() => {
     if (!editor) return;
     let frame = 0;
+    let capped = false;
     const measure = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         const pages = editor.view.dom.querySelector("[data-rm-pagination]");
-        setPageCount(Math.max(1, pages?.children.length ?? 1));
+        const count = pages?.children.length ?? 1;
+        if (!capped && count > 120) {
+          capped = true;
+          const commands = editor.commands as { disablePagination?: () => boolean };
+          commands.disablePagination?.();
+          return;
+        }
+        setPageCount(Math.max(1, count));
         setWordCount(editor.storage.characterCount.words());
       });
     };
@@ -260,7 +270,7 @@ export function DocumentStudioEditor({
           throw new Error(result.error ?? "Upload failed");
         }
         if (file.type.startsWith("image/")) {
-          editor.chain().focus().setImage({ src: result.url, alt: result.name }).run();
+          editor.chain().focus().setImage({ src: result.url, alt: result.name }).updateAttributes("image", { fileId: result.id }).run();
         } else {
           editor
             .chain()

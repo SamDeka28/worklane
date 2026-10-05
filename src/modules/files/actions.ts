@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { listFilesForEntity } from "@/modules/files/queries";
+import { uploadStoredFile } from "@/modules/files/store";
 
 const MAX_BYTES = 12 * 1024 * 1024;
 const ALLOWED = new Set([
@@ -37,47 +38,17 @@ export async function uploadFileAction(
     return { error: "File type not allowed" };
   }
 
-  const safeName = file.name.replace(/[^\w.\- ()]/g, "_").slice(0, 180);
-  const storagePath = `${ctx.org.id}/${entityType}/${entityId}/${crypto.randomUUID()}-${safeName}`;
-
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const { error: uploadError } = await ctx.supabase.storage
-    .from("org-files")
-    .upload(storagePath, bytes, {
-      contentType: file.type || "application/octet-stream",
-      upsert: false,
-    });
-  if (uploadError) return { error: uploadError.message };
-
-  const { data, error } = await ctx.supabase
-    .from("files")
-    .insert({
-      organization_id: ctx.org.id,
-      entity_type: entityType,
-      entity_id: entityId,
-      storage_path: storagePath,
-      name: safeName,
-      mime: file.type || null,
-      size_bytes: file.size,
-      visibility,
-      created_by: ctx.userId,
-    })
-    .select("id, storage_path, name")
-    .single();
-
-  if (error || !data) return { error: error?.message ?? "Could not save file" };
-
-  const { data: signed } = await ctx.supabase.storage
-    .from("org-files")
-    .createSignedUrl(storagePath, 60 * 60);
-
+  const stored = await uploadStoredFile(ctx, {
+    entityType,
+    entityId,
+    name: file.name,
+    mime: file.type || null,
+    bytes: new Uint8Array(await file.arrayBuffer()),
+    visibility,
+  });
+  if ("error" in stored) return { error: stored.error };
   revalidatePath(`/${orgSlug}`);
-  return {
-    id: data.id as string,
-    path: data.storage_path as string,
-    name: data.name as string,
-    url: signed?.signedUrl,
-  };
+  return { id: stored.id, path: stored.path, name: stored.name, url: stored.url ?? undefined };
 }
 
 export async function softDeleteFileAction(orgSlug: string, fileId: string) {
