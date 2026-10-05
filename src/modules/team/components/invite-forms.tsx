@@ -82,7 +82,7 @@ export function InviteMemberForm({
         }
         start(async () => {
           const result = await inviteOrgMemberAction(orgSlug, formData);
-          if (result.error) {
+          if ("error" in result) {
             toast.error(result.error);
             return;
           }

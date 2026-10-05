@@ -75,7 +75,7 @@ export async function createPartnerAction(orgSlug: string, formData: FormData) {
   inviteData.set("partner_id", created.id as string);
   inviteData.set("display_name", name);
   const invite = await inviteOrgMemberAction(orgSlug, inviteData);
-  if (invite.error) {
+  if ("error" in invite) {
     revalidatePath(`/${orgSlug}/partners`);
     return {
       id: created.id as string,
@@ -149,7 +149,7 @@ export async function invitePartnerLoginAction(orgSlug: string, partnerId: strin
   inviteData.set("partner_id", partner.id as string);
   inviteData.set("display_name", String(partner.name ?? ""));
   const invite = await inviteOrgMemberAction(orgSlug, inviteData);
-  if (invite.error) return { error: invite.error };
+  if ("error" in invite) return { error: invite.error };
 
   revalidatePath(`/${orgSlug}/partners`);
   revalidatePath(`/${orgSlug}/team`);
