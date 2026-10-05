@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { docToPlainText } from "@/components/editor/doc-text";
 import type { JSONContent } from "@tiptap/core";
+import { persistDocumentAssets } from "@/modules/documents/assets";
 import { assertCanMutateVersion, buildLiveSnapshot } from "@/modules/documents/lock";
 import { extractDocumentRefs } from "@/modules/documents/refs";
 import { buildBasicDocumentTemplate, getDocumentTemplate } from "@/modules/documents/templates";
@@ -204,9 +205,10 @@ export async function saveDocumentVersionAction(
     return { error: "This version was sent to the client. Start a new revision to make changes." };
   }
 
+  const storedDoc = persistDocumentAssets(contentDoc as JSONContent);
   const { error } = await ctx.supabase
     .from("document_versions")
-    .update({ content_doc: contentDoc })
+    .update({ content_doc: storedDoc })
     .eq("id", versionId)
     .eq("organization_id", ctx.org.id);
   if (error) return { error: error.message };

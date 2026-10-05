@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core";
-import { DOCUMENT_KIND_LABEL, type DocumentKind } from "@/modules/documents/types";
+import { DOCUMENT_KINDS, DOCUMENT_KIND_LABEL, type DocumentKind } from "@/modules/documents/types";
 
 export type TemplateMention = {
   id: string;
@@ -875,6 +875,107 @@ function blank(ctx: TemplateContext): JSONContent {
   return doc(h1(ctx.title.trim() || "Untitled document"), spacer());
 }
 
+function productRequirements(ctx: TemplateContext): JSONContent {
+  const x = parties(ctx);
+  return doc(
+    ...cover("Product requirements", ctx, ["Prepared for ", x.client, " by ", x.orgInline]),
+    infoGrid([
+      ["Document", "PRS"],
+      ["Product", x.project],
+      ["Prepared for", x.client],
+      ["Prepared by", x.orgInline],
+      ["Date", x.today],
+      ["Status", field("Draft")],
+    ]),
+    spacer(),
+    section(1, "Executive summary"),
+    p("What this product is, who it is for, and the outcome this release must create."),
+    section(2, "Product vision"),
+    p(field("The product in one paragraph, and the outcome it creates")),
+    section(3, "Problem and opportunity"),
+    p(field("The problem, who feels it, and why it is worth solving now")),
+    section(4, "Requirements"),
+    table(
+      ["ID", "Requirement", "Priority", "Notes"],
+      [
+        ["R1", field("Requirement"), field("Must"), field("Notes")],
+        ["R2", field("Requirement"), field("Should"), field("Notes")],
+      ],
+    ),
+    section(5, "Architecture"),
+    p("The editor and the PDF draw this diagram as boxes and lines."),
+    {
+      type: "diagram",
+      attrs: {
+        layout: "stack",
+        nodes: [
+          { id: "experience", label: "Experience" },
+          { id: "services", label: "Services" },
+          { id: "data", label: "Data" },
+        ],
+        edges: [
+          { from: "experience", to: "services" },
+          { from: "services", to: "data" },
+        ],
+      },
+    },
+    section(6, "Workflows"),
+    bullets(field("Primary workflow"), field("Exception or edge case")),
+    section(7, "Feasibility"),
+    table(
+      ["Area", "Assessment", "Risk"],
+      [[field("Technical"), field("Feasible"), field("Risk")]],
+    ),
+    section(8, "UX and screen map"),
+    p("Upload each screen with upload_asset, then place it with compose_document using the returned fileId."),
+    table(
+      ["Screen", "Purpose", "Notes"],
+      [[field("Screen"), field("What the person does here"), field("Notes")]],
+    ),
+    section(9, "Non-functional requirements"),
+    table(
+      ["ID", "Quality", "Target"],
+      [["NFR1", field("Performance, privacy, or reliability"), field("Target")]],
+    ),
+    section(10, "Roadmap"),
+    table(
+      ["Phase", "Outcome", "When"],
+      [["Now", field("Outcome"), field("When")]],
+    ),
+    section(11, "Success criteria"),
+    bullets(field("How we know this worked")),
+    section(12, "Definition of done"),
+    checklist("Requirements are accepted", "Screens and diagrams are in the document", "Open questions are resolved"),
+    section(13, "Document control"),
+    table(
+      ["Version", "Date", "Author", "Change"],
+      [["0.1", x.today, x.orgInline, "Initial draft"]],
+    ),
+  );
+}
+
+function softwareRequirements(ctx: TemplateContext): JSONContent {
+  const x = parties(ctx);
+  return doc(
+    ...cover("Software requirements", ctx, ["Prepared for ", x.client, " by ", x.orgInline]),
+    infoGrid([
+      ["Document", "SRS"],
+      ["Product", x.project],
+      ["Date", x.today],
+    ]),
+    spacer(),
+    section(1, "Requirements"),
+    table(
+      ["ID", "Requirement", "Behavior"],
+      [["S1", field("Requirement"), field("Behavior")]],
+    ),
+    section(2, "Quality"),
+    bullets(field("Performance, security, or reliability target")),
+    section(3, "Definition of done"),
+    checklist("Behavior is specified", "Open questions are resolved"),
+  );
+}
+
 export const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
   {
     id: "proposal",
@@ -933,6 +1034,22 @@ export const DOCUMENT_TEMPLATES: DocumentTemplate[] = [
     build: statusReport,
   },
   {
+    id: "prs",
+    kind: "prs",
+    name: "Product requirements",
+    description: "Product and software requirements: vision, requirements, architecture, screens, and definition of done.",
+    outline: ["Executive summary", "Product vision", "Problem and opportunity", "Requirements", "Architecture", "Workflows", "Feasibility", "UX and screen map", "Non-functional requirements", "Roadmap", "Success criteria", "Definition of done", "Document control"],
+    build: productRequirements,
+  },
+  {
+    id: "srs",
+    kind: "srs",
+    name: "Software requirements",
+    description: "Software behavior, quality targets, and definition of done.",
+    outline: ["Requirements", "Quality", "Definition of done"],
+    build: softwareRequirements,
+  },
+  {
     id: "meeting_notes",
     kind: "other",
     name: "Meeting notes",
@@ -954,8 +1071,62 @@ export function getDocumentTemplate(id: string): DocumentTemplate | null {
   return DOCUMENT_TEMPLATES.find((template) => template.id === id) ?? null;
 }
 
+const KIND_TEMPLATE: Partial<Record<DocumentKind, string>> = {
+  proposal: "proposal",
+  sow: "sow",
+  contract: "msa",
+  nda: "nda",
+  brief: "brief",
+  change_order: "change_order",
+  report: "status_report",
+  prs: "prs",
+  srs: "srs",
+  other: "blank",
+};
+
+export function normalizeDocumentKind(value: string | null | undefined): DocumentKind | null {
+  const raw = (value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (raw === "general" || raw === "blank") return "other";
+  if (raw === "msa" || raw === "agreement") return "contract";
+  if (raw === "status_report") return "report";
+  return (DOCUMENT_KINDS as readonly string[]).includes(raw) ? (raw as DocumentKind) : null;
+}
+
+/**
+ * Explicit template id wins. Otherwise the kind's own template is used.
+ * A PRS never falls through to the proposal or blank template.
+ */
+export function resolveDocumentTemplate(input: { templateId?: string; kind?: string }):
+  | { template: DocumentTemplate; kind: DocumentKind }
+  | { error: string } {
+  const requested = input.kind ? normalizeDocumentKind(input.kind) : null;
+  if (input.kind && !requested) return { error: "That document kind does not have a template." };
+  if (input.templateId) {
+    const template = getDocumentTemplate(input.templateId);
+    if (!template) return { error: "That document template does not exist." };
+    if (requested === "prs" && template.kind !== "prs") {
+      return { error: "A PRS uses the product requirements template, not another document type." };
+    }
+    return { template, kind: requested ?? template.kind };
+  }
+  if (requested) {
+    const template = defaultTemplateForKind(requested);
+    if (requested !== "other" && requested !== "invoice" && template.kind !== requested) {
+      return { error: "That document kind does not have a template." };
+    }
+    if (requested === "invoice") return { error: "That document kind does not have a template." };
+    return { template, kind: requested };
+  }
+  const proposal = getDocumentTemplate("proposal");
+  if (!proposal) return { error: "That document template does not exist." };
+  return { template: proposal, kind: "proposal" };
+}
+
 export function defaultTemplateForKind(kind: DocumentKind): DocumentTemplate {
-  return DOCUMENT_TEMPLATES.find((template) => template.kind === kind) ?? DOCUMENT_TEMPLATES[0];
+  const id = KIND_TEMPLATE[kind];
+  const named = id ? getDocumentTemplate(id) : null;
+  if (named) return named;
+  return DOCUMENT_TEMPLATES.find((template) => template.kind === kind) ?? getDocumentTemplate("blank") ?? DOCUMENT_TEMPLATES[0];
 }
 
 /** Default starter doc for a document kind. */

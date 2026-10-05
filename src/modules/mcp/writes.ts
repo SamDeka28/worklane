@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { sendLeadEmailForContext } from "@/modules/crm/email-actions";
 import { countersignDocumentForContext, emailSignedCopyForContext } from "@/modules/documents/actions";
-import { uploadDocumentAsset } from "@/modules/documents/assets";
+import { deleteDocumentAsset, getDocumentAsset, listDocumentAssets, uploadDocumentAsset } from "@/modules/documents/assets";
 import { documentBlockGuide } from "@/modules/documents/blocks";
 import { previewDocumentsForContext, validateDocumentForContext } from "@/modules/documents/preview";
 import { listDocumentTemplates } from "@/modules/documents/structured";
@@ -97,10 +97,22 @@ const toolShapes: Record<string, z.ZodRawShape> = {
   list_document_templates: {},
   list_document_blocks: {},
   upload_asset: {
-    id: recordId.describe("Document id the file belongs to."),
-    filename: z.string().describe("File name, such as mark.png."),
-    contentType: z.string().describe("image/png, image/jpeg, image/webp, image/gif, or image/svg+xml."),
-    contentBase64: z.string().describe("Base64 file bytes, up to 4 MB. Do not use a data URL."),
+    id: recordId.describe("Document id the image belongs to."),
+    filename: z.string().describe("File name, such as screen.png."),
+    mimeType: z.string().optional().describe("image/png, image/jpeg, image/webp, image/gif, or image/svg+xml."),
+    contentType: z.string().optional().describe("Same as mimeType."),
+    contentBase64: z.string().describe("Base64 image bytes, up to 4 MB. A data URL is accepted. Do not pass a local file path."),
+    alt: z.string().optional().describe("Alt text to copy onto the image block."),
+    metadata: z.string().optional().describe("Optional JSON object. Returned with the asset. It is not a fileId."),
+  },
+  get_asset: {
+    id: recordId.describe("fileId returned by upload_asset."),
+  },
+  list_document_assets: {
+    id: recordId.describe("Document id."),
+  },
+  delete_asset: {
+    id: recordId.describe("fileId returned by upload_asset. Deletes that image in this studio only."),
   },
   compose_document: {
     id: recordId,
@@ -111,7 +123,7 @@ const toolShapes: Record<string, z.ZodRawShape> = {
   create_document: {
     title: z.string().describe("Document title."),
     templateId: z.string().optional().describe("Template id from list_document_templates. Defaults from kind, or proposal."),
-    kind: z.string().optional().describe("proposal, sow, contract, nda, brief, change_order, report, or other."),
+    kind: z.string().optional().describe("proposal, sow, prs, contract, nda, brief, change_order, report, or other. general is other. prs uses the product requirements template."),
     data: z.string().optional().describe("JSON. For an SOW, pass deliverables, milestones, roles, and paymentSchedule as arrays of row objects. Do not copy one string into every row. Omit unknown fees and dates."),
     clientId: z.string().optional().describe("Client id. A lead id is not a client."),
     projectId: z.string().optional(),
@@ -376,6 +388,9 @@ const toolTitles: Record<string, string> = {
   get_document: "Get document",
   list_document_blocks: "List document blocks",
   upload_asset: "Upload document asset",
+  get_asset: "Get document asset",
+  list_document_assets: "List document assets",
+  delete_asset: "Delete document asset",
   compose_document: "Compose document",
 };
 
@@ -413,14 +428,28 @@ type ToolInput = {
   dueOn?: string;
   attachments?: string;
   filename?: string;
+  mimeType?: string;
   contentType?: string;
   contentBase64?: string;
+  alt?: string;
+  metadata?: string;
   sendId?: string;
   emailClient?: boolean | string;
   data?: string;
   content?: string;
   placement?: string;
 };
+
+function parseAssetMetadata(raw?: string): { value?: unknown } | { error: string } {
+  if (!raw?.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { error: "metadata must be a JSON object." };
+    return { value: parsed };
+  } catch {
+    return { error: "metadata must be JSON." };
+  }
+}
 
 function documentFields(raw?: string): { data: Record<string, unknown> } | { error: string } {
   if (!raw?.trim()) return { data: {} };
@@ -533,18 +562,31 @@ export function registerStudioActions(
   add("list_document_templates", "List the studio document templates. Each result includes design, the layout to keep: cover, sections, and tables. Fill that design with data. Do not replace it with Markdown or write_document.", false, false, async () =>
     result({ templates: listDocumentTemplates() }),
   );
-  add("list_document_blocks", "Describe the layout blocks the document editor can place: cover, fact grid, table formatting, images, diagrams, callouts, and signature blocks. A diagram is native boxes and lines. An image can use fileId from upload_asset. Use compose_document with this content. Does not save.", false, false, async () =>
+  add("list_document_blocks", "Describe the layout blocks the document editor can place: cover, fact grid, table formatting, images, diagrams, callouts, and signature blocks. A diagram is native boxes and lines. Upload the asset first using upload_asset. Use the returned fileId in compose_document image blocks. Do not invent fileIds. Use compose_document with this content. Does not save.", false, false, async () =>
     result(documentBlockGuide()),
   );
-  add("upload_asset", "Upload an image into a document. Pass the document id, filename, contentType, and contentBase64. Returns fileId and url. Use fileId on an image block in compose_document. Does not change the document text.", false, true, (input) =>
-    run(input, (ctx) =>
+  add("upload_asset", "Upload the asset first using upload_asset. Use the returned fileId in compose_document image blocks. Do not invent fileIds. Pass the document id, filename, mimeType, and contentBase64. Returns fileId, filename, mimeType, size, url, width, and height. fileId stays valid after this call. Does not change the document text.", false, true, (input) => {
+    const metadata = parseAssetMetadata(input.metadata);
+    if ("error" in metadata) return Promise.resolve(result(metadata));
+    return run(input, (ctx) =>
       uploadDocumentAsset(ctx, {
         documentId: input.id || "",
         filename: input.filename || "image.png",
-        contentType: input.contentType || "",
+        contentType: input.mimeType || input.contentType || "",
         contentBase64: input.contentBase64 || "",
+        alt: input.alt,
+        metadata: metadata.value,
       }),
-    ),
+    );
+  });
+  add("get_asset", "Read one uploaded image by fileId. Returns filename, mimeType, size, and a fresh url. Does not change the document.", false, false, (input) =>
+    run(input, (ctx) => getDocumentAsset(ctx, input.id || "")),
+  );
+  add("list_document_assets", "List images uploaded to one document. Each item includes fileId for compose_document. Does not change the document.", false, false, (input) =>
+    run(input, (ctx) => listDocumentAssets(ctx, input.id || "")),
+  );
+  add("delete_asset", "Soft-delete one image in this studio. Pass the fileId from upload_asset. An asset from another studio cannot be deleted.", true, true, (input) =>
+    run(input, (ctx) => deleteDocumentAsset(ctx, input.id || "")),
   );
   add("preview_document", "Preview a saved document. Pass id. previewUrl is the current saved document, the same one the editor opens. Without an id this returns the blank template, not a saved document. Does not save or send.", false, false, (input) =>
     run(input, (ctx) =>
@@ -703,7 +745,7 @@ export function registerStudioActions(
       }),
     );
   });
-  add("compose_document", "Place editor blocks into a draft: cover, facts, tables with cell fill and borders, images, diagrams, lists, callouts, and signature blocks. An image uses fileId from upload_asset or an https src. A diagram uses layout row, stack, hub, or timeline, plus nodes and edges. content is the JSON from list_document_blocks. placement append adds them, start puts them first, replace rewrites the draft. Does not send or sign.", false, true, (input) =>
+  add("compose_document", "Place editor blocks into a draft: cover, facts, tables with cell fill and borders, images, diagrams, lists, callouts, and signature blocks. Upload the asset first using upload_asset. Use the returned fileId in compose_document image blocks. Do not invent fileIds. An https src still works. A diagram uses layout row, stack, hub, or timeline, plus nodes and edges. content is the JSON from list_document_blocks. placement append adds them, start puts them first, replace rewrites the draft. Does not send or sign.", false, true, (input) =>
     run(input, (ctx) =>
       composeDocumentRecord(ctx, {
         id: input.id || "",
@@ -930,6 +972,9 @@ export function registerStudioActions(
     "create_sow",
     "list_document_blocks",
     "upload_asset",
+    "get_asset",
+    "list_document_assets",
+    "delete_asset",
     "compose_document",
     "write_document",
     "fill_document",

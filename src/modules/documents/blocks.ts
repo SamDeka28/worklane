@@ -62,7 +62,8 @@ const BLOCK_GUIDE = [
   "paragraph and heading: text is a string or an array of runs {text, bold, italic, underline, strike, color, size, highlight, link}. align is left, center, right, or justify. heading level is 1, 2, or 3.",
   "bullets and numbered: items are strings or runs. checklist: items are {text, checked}.",
   "quote: text. divider: no fields. spacer: an empty line.",
-  "image: src is an https URL, or fileId from upload_asset. Optional alt and width in pixels.",
+  "Upload the asset first using upload_asset. Use the returned fileId in compose_document image blocks. Do not invent fileIds.",
+  "image: fileId from upload_asset, or src as an https URL. Optional alt and width in pixels. A fileId is stored on the document. Do not pass a local path or a temporary link.",
   "diagram: layout is row, stack, hub, or timeline. nodes are {id, label, caption}. edges are {from, to}. The editor and the PDF draw this as boxes and lines, not as a table or an image.",
   "table: columns are header labels. rows are cells. A cell is a string or {text, header, fill, border, align}. border is grid, none, line, or band. fill is a #hex color.",
   "cover: kicker, title, subtitle. A full-width dark band.",
@@ -273,7 +274,7 @@ function image(block: BlockInput): JSONContent[] | { error: string } {
     {
       type: "image",
       attrs: {
-        src: HTTPS.test(src) ? src : null,
+        src: fileId ? null : src,
         alt: typeof block.alt === "string" ? block.alt.slice(0, 180) : null,
         width,
         fileId: fileId || null,

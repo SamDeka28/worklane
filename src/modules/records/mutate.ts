@@ -6,7 +6,8 @@ import { proseFromDoc, proseToDoc } from "@/modules/documents/prose";
 import { resolveDocumentLinks } from "@/modules/documents/parties";
 import { applyDocumentData } from "@/modules/documents/template-fill";
 import { collectPlaceholders, documentPreviewUrl, documentWarnings } from "@/modules/documents/structured";
-import { getDocumentTemplate, type DocumentTemplate } from "@/modules/documents/templates";
+import { getDocumentTemplate, resolveDocumentTemplate } from "@/modules/documents/templates";
+import type { DocumentKind } from "@/modules/documents/types";
 import { invoiceLayoutSpec, INVOICE_LAYOUT_SPECS } from "@/modules/invoices/layouts";
 import { INVOICE_LAYOUTS, type InvoiceLayout } from "@/modules/invoices/settings";
 import { chargeFromWorkLog, hoursToMillis } from "@/modules/delivery/ledger";
@@ -824,15 +825,6 @@ async function projectMention(ctx: OrgContext, id: string | null) {
   };
 }
 
-function templateForKind(kind: string): DocumentTemplate | null {
-  const normalized = kind === "msa" ? "contract" : kind;
-  return (
-    getDocumentTemplate(
-      normalized === "contract" ? "msa" : normalized === "report" ? "status_report" : normalized,
-    ) ?? null
-  );
-}
-
 export async function createDocumentRecord(
   ctx: OrgContext,
   input: {
@@ -851,19 +843,9 @@ export async function createDocumentRecord(
   if (blocked) return blocked;
   const title = input.title.trim();
   if (!title) return { error: "Title is required" };
-  if (input.templateId && !getDocumentTemplate(input.templateId)) {
-    return { error: "That document template does not exist." };
-  }
-  if (input.kind && !input.templateId && !templateForKind(input.kind)) {
-    return { error: "That document kind does not have a template." };
-  }
   const supplied = input.body?.trim() ?? "";
   const hasFields = Boolean(input.data && Object.keys(input.data).length > 0);
   const structured = Boolean(input.templateId || input.kind || hasFields);
-  const template =
-    (input.templateId ? getDocumentTemplate(input.templateId) : null) ??
-    (input.kind ? templateForKind(input.kind) : null) ??
-    (structured || !supplied ? getDocumentTemplate("proposal") : null);
   const links = await resolveDocumentLinks(ctx, {
     clientId: input.clientId,
     projectId: input.projectId,
@@ -872,29 +854,31 @@ export async function createDocumentRecord(
   if ("error" in links) return links;
   let content: JSONContent;
   let templateId = "custom";
+  let kind: DocumentKind = "proposal";
   const clientId = links.clientId;
   const projectId = links.projectId;
   if (!structured && supplied) {
     content = proseToDoc(supplied);
-  } else if (template) {
+  } else {
+    const resolved = resolveDocumentTemplate({ templateId: input.templateId, kind: input.kind });
+    if ("error" in resolved) return resolved;
     const project = await projectMention(ctx, projectId);
     const client = await clientMention(ctx, clientId);
-    content = template.build({
+    content = resolved.template.build({
       title,
       orgName: ctx.org.name,
       client,
       project: project ? { id: project.id, label: project.label, type: "project" } : null,
     });
     if (hasFields && input.data) content = applyDocumentData(content, input.data);
-    templateId = template.id;
-  } else {
-    return { error: "That document template does not exist." };
+    templateId = resolved.template.id;
+    kind = resolved.kind;
   }
   const { data: document, error } = await ctx.supabase
     .from("documents")
     .insert({
       organization_id: ctx.org.id,
-      kind: template?.kind ?? "proposal",
+      kind,
       title,
       status: "draft",
       client_id: clientId,
@@ -918,6 +902,7 @@ export async function createDocumentRecord(
   return {
     id: document.id as string,
     title,
+    kind,
     template: templateId,
     version: 1,
     status: "draft",

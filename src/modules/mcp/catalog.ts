@@ -589,7 +589,7 @@ export const DATASETS: Dataset[] = [
     orderField: "updated_at",
     fields: [
       id("id", "Document id."),
-      text("kind", "proposal, sow, or other."),
+      text("kind", "proposal, sow, prs, srs, contract, nda, brief, change_order, report, invoice, or other."),
       text("title", "Title.", true),
       text("status", "draft, sent, accepted, signed, or void."),
       id("client_id", "Client id, if linked."),

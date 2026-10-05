@@ -6,6 +6,7 @@ import { documentSendToken, documentViewPath } from "@/modules/documents/sends";
 import { resolveDocumentLinks } from "@/modules/documents/parties";
 import { renderStoredDocumentPdf } from "@/modules/documents/render-pdf";
 import { documentPreviewUrl, documentWarnings, type TemplateFieldValue } from "@/modules/documents/structured";
+import { assertDocumentImageAssets, persistDocumentAssets } from "@/modules/documents/assets";
 import { appendBlocks, blocksToDoc, parseDocumentBlocks } from "@/modules/documents/blocks";
 import { applyDocumentData } from "@/modules/documents/template-fill";
 import { buildBasicDocumentTemplate } from "@/modules/documents/templates";
@@ -122,6 +123,8 @@ export async function composeDocumentRecord(
   if ("error" in parsed) return parsed;
   const built = blocksToDoc(parsed.blocks);
   if ("error" in built) return built;
+  const assets = await assertDocumentImageAssets(ctx, built.doc);
+  if (assets) return assets;
   const placement = input.placement === "replace" || input.placement === "start" ? input.placement : "append";
   const loaded = await latestVersion(ctx, input.id);
   if ("error" in loaded) return loaded;
@@ -132,7 +135,7 @@ export async function composeDocumentRecord(
   if (version.status === "sent") {
     return { error: "This version was already sent. Start a new revision before changing it." };
   }
-  const content = appendBlocks((version.content_doc ?? { type: "doc" }) as JSONContent, built.doc.content ?? [], placement);
+  const content = persistDocumentAssets(appendBlocks((version.content_doc ?? { type: "doc" }) as JSONContent, built.doc.content ?? [], placement));
   const { error } = await ctx.supabase
     .from("document_versions")
     .update({ content_doc: content })
