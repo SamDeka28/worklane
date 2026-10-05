@@ -407,6 +407,9 @@ export function SendInvoiceDialog({
                 data-1p-ignore
               />
             </Field>
+            <Field label="CC" htmlFor="send_cc" hint="Optional, separate with commas">
+              <Input id="send_cc" name="cc" autoComplete="off" placeholder="Optional" data-1p-ignore />
+            </Field>
             <Field
               label="Message"
               htmlFor="send_message"

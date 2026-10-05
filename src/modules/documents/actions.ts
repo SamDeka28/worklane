@@ -12,6 +12,7 @@ import { asDocumentKind, DOCUMENT_KIND_LABEL, type DocumentKind } from "@/module
 import { requireWritableOrg } from "@/modules/identity/org";
 import { notifyMentions } from "@/modules/mentions/notify";
 import { deliverDocumentEmail } from "@/modules/documents/records";
+import { replyDocumentForContext } from "@/modules/documents/reply";
 import { isWriteError } from "@/modules/records/mutate";
 import { documentSendToken, documentViewPath } from "@/modules/documents/sends";
 import { readSignature, signatureIntent } from "@/modules/documents/signature";
@@ -286,8 +287,14 @@ export async function updateDocumentLinksAction(
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
   if (!document) return { error: "Document not found" };
-  if (document.status === "accepted" || document.status === "signed") {
-    return { error: "Locked documents cannot change links" };
+  const locked = document.status === "accepted" || document.status === "signed";
+  if (locked) {
+    if (input.clientId !== undefined && document.client_id && (input.clientId || null) !== document.client_id) {
+      return { error: "This signed document already has a client." };
+    }
+    if (input.projectId !== undefined && document.project_id && (input.projectId || null) !== document.project_id) {
+      return { error: "This signed document already has a project." };
+    }
   }
 
   let clientId =
@@ -303,6 +310,9 @@ export async function updateDocumentLinksAction(
       .eq("organization_id", ctx.org.id)
       .maybeSingle();
     if (!project) return { error: "Project not found" };
+    if (locked && document.client_id && project.client_id !== document.client_id) {
+      return { error: "That project belongs to a different client." };
+    }
     clientId = project.client_id;
   } else if (clientId) {
     const { data: client } = await ctx.supabase
@@ -1362,56 +1372,14 @@ export async function replyDocumentFeedbackAction(
   formData: FormData,
 ) {
   const ctx = await requireWritableOrg(orgSlug);
-  const sendId = String(formData.get("send_id") ?? "").trim();
-  const body = String(formData.get("body") ?? "").trim().slice(0, 4000);
-  const notifyClient = formData.get("email_client") === "on";
-  if (!body) return { error: "Write a reply first" };
-
-  const { data: send } = await ctx.supabase
-    .from("document_sends")
-    .select("id, document_version_id, recipient_email, recipient_name, title, revoked_at")
-    .eq("id", sendId)
-    .eq("document_id", documentId)
-    .eq("organization_id", ctx.org.id)
-    .maybeSingle();
-  if (!send) return { error: "Pick which email this reply belongs to" };
-
-  const { error } = await ctx.supabase.from("document_feedback").insert({
-    organization_id: ctx.org.id,
-    document_id: documentId,
-    document_version_id: send.document_version_id,
-    send_id: send.id,
-    kind: "reply",
-    author_type: "studio",
-    author_name: ctx.user.displayName ?? ctx.org.name,
-    author_email: ctx.user.email,
-    author_user_id: ctx.userId,
-    body,
+  const result = await replyDocumentForContext(ctx, documentId, {
+    sendId: String(formData.get("send_id") ?? ""),
+    body: String(formData.get("body") ?? ""),
+    emailClient: formData.get("email_client") === "on",
   });
-  if (error) return { error: error.message };
-
-  let emailed = false;
-  if (notifyClient && !send.revoked_at && isEmailConfigured()) {
-    const input = {
-      orgName: ctx.org.name,
-      heading: `New reply on ${send.title}`,
-      message: `${ctx.user.displayName ?? ctx.org.name} replied:\n\n${body}`,
-      viewUrl: `${getAppUrl()}${documentViewPath(documentSendToken(send.id as string))}`,
-      buttonLabel: "Open and respond",
-    };
-    const result = await sendDocumentTrackedEmail(ctx, {
-      to: send.recipient_email as string,
-      subject: `Re: ${send.title}`,
-      fromName: `${ctx.user.displayName ? `${ctx.user.displayName} at ` : ""}${ctx.org.name}`,
-      replyTo: ctx.user.email ?? undefined,
-      html: documentUpdateEmailHtml(input),
-      text: documentUpdateEmailText(input),
-    });
-    emailed = result.ok;
-  }
-
+  if ("error" in result) return result;
   revalidatePath(`/${orgSlug}/documents/${documentId}`);
-  return { ok: true as const, emailed };
+  return result;
 }
 
 export async function resolveDocumentFeedbackAction(

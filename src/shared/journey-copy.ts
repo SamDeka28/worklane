@@ -25,6 +25,13 @@ export const JOURNEY = {
     emptyNeedsClientTitle: "Add a client first",
     emptyNeedsClientBody: "Every project belongs to a client you can bill.",
   },
+  credentials: {
+    purpose: "Logins and keys for the studio, optionally tied to a project",
+    primaryCta: "Add credential",
+    emptyTitle: "No credentials yet",
+    emptyBody:
+      "Keep logins, API keys, and server access here instead of spreadsheets and chats. A project is optional. Everything is encrypted, and you choose who can see each one.",
+  },
   documents: {
     purpose: "Proposals and SOWs for clients and projects",
     primaryCta: "New document",

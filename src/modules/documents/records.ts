@@ -3,6 +3,8 @@ import { docToPlainText } from "@/components/editor/doc-text";
 import { proseFromDoc, proseToDoc } from "@/modules/documents/prose";
 import { buildLiveSnapshot } from "@/modules/documents/lock";
 import { documentSendToken, documentViewPath } from "@/modules/documents/sends";
+import { renderStoredDocumentPdf } from "@/modules/documents/render-pdf";
+import { applyStructuredFills, documentPreviewUrl, documentWarnings, type TemplateFieldValue } from "@/modules/documents/structured";
 import { buildBasicDocumentTemplate } from "@/modules/documents/templates";
 import { asDocumentKind, DOCUMENT_KIND_LABEL } from "@/modules/documents/types";
 import { resolveSender } from "@/modules/email-senders/server";
@@ -47,16 +49,21 @@ function fillNode(node: JSONContent, replacements: Map<string, string>): JSONCon
   return { ...node, content: node.content.map((child) => fillNode(child, replacements)) };
 }
 
-export function parseDocumentFills(body: string) {
-  const replacements = new Map<string, string>();
+export function parseDocumentFills(body: string): Record<string, TemplateFieldValue> {
+  const grouped = new Map<string, string[]>();
   for (const line of body.split("\n")) {
     const split = line.indexOf(":");
     if (split < 1) continue;
     const label = line.slice(0, split).trim().replace(/^\[/, "").replace(/\]$/, "");
     const value = line.slice(split + 1).trim();
-    if (label && value) replacements.set(label, value);
+    if (!label || !value) continue;
+    const list = grouped.get(label) ?? [];
+    list.push(value);
+    grouped.set(label, list);
   }
-  return replacements;
+  const data: Record<string, TemplateFieldValue> = {};
+  for (const [label, values] of grouped) data[label] = values.length === 1 ? values[0] : values;
+  return data;
 }
 
 async function latestVersion(ctx: OrgContext, documentId: string) {
@@ -116,8 +123,8 @@ export async function fillDocumentRecord(
   const blocked = assertWrite(ctx, "documents");
   if (blocked) return blocked;
   const replacements = parseDocumentFills(input.body);
-  if (replacements.size === 0) {
-    return { error: "Pass one placeholder per line, such as Client name: Rentique." };
+  if (Object.keys(replacements).length === 0) {
+    return { error: "Pass one placeholder per line, such as Client name: Rentique. Repeat a label to fill each copy in order." };
   }
   const loaded = await latestVersion(ctx, input.id);
   if ("error" in loaded) return loaded;
@@ -128,7 +135,7 @@ export async function fillDocumentRecord(
   if (version.status === "sent") {
     return { error: "This version was already sent. Start a new revision before changing it." };
   }
-  const content = fillNode((version.content_doc ?? { type: "doc" }) as JSONContent, replacements);
+  const content = applyStructuredFills((version.content_doc ?? { type: "doc" }) as JSONContent, replacements);
   const { error } = await ctx.supabase
     .from("document_versions")
     .update({ content_doc: content })
@@ -142,10 +149,14 @@ export async function fillDocumentRecord(
       .eq("id", input.id)
       .eq("organization_id", ctx.org.id);
   }
+  const previewUrl = documentPreviewUrl(ctx.org.slug, input.id, version.version_number);
   return {
     id: input.id,
     versionId: version.id,
-    filled: [...replacements.keys()],
+    version: version.version_number,
+    filled: Object.keys(replacements),
+    previewUrl,
+    pdfUrl: previewUrl,
     text: docToPlainText(content),
   };
 }
@@ -163,12 +174,18 @@ export async function linkDocumentRecord(
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
   if (!document) return { error: "Document not found" };
-  if (document.status === "accepted" || document.status === "signed") {
-    return { error: "Locked documents cannot change links" };
+  const locked = document.status === "accepted" || document.status === "signed";
+  if (locked) {
+    if (document.client_id && input.clientId?.trim() && input.clientId.trim() !== document.client_id) {
+      return { error: "This signed document already has a client." };
+    }
+    if (document.project_id && input.projectId?.trim() && input.projectId.trim() !== document.project_id) {
+      return { error: "This signed document already has a project." };
+    }
   }
 
   let clientId = input.clientId?.trim() || document.client_id;
-  let projectId = input.projectId?.trim() || null;
+  let projectId = input.projectId?.trim() || (locked ? document.project_id : null);
   let clientName: string | null = null;
   let projectName: string | null = null;
   if (input.projectId?.trim()) {
@@ -179,6 +196,9 @@ export async function linkDocumentRecord(
       .eq("organization_id", ctx.org.id)
       .maybeSingle();
     if (!project) return { error: "Project not found" };
+    if (locked && document.client_id && project.client_id !== document.client_id) {
+      return { error: "That project belongs to a different client." };
+    }
     projectId = project.id as string;
     projectName = project.name as string;
     clientId = project.client_id as string;
@@ -218,7 +238,11 @@ export async function linkDocumentRecord(
   return { id: input.id, clientId, projectId, clientName, projectName };
 }
 
-export async function createSowRecord(ctx: OrgContext, documentId: string): Promise<WriteResult> {
+export async function createSowRecord(
+  ctx: OrgContext,
+  documentId: string,
+  options?: { title?: string; data?: Record<string, TemplateFieldValue> },
+): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "documents");
   if (blocked) return blocked;
   const { data: source } = await ctx.supabase
@@ -238,14 +262,17 @@ export async function createSowRecord(ctx: OrgContext, documentId: string): Prom
       ? ctx.supabase.from("projects").select("id, name").eq("organization_id", ctx.org.id).eq("id", source.project_id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
-  const sowTitle = `SOW · ${source.title}`;
-  const sowDoc = buildBasicDocumentTemplate({
+  const sowTitle = options?.title?.trim() || `Statement of Work — ${source.title}`;
+  let sowDoc = buildBasicDocumentTemplate({
     kind: "sow",
     title: sowTitle,
     orgName: ctx.org.name,
     client: client ? { id: client.id as string, label: client.name as string, type: "client" } : null,
     project: project ? { id: project.id as string, label: project.name as string, type: "project" } : null,
   });
+  if (options?.data && Object.keys(options.data).length > 0) {
+    sowDoc = applyStructuredFills(sowDoc, options.data);
+  }
   const { data: sow, error } = await ctx.supabase
     .from("documents")
     .insert({
@@ -269,7 +296,21 @@ export async function createSowRecord(ctx: OrgContext, documentId: string): Prom
     status: "draft",
     created_by: ctx.userId,
   });
-  return { id: sow.id as string, title: sowTitle, status: "draft" };
+  const previewUrl = documentPreviewUrl(ctx.org.slug, sow.id as string, 1);
+  return {
+    id: sow.id as string,
+    title: sowTitle,
+    template: "sow",
+    version: 1,
+    status: "draft",
+    previewUrl,
+    pdfUrl: previewUrl,
+    validation: documentWarnings(sowDoc, {
+      title: sowTitle,
+      clientId: (source.client_id as string | null) ?? null,
+      projectId: (source.project_id as string | null) ?? null,
+    }),
+  };
 }
 
 /** Emails the current version and marks it sent only after the email is accepted. */
@@ -416,6 +457,8 @@ export async function sendDocumentRecord(
   const cc = input.cc
     ? input.cc.split(/[,;\s]+/).map((value) => value.trim()).filter(Boolean)
     : [];
+  const pdf = await renderStoredDocumentPdf(ctx, { documentId: input.id, versionId: version.id });
+  if ("error" in pdf) return { error: pdf.error };
   return deliverDocumentEmail(ctx, {
     documentId: input.id,
     to: input.to,
@@ -425,6 +468,9 @@ export async function sendDocumentRecord(
     message: input.message,
     versionId: version.id,
     content: version.content_doc,
-    attachments: input.attachments,
+    attachments: [
+      { filename: pdf.filename, content: pdf.content, contentType: "application/pdf" },
+      ...(input.attachments ?? []),
+    ],
   });
 }

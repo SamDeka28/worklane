@@ -41,7 +41,9 @@ export const EMPTY_SECRET: CredentialSecret = {
 
 export type CredentialRecord = {
   id: string;
-  projectId: string;
+  /** Null when the credential belongs to the studio and no project. */
+  projectId: string | null;
+  projectName: string | null;
   name: string;
   kind: CredentialKind;
   url: string | null;

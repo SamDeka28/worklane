@@ -15,6 +15,14 @@ export const metadata = {
   title: "Connect using MCP",
 };
 
+function redirectHost(uri: string) {
+  try {
+    return new URL(uri).host;
+  } catch {
+    return "";
+  }
+}
+
 export default async function ConnectPage({
   searchParams,
 }: {
@@ -56,68 +64,73 @@ export default async function ConnectPage({
 
   if (!started) {
     const invalidAppId = value("plugin") === "invalid";
+    const clients = [
+      {
+        name: "ChatGPT",
+        steps: [
+          "Open Settings, then Apps or Connectors, and add a custom MCP server.",
+          "Paste the address below.",
+          "When this page opens, sign in and allow access.",
+        ],
+      },
+      {
+        name: "Claude",
+        steps: [
+          "Open Customize, then Connectors, and add a custom connector.",
+          "Paste the address below.",
+          "When this page opens, sign in and allow access.",
+        ],
+      },
+      {
+        name: "Cursor",
+        steps: [
+          "Add a remote MCP server with the address below.",
+          "When this page opens, sign in and allow access.",
+        ],
+      },
+    ];
     return (
       <main className="min-h-svh px-4 py-16 sm:px-6">
         <div className="mx-auto w-full max-w-5xl">
           <div className="mx-auto max-w-lg text-center">
             <BrandMark size={28} priority className="mx-auto" />
-            <h1 className="mt-4 font-heading text-3xl font-semibold tracking-tight">Connect ChatGPT</h1>
+            <h1 className="mt-4 font-heading text-3xl font-semibold tracking-tight">Connect an assistant</h1>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              Sign in on this page when ChatGPT asks. Reading is included. Allow changes when you
-              want it to create, send, or update records.
+              Paste this address into ChatGPT, Claude, or Cursor. Sign in on this page when it asks.
+              Reading is included. Allow changes when you want it to create, send, or update records.
             </p>
           </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            <section className="rounded-3xl bg-card p-6 shadow-lift ring-1 ring-border/60 sm:p-8">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Step 1</p>
-              <h2 className="mt-2 font-heading text-xl font-semibold tracking-tight">Paste the server address</h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                This connects ChatGPT to your studios and creates the app id for your account.
-              </p>
-              <ol className="mt-5 space-y-3">
-                {[
-                  "In ChatGPT, open Settings, then Security and login, and turn on Developer mode.",
-                  "Open Plugins and choose the plus button. Paste the address below and create the plugin.",
-                  "When ChatGPT opens this page, sign in and allow access. Install the plugin under Personal.",
-                  "Switch from Chat to Work. In a new chat, type @ and select Worklane.",
-                ].map((step, index) => (
-                  <li key={step} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-foreground">
-                      {index + 1}
-                    </span>
-                    <span>{step}</span>
-                  </li>
-                ))}
-              </ol>
-              {origin ? <CopyAddress value={`${origin}/mcp`} /> : null}
-            </section>
-            <section className="rounded-3xl bg-card p-6 shadow-lift ring-1 ring-border/60 sm:p-8">
-              <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Step 2</p>
-              <h2 className="mt-2 font-heading text-xl font-semibold tracking-tight">Add the skill</h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                The server address does not include the skill. Build a plugin for the app id on
-                your ChatGPT account.
-              </p>
-              <ol className="mt-5 space-y-3">
-                {[
-                  "Open the Worklane plugin you just created.",
-                  "Copy the app id from the page address. It starts with asdk_app_. Pasting the whole address works.",
-                  <>
-                    Download <span className="whitespace-nowrap">version {PLUGIN_VERSION}</span> and
-                    upload that file as a new version of the same plugin. Keep the file name.
-                  </>,
-                ].map((step, index) => (
-                  <li key={index} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-foreground">
-                      {index + 1}
-                    </span>
-                    <span>{step}</span>
-                  </li>
-                ))}
-              </ol>
-              <PluginDownloadForm defaultAppId={value("app_id")} invalid={invalidAppId} />
-            </section>
+          {origin ? (
+            <div className="mx-auto mt-6 max-w-lg">
+              <CopyAddress value={`${origin}/mcp`} />
+            </div>
+          ) : null}
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {clients.map((client) => (
+              <section key={client.name} className="rounded-3xl bg-card p-6 shadow-lift ring-1 ring-border/60">
+                <h2 className="font-heading text-lg font-semibold tracking-tight">{client.name}</h2>
+                <ol className="mt-4 space-y-3">
+                  {client.steps.map((step, index) => (
+                    <li key={step} className="flex gap-3 text-sm leading-relaxed text-muted-foreground">
+                      <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-medium text-foreground">
+                        {index + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ))}
           </div>
+          <section className="mx-auto mt-4 max-w-xl rounded-3xl bg-card p-6 shadow-lift ring-1 ring-border/60 sm:p-8">
+            <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Optional</p>
+            <h2 className="mt-2 font-heading text-xl font-semibold tracking-tight">ChatGPT plugin</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              A custom connection does not need this. Download version {PLUGIN_VERSION} only if you
+              install Worklane as a ChatGPT plugin and want the packaged skill.
+            </p>
+            <PluginDownloadForm defaultAppId={value("app_id")} invalid={invalidAppId} />
+          </section>
         </div>
       </main>
     );
@@ -131,7 +144,8 @@ export default async function ConnectPage({
         {ready && client ? (
           <>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {client.clientName} is asking to read your studios.{" "}
+              {client.clientName} is asking to read your studios
+              {redirectHost(redirectUri) ? ` and will send you back to ${redirectHost(redirectUri)}` : ""}.{" "}
               {scope?.includes("worklane:write")
                 ? "Allowing this also lets it create, change, and send on your behalf, using the same access you already have."
                 : "This connection can read only. Connect again from a write action if you want it to make changes."}{" "}

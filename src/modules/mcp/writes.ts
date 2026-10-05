@@ -3,7 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { sendLeadEmailForContext } from "@/modules/crm/email-actions";
 import { countersignDocumentForContext, emailSignedCopyForContext } from "@/modules/documents/actions";
-import { previewDocumentsForContext } from "@/modules/documents/preview";
+import { previewDocumentsForContext, validateDocumentForContext } from "@/modules/documents/preview";
+import { listDocumentTemplates, type TemplateFieldValue } from "@/modules/documents/structured";
 import { sendTrackedEmailForContext } from "@/modules/emails/actions";
 import {
   billMilestoneForContext,
@@ -21,6 +22,9 @@ import {
   voidPartnerSettlementForContext,
 } from "@/modules/partners/actions";
 import { inviteMemberForContext } from "@/modules/team/actions";
+import { sendProjectTimesheetForContext } from "@/modules/delivery/timesheet-send";
+import { replyDocumentForContext } from "@/modules/documents/reply";
+import { readDocumentForContext } from "@/modules/mcp/document-read";
 import {
   createSowRecord,
   fillDocumentRecord,
@@ -64,47 +68,292 @@ import {
 
 type Reader = { supabase: SupabaseClient; userId: string; scopes?: string[] };
 
-const inputSchema = {
-  org: z.string().optional().describe("Studio slug when you belong to more than one studio."),
-  id: z.string().optional(),
-  clientId: z.string().optional(),
-  projectId: z.string().optional(),
-  leadId: z.string().optional(),
-  name: z.string().optional(),
-  title: z.string().optional(),
-  body: z.string().optional().describe("Document text, email body, or note. For a document, this is saved as the content."),
-  status: z.string().optional(),
-  amount: z.string().optional().describe("Amount in major units, such as 1500."),
-  gross: z.string().optional().describe("Charge amount in major units."),
-  email: z.string().optional(),
-  to: z.string().optional(),
-  cc: z.string().optional().describe("CC addresses, separated by commas. Up to 5."),
-  includeSignature: z
-    .union([z.boolean(), z.string()])
-    .optional()
-    .describe(
-      "On send_lead_email and send_email, set true when the member asks to include their email signature. The saved signature is added under that message. Leave unset otherwise.",
-    ),
-  subject: z.string().optional(),
-  templateId: z.string().optional(),
-  layout: z.string().optional().describe("Invoice layout: classic, minimal, bold, modern, elegant, studio, corporate, swiss, edge, letterhead, or ribbon."),
-  confirmName: z.string().optional().describe("Exact record name required before a delete."),
-  kind: z.string().optional(),
-  notes: z.string().optional(),
-  currency: z.string().optional(),
-  billingMode: z.string().optional(),
-  hours: z.string().optional(),
-  description: z.string().optional(),
-  stage: z.string().optional(),
-  company: z.string().optional(),
-  memo: z.string().optional(),
-  scope: z.string().optional(),
-  phone: z.string().optional(),
-  dueOn: z.string().optional(),
-  attachments: z
-    .string()
-    .optional()
-    .describe("JSON array of email files: filename, contentType, and contentBase64. Up to 5 files, 5 MB each."),
+const orgField = z.string().optional().describe("Studio slug when you belong to more than one studio.");
+const recordId = z.string().describe("Record id.");
+const ccField = z.string().optional().describe("CC addresses, separated by commas. Up to 5.");
+const attachmentField = z
+  .string()
+  .optional()
+  .describe("JSON array of filename, contentType, and contentBase64. Up to 5 files, 5 MB each.");
+const signatureField = z
+  .union([z.boolean(), z.string()])
+  .optional()
+  .describe("True only when the member asks to include their saved email signature.");
+
+const toolShapes: Record<string, z.ZodRawShape> = {
+  preview_document: {
+    id: z.string().optional().describe("Document id."),
+    projectId: z.string().optional(),
+    clientId: z.string().optional(),
+    title: z.string().optional(),
+    templateId: z.string().optional(),
+  },
+  get_document: { id: recordId },
+  get_document_preview_url: { id: recordId },
+  validate_document: { id: recordId },
+  list_document_templates: {},
+  create_document: {
+    title: z.string().describe("Document title."),
+    templateId: z.string().optional().describe("Template id from list_document_templates. Defaults from kind, or proposal."),
+    kind: z.string().optional().describe("proposal, sow, contract, nda, brief, change_order, report, or other."),
+    data: z.string().optional().describe("JSON object of template field labels to plain-text values. Repeated labels are arrays in order. Leave unknown amounts out."),
+    clientId: z.string().optional(),
+    projectId: z.string().optional(),
+    body: z.string().optional().describe("Legacy plain text only. Ignored when templateId, kind, or data is set. Do not use for a proposal or SOW."),
+  },
+  create_proposal: {
+    title: z.string().describe("Document title."),
+    templateId: z.string().optional().describe("Defaults to proposal."),
+    clientId: z.string().optional(),
+    projectId: z.string().optional(),
+    data: z.string().optional().describe("JSON object of proposal template fields. Do not invent fees."),
+  },
+  write_document: {
+    id: recordId,
+    body: z.string().describe("Replacement document text."),
+    title: z.string().optional(),
+  },
+  fill_document: {
+    id: recordId,
+    body: z.string().describe("One fill per line, such as Client name: Rentique."),
+    title: z.string().optional(),
+  },
+  link_document: {
+    id: recordId,
+    clientId: z.string().optional().describe("Client to attach. On a signed document, only if none is set."),
+    projectId: z.string().optional().describe("Project to attach. On a signed document, only if none is set."),
+  },
+  create_sow: {
+    id: z.string().optional().describe("Proposal id, when the SOW should start from that proposal."),
+    title: z.string().optional().describe("Document title. Defaults from the proposal or to Statement of work."),
+    templateId: z.string().optional().describe("Defaults to sow."),
+    clientId: z.string().optional(),
+    projectId: z.string().optional(),
+    data: z.string().optional().describe("JSON object of SOW template field labels to plain-text values. Repeated labels are arrays in order. Do not invent fees or dates."),
+  },
+  send_document: {
+    id: recordId,
+    to: z.string().describe("Client email that receives the signing link."),
+    subject: z.string(),
+    body: z.string().describe("Message above the signing link."),
+    name: z.string().optional().describe("Recipient name."),
+    cc: ccField,
+    attachments: attachmentField,
+  },
+  countersign_document: {
+    id: recordId,
+    name: z.string().describe("Studio signer name."),
+    email: z.string().describe("Studio signer email."),
+    body: z.string().optional().describe("Typed signature. Defaults to the signer name."),
+  },
+  send_signed_copy: {
+    id: recordId,
+    to: z.string().describe("Email that receives the signed PDF."),
+    body: z.string().optional().describe("Optional message."),
+    cc: ccField,
+  },
+  reply_document: {
+    id: recordId,
+    body: z.string().describe("Reply the client will see."),
+    sendId: z.string().optional().describe("Which sent email this reply belongs to."),
+    emailClient: z.union([z.boolean(), z.string()]).optional().describe("Email the client. Defaults to true."),
+  },
+  preview_email: {
+    to: z.string().optional(),
+    subject: z.string().optional(),
+    body: z.string().optional(),
+  },
+  send_lead_email: {
+    leadId: z.string().describe("Lead id."),
+    to: z.string().describe("Recipient email."),
+    subject: z.string(),
+    body: z.string(),
+    cc: ccField,
+    includeSignature: signatureField,
+    templateId: z.string().optional(),
+    stage: z.string().optional().describe("Move the lead to this stage slug after sending."),
+    attachments: attachmentField,
+  },
+  send_email: {
+    to: z.string().describe("Recipient email."),
+    subject: z.string(),
+    body: z.string(),
+    cc: ccField,
+    includeSignature: signatureField,
+    attachments: attachmentField,
+  },
+  send_timesheet: {
+    projectId: z.string().describe("Project id."),
+    dueOn: z.string().describe("Month, YYYY-MM."),
+    to: z.string(),
+    subject: z.string(),
+    body: z.string(),
+    cc: ccField,
+    attachments: attachmentField,
+  },
+  send_invoice: {
+    id: z.string().describe("Invoice id."),
+    to: z.string().optional().describe("Recipient. Defaults to the billed-to email."),
+    body: z.string().optional().describe("Message. Defaults to the invoice notes."),
+    cc: ccField,
+    kind: z.string().optional().describe("reminder to send a payment reminder."),
+  },
+  preview_invoice: {
+    id: z.string().optional(),
+    layout: z.string().optional().describe("classic, minimal, bold, modern, elegant, studio, corporate, swiss, edge, letterhead, or ribbon."),
+    currency: z.string().optional(),
+  },
+  create_client: {
+    name: z.string(),
+    kind: z.string().optional(),
+    currency: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+    notes: z.string().optional(),
+  },
+  update_client: {
+    id: recordId,
+    name: z.string().optional(),
+    notes: z.string().optional(),
+    kind: z.string().optional(),
+    currency: z.string().optional(),
+  },
+  add_contact: {
+    clientId: z.string(),
+    name: z.string().optional(),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+  },
+  update_client_billing: {
+    clientId: z.string(),
+    name: z.string(),
+    title: z.string().optional().describe("Contact name."),
+    email: z.string().optional(),
+    phone: z.string().optional(),
+    body: z.string().optional().describe("Address."),
+    memo: z.string().optional().describe("Tax id."),
+  },
+  archive_client: { id: recordId },
+  delete_client: { id: recordId, confirmName: z.string().describe("Exact client name.") },
+  rename_studio: { name: z.string() },
+  create_project: {
+    name: z.string(),
+    clientId: z.string(),
+    billingMode: z.string().optional(),
+    status: z.string().optional(),
+    scope: z.string().optional(),
+    amount: z.string().optional().describe("Contracted amount in major units. An agreement, not cash."),
+  },
+  set_project_status: { id: recordId, status: z.string().describe("planning, active, on_hold, completed, or cancelled.") },
+  delete_project: { id: recordId, confirmName: z.string().describe("Exact project name.") },
+  create_task: {
+    projectId: z.string(),
+    title: z.string(),
+    description: z.string().optional(),
+    status: z.string().optional(),
+    dueOn: z.string().optional(),
+  },
+  update_task: {
+    id: recordId,
+    title: z.string().optional(),
+    description: z.string().optional(),
+    status: z.string().optional(),
+    dueOn: z.string().optional(),
+  },
+  delete_task: { id: recordId },
+  comment_on_task: { id: recordId, body: z.string() },
+  create_work_log: {
+    projectId: z.string(),
+    dueOn: z.string().optional().describe("Worked on, YYYY-MM-DD."),
+    hours: z.string().describe("Decimal hours, such as 1.5."),
+    description: z.string().optional(),
+  },
+  create_charge: {
+    clientId: z.string(),
+    projectId: z.string().optional(),
+    gross: z.string().describe("Amount in major units. Not cash received."),
+    memo: z.string().optional(),
+    dueOn: z.string().optional().describe("Charged on, YYYY-MM-DD."),
+  },
+  record_payment: {
+    clientId: z.string(),
+    amount: z.string().describe("Amount in major units."),
+    kind: z.string().optional().describe("receipt or refund."),
+    memo: z.string().optional().describe("Reference."),
+  },
+  void_charge: { id: recordId },
+  void_payment: { id: recordId },
+  create_lead: {
+    name: z.string(),
+    company: z.string().optional(),
+    email: z.string().optional(),
+    stage: z.string().optional(),
+    notes: z.string().optional(),
+    amount: z.string().optional().describe("Estimated value in major units. A forecast, not billed."),
+  },
+  move_lead: { id: recordId, stage: z.string().describe("Stage slug.") },
+  log_lead_note: {
+    id: recordId,
+    body: z.string(),
+    kind: z.string().optional().describe("note, call, or meeting."),
+  },
+  create_invoice: {
+    clientId: z.string(),
+    projectId: z.string().optional(),
+    description: z.string().optional(),
+    amount: z.string().optional().describe("First line amount in major units."),
+    dueOn: z.string().optional(),
+    memo: z.string().optional(),
+  },
+  add_invoice_line: {
+    id: z.string().describe("Invoice id."),
+    description: z.string(),
+    amount: z.string().describe("Unit price in major units."),
+  },
+  issue_invoice: {
+    id: z.string().describe("Invoice id."),
+    confirmName: z.string().optional().describe("Pass confirm only after the member agrees to bill items that were already charged."),
+  },
+  create_milestone: {
+    projectId: z.string(),
+    name: z.string(),
+    amount: z.string().optional().describe("Amount in major units."),
+    dueOn: z.string().optional(),
+    description: z.string().optional(),
+    status: z.string().optional().describe("planned, in_progress, completed, or cancelled."),
+  },
+  set_milestone_status: { id: recordId, status: z.string().describe("planned, in_progress, completed, or cancelled.") },
+  bill_milestone: { id: recordId, dueOn: z.string().optional().describe("Charge date, YYYY-MM-DD.") },
+  invite_member: {
+    email: z.string(),
+    kind: z.string().optional().describe("member, admin, viewer, or partner."),
+    projectId: z.string().optional(),
+    name: z.string().optional(),
+  },
+  record_settlement: {
+    id: z.string().describe("Partner id."),
+    amount: z.string().describe("Amount in major units."),
+    kind: z.string().optional().describe("upwork, bank, stripe, or other."),
+    dueOn: z.string().optional().describe("Settled on, YYYY-MM-DD."),
+    memo: z.string().optional(),
+    currency: z.string().optional(),
+  },
+  void_settlement: { id: recordId },
+  create_partner: {
+    name: z.string(),
+    email: z.string(),
+    kind: z.string().optional(),
+    notes: z.string().optional(),
+  },
+  reveal_credential: { id: recordId },
+};
+
+const toolTitles: Record<string, string> = {
+  send_document: "Send by email",
+  countersign_document: "Countersign document",
+  send_signed_copy: "Email signed PDF",
+  reply_document: "Email the client",
+  get_document: "Get document",
 };
 
 type ToolInput = {
@@ -140,7 +389,29 @@ type ToolInput = {
   phone?: string;
   dueOn?: string;
   attachments?: string;
+  sendId?: string;
+  emailClient?: boolean | string;
+  data?: string;
 };
+
+function documentFields(raw?: string): { data: Record<string, TemplateFieldValue> } | { error: string } {
+  if (!raw?.trim()) return { data: {} };
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { error: "data must be a JSON object of template fields." };
+    }
+    const data: Record<string, TemplateFieldValue> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "string") data[key] = value;
+      else if (Array.isArray(value) && value.every((item) => typeof item === "string")) data[key] = value;
+      else return { error: `Field ${key} must be a string or an array of strings.` };
+    }
+    return { data };
+  } catch {
+    return { error: "data must be JSON." };
+  }
+}
 
 async function signedVersionId(ctx: OrgContext, documentId: string) {
   const { data } = await ctx.supabase
@@ -212,6 +483,17 @@ export function registerStudioActions(
     return result(await fn(ctx));
   };
 
+  const pending: {
+    name: string;
+    description: string;
+    destructive: boolean;
+    writing: boolean;
+    handle: (input: ToolInput) => Promise<{
+      content: { type: "text"; text: string }[];
+      isError?: boolean;
+      _meta?: Record<string, unknown>;
+    }>;
+  }[] = [];
   const add = (
     name: string,
     description: string,
@@ -223,23 +505,13 @@ export function registerStudioActions(
       _meta?: Record<string, unknown>;
     }>,
   ) => {
-    server.registerTool(
-      name,
-      {
-        description,
-        inputSchema,
-        annotations: { readOnlyHint: !writing, destructiveHint: destructive, openWorldHint: false },
-        _meta: writing ? writeMeta : readMeta,
-      },
-      async (input) => {
-        if (!reader) return connectRequired(origin);
-        if (writing && !canWrite) return writeRequired(origin);
-        return handle(input as ToolInput);
-      },
-    );
+    pending.push({ name, description, destructive, writing, handle });
   };
 
-  add("preview_document", "Preview a saved document, the documents on a project, or the documents on a client. Pass id for one document, projectId for that project's documents (including ones linked only to its client), or clientId for a client's documents. With none of those, preview a template before saving. Returns the text. Does not save or send.", false, false, (input) =>
+  add("list_document_templates", "List the studio document templates: id, name, kind, and field labels with how many times each label appears. When count is greater than 1, pass that field in data as an array in document order. Use these ids with create_document, create_sow, and create_proposal.", false, false, async () =>
+    result({ templates: listDocumentTemplates() }),
+  );
+  add("preview_document", "Preview a saved document, the documents on a project, or the documents on a client. Pass id for one document. The result includes previewUrl and pdfUrl for the current version PDF. With none of those, preview a template and its fields before saving. Does not save or send.", false, false, (input) =>
     run(input, (ctx) =>
       previewDocumentsForContext(ctx, {
         id: input.id,
@@ -366,21 +638,68 @@ export function registerStudioActions(
       }),
     );
   });
-  add("create_document", "Create a draft. When body is set, that text is the document and the template is not used. The result text is what was stored. Omit body only to start from a template. This does not send it.", false, true, (input) =>
-    run(input, (ctx) => createDocumentRecord(ctx, { title: input.title || input.name || "", templateId: input.templateId, clientId: input.clientId, projectId: input.projectId, body: input.body })),
-  );
-  add("write_document", "Replace a draft with the supplied body. The result text is exactly what was stored. Use this when a template saved the wrong content. Does not send or sign.", false, true, (input) =>
+  add("create_document", "Create a draft from an existing template. Pass templateId or kind, and data as JSON of that template's field labels. Do not put the document in body, and do not send Markdown. body is only a legacy plain-text note and is ignored when templateId, kind, or data is set. Returns previewUrl. Does not send.", false, true, async (input) => {
+    const fields = documentFields(input.data);
+    if ("error" in fields) return result(fields);
+    return run(input, (ctx) =>
+      createDocumentRecord(ctx, {
+        title: input.title || input.name || "",
+        templateId: input.templateId,
+        kind: input.kind,
+        clientId: input.clientId,
+        projectId: input.projectId,
+        data: fields.data,
+        body: input.body,
+      }),
+    );
+  });
+  add("create_proposal", "Create a draft proposal from the proposal template. Pass data as JSON of the template's field labels. Do not invent fees. Returns previewUrl. Does not send.", false, true, async (input) => {
+    const fields = documentFields(input.data);
+    if ("error" in fields) return result(fields);
+    return run(input, (ctx) =>
+      createDocumentRecord(ctx, {
+        title: input.title || input.name || "Project proposal",
+        templateId: input.templateId || "proposal",
+        kind: "proposal",
+        clientId: input.clientId,
+        projectId: input.projectId,
+        data: fields.data,
+      }),
+    );
+  });
+  add("write_document", "Legacy. Replaces a draft with plain text and drops the template layout. Prefer create_document with templateId and data, or fill_document. Does not send or sign.", false, true, (input) =>
     run(input, (ctx) => writeDocumentRecord(ctx, { id: input.id || "", body: input.body || "", title: input.title })),
   );
-  add("fill_document", "Replace [Placeholder] labels in a draft. body is one line per fill, such as Client name: Rentique. Does not send or sign.", false, true, (input) =>
+  add("fill_document", "Replace [Placeholder] labels in a draft. body is one line per fill, such as Deliverable: Public storefront. Repeat a label to fill each copy in order. Returns previewUrl. Does not send or sign.", false, true, (input) =>
     run(input, (ctx) => fillDocumentRecord(ctx, { id: input.id || "", body: input.body || input.notes || "", title: input.title })),
   );
-  add("link_document", "Attach a client or project to a draft and fill Client name and Project name when those records exist.", false, true, (input) =>
+  add("get_document", "Read one document: status, version, client, project, previewUrl, validation, sends, and signatures. Does not send or sign.", false, false, (input) =>
+    run(input, (ctx) => readDocumentForContext(ctx, input.id || "")),
+  );
+  add("get_document_preview_url", "Return the authenticated preview URL for the current document version. Opening it shows the PDF. Does not send.", false, false, (input) =>
+    run(input, (ctx) => validateDocumentForContext(ctx, input.id || "")),
+  );
+  add("validate_document", "Check a document for unfilled template fields and a missing client, project, or title. Does not invent values and does not send.", false, false, (input) =>
+    run(input, (ctx) => validateDocumentForContext(ctx, input.id || "")),
+  );
+  add("link_document", "Attach a client or project. On a signed or accepted document, only a missing client or project can be set. A link that is already set stays. Does not rewrite a locked version.", false, true, (input) =>
     run(input, (ctx) => linkDocumentRecord(ctx, { id: input.id || "", clientId: input.clientId, projectId: input.projectId })),
   );
-  add("create_sow", "Create a draft statement of work from a proposal. Does not send it.", false, true, (input) =>
-    run(input, (ctx) => createSowRecord(ctx, input.id || "")),
-  );
+  add("create_sow", "Create a draft statement of work from the SOW template. Pass clientId, projectId, and data as JSON of the template's field labels. Pass id only to start from a proposal. Do not put the SOW in body or Markdown. Returns previewUrl. Does not send.", false, true, async (input) => {
+    const fields = documentFields(input.data);
+    if ("error" in fields) return result(fields);
+    return run(input, (ctx) => {
+      if (input.id) return createSowRecord(ctx, input.id, { title: input.title, data: fields.data });
+      return createDocumentRecord(ctx, {
+        title: input.title || input.name || "Statement of work",
+        templateId: input.templateId || "sow",
+        kind: "sow",
+        clientId: input.clientId,
+        projectId: input.projectId,
+        data: fields.data,
+      });
+    });
+  });
   add("send_email", "Send a studio email that is not tied to one lead. cc is comma-separated. Set includeSignature true only when the member asks to include their email signature; the saved signature is then added under the message. Do not say it was included unless the result says signatureIncluded. Preview the body first. This sends. attachments is a JSON array of filename, contentType, and contentBase64.", true, true, async (input) => {
     const files = emailFiles(input.attachments);
     if ("error" in files) return result(files);
@@ -399,7 +718,7 @@ export function registerStudioActions(
       }),
     );
   });
-  add("send_document", "Email the current document version for signature. cc is comma-separated. Refuses while placeholders remain. Marks the document sent only after the email is accepted. Do not claim it was sent or signed unless this result says sent. attachments is a JSON array of filename, contentType, and contentBase64.", true, true, async (input) => {
+  add("send_document", "Send by email. Attaches the current version PDF from the studio renderer and emails the client a private link so they can sign. cc is comma-separated. Refuses while placeholders remain. Marks it sent only after the email is accepted. Do not claim it was sent or signed unless this result says sent.", true, true, async (input) => {
     const files = emailFiles(input.attachments);
     if ("error" in files) return result(files);
     return run(input, (ctx) =>
@@ -414,7 +733,7 @@ export function registerStudioActions(
       }),
     );
   });
-  add("countersign_document", "Add the studio signature after the client has signed. id is the document. name and email are the signer. body is the typed signature. This emails the fully signed PDF. Do not claim it was signed unless the result says ok.", true, true, (input) =>
+  add("countersign_document", "Add the studio signature after the client has signed. This emails the fully signed PDF. Do not claim it was signed unless the result says ok.", true, true, (input) =>
     run(input, async (ctx) => {
       const blocked = assertWrite(ctx, "documents");
       if (blocked) return blocked;
@@ -428,7 +747,18 @@ export function registerStudioActions(
       return countersignDocumentForContext(ctx, versionId, form);
     }),
   );
-  add("send_signed_copy", "Email the signed PDF of a document. id is the document. cc is comma-separated. Sends the certificate once both sides have signed. Do not claim it was sent unless the result says ok.", true, true, (input) =>
+  add("reply_document", "Reply on a document and email the client, including the link they use to review or sign. emailClient defaults to true. Do not claim it was emailed unless the result says emailed.", true, true, (input) =>
+    run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "documents");
+      if (blocked) return blocked;
+      return replyDocumentForContext(ctx, input.id || "", {
+        sendId: input.sendId,
+        body: input.body || "",
+        emailClient: input.emailClient === undefined ? true : includeEmailSignature(input.emailClient),
+      });
+    }),
+  );
+  add("send_signed_copy", "Email the signed PDF. cc is comma-separated. Sends the certificate once both sides have signed. Do not claim it was sent unless the result says ok.", true, true, (input) =>
     run(input, async (ctx) => {
       const blocked = assertWrite(ctx, "documents");
       if (blocked) return blocked;
@@ -462,11 +792,30 @@ export function registerStudioActions(
       return issueInvoiceForContext(ctx, input.id || "", input.confirmName === "confirm");
     }),
   );
-  add("send_invoice", "Email an issued invoice PDF. Marks it sent only after the email is accepted. kind reminder sends a reminder. Do not claim it was sent unless the result says sent.", true, true, (input) =>
+  add("send_timesheet", "Email a project's timesheet PDF for one month. dueOn is YYYY-MM. cc is comma-separated. Do not claim it was sent unless the result says ok.", true, true, async (input) => {
+    const files = emailFiles(input.attachments);
+    if ("error" in files) return result(files);
+    return run(input, async (ctx) => {
+      const blocked = assertWrite(ctx, "delivery");
+      if (blocked) return blocked;
+      return sendProjectTimesheetForContext(ctx, input.projectId || "", input.dueOn || "", {
+        to: input.to || input.email || "",
+        cc: input.cc || "",
+        subject: input.subject || "",
+        body: input.body || "",
+        attachments: files.attachments.map((file) => ({
+          filename: file.filename,
+          contentType: file.contentType,
+          contentBase64: file.content.toString("base64").replace(/=+$/, ""),
+        })),
+      });
+    });
+  });
+  add("send_invoice", "Email an issued invoice PDF. cc is comma-separated. Marks it sent only after the email is accepted. kind reminder sends a reminder. Do not claim it was sent unless the result says sent.", true, true, (input) =>
     run(input, async (ctx) => {
       const blocked = assertWrite(ctx, "finance");
       if (blocked) return blocked;
-      return sendInvoiceForContext(ctx, input.id || "", { to: input.to || input.email, message: input.body, reminder: input.kind === "reminder" });
+      return sendInvoiceForContext(ctx, input.id || "", { to: input.to || input.email, cc: input.cc, message: input.body, reminder: input.kind === "reminder" });
     }),
   );
   add("create_milestone", "Add a milestone to a project. amount is major units. status is planned, in_progress, completed, or cancelled.", false, true, (input) =>
@@ -513,4 +862,46 @@ export function registerStudioActions(
   add("reveal_credential", "Reveal one vault secret. Use this only when the member asked for that credential. Other tools never include the secret.", true, true, (input) =>
     run(input, (ctx) => revealCredentialRecord(ctx, input.id || "")),
   );
+
+  const first = [
+    "list_document_templates",
+    "get_document",
+    "preview_document",
+    "get_document_preview_url",
+    "validate_document",
+    "create_document",
+    "create_proposal",
+    "create_sow",
+    "write_document",
+    "fill_document",
+    "link_document",
+    "send_document",
+    "reply_document",
+    "countersign_document",
+    "send_signed_copy",
+    "preview_email",
+    "send_lead_email",
+    "send_email",
+    "send_timesheet",
+    "send_invoice",
+  ];
+  const rank = new Map(first.map((name, index) => [name, index]));
+  pending.sort((a, b) => (rank.get(a.name) ?? 100) - (rank.get(b.name) ?? 100));
+  for (const tool of pending) {
+    server.registerTool(
+      tool.name,
+      {
+        title: toolTitles[tool.name],
+        description: tool.description,
+        inputSchema: { org: orgField, ...(toolShapes[tool.name] ?? {}) },
+        annotations: { readOnlyHint: !tool.writing, destructiveHint: tool.destructive, openWorldHint: false },
+        _meta: tool.writing ? writeMeta : readMeta,
+      },
+      async (input) => {
+        if (!reader) return connectRequired(origin);
+        if (tool.writing && !canWrite) return writeRequired(origin);
+        return tool.handle(input as ToolInput);
+      },
+    );
+  }
 }

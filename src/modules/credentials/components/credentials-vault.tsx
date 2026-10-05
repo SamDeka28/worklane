@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useActionProgress as useTransition } from "@/components/studio/use-action-progress";
 import {
   Check,
@@ -37,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
 import { cn } from "@/lib/utils";
 import {
   deleteCredentialAction,
@@ -82,6 +83,30 @@ const EVENT_LABEL: Record<CredentialEvent["action"], string> = {
   deleted: "deleted it",
   access_changed: "changed who can see it",
 };
+
+function FilterButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "h-8 rounded-full px-3 text-xs font-medium",
+        active ? "bg-foreground text-background" : "bg-muted text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
 
 function linkFor(url: string | null) {
   if (!url) return null;
@@ -329,6 +354,11 @@ function CredentialCard({
               </p>
             )
           ) : null}
+          {credential.projectName || credential.projectId === null ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              {credential.projectName ?? "No project"}
+            </p>
+          ) : null}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
             {credential.restricted ? (
               <span className="inline-flex items-center gap-1.5">
@@ -352,7 +382,7 @@ function CredentialCard({
               </span>
             ) : (
               <span className="inline-flex items-center gap-1">
-                <Users className="size-3" /> Project team
+                <Users className="size-3" /> {credential.projectId ? "Project team" : "Studio"}
               </span>
             )}
             <span>
@@ -498,33 +528,49 @@ export function CredentialsVault({
   team,
   always,
   people,
+  projects,
+  teamsByProject,
+  studioTeam,
   canCreate,
   configured,
 }: {
   orgSlug: string;
-  projectId: string;
+  projectId: string | null;
   credentials: CredentialRecord[];
   team: CredentialPerson[];
   always: CredentialPerson[];
   people: CredentialPerson[];
+  projects?: { id: string; name: string }[];
+  teamsByProject?: Record<string, CredentialPerson[]>;
+  studioTeam?: CredentialPerson[];
   canCreate: boolean;
   configured: boolean;
 }) {
   const [query, setQuery] = useState("");
+  const [kind, setKind] = useState<CredentialKind | "all">("all");
+  const [projectFilter, setProjectFilter] = useState("all");
   const [formFor, setFormFor] = useState<CredentialRecord | "new" | null>(null);
   const [historyFor, setHistoryFor] = useState<CredentialRecord | null>(null);
   const peopleById = useMemo(() => new Map(people.map((p) => [p.userId, p])), [people]);
+  const studioList = Boolean(projects);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return credentials;
-    return credentials.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.url ?? "").toLowerCase().includes(q) ||
-        CREDENTIAL_KIND_LABEL[c.kind].toLowerCase().includes(q),
-    );
-  }, [credentials, query]);
+    return credentials.filter((credential) => {
+      if (kind !== "all" && credential.kind !== kind) return false;
+      if (studioList && projectFilter === "studio" && credential.projectId) return false;
+      if (studioList && projectFilter !== "all" && projectFilter !== "studio" && credential.projectId !== projectFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        credential.name.toLowerCase().includes(q) ||
+        (credential.url ?? "").toLowerCase().includes(q) ||
+        (credential.projectName ?? "").toLowerCase().includes(q) ||
+        CREDENTIAL_KIND_LABEL[credential.kind].toLowerCase().includes(q)
+      );
+    });
+  }, [credentials, kind, projectFilter, query, studioList]);
 
   const newButton =
     canCreate && configured ? (
@@ -557,17 +603,49 @@ export function CredentialsVault({
           <ShieldCheck className="size-3.5 text-emerald-500" />
           Encrypted · every reveal is logged
         </span>
+        {studioList ? (
+          <NativeSelect
+            value={projectFilter}
+            onChange={(event) => setProjectFilter(event.target.value)}
+            aria-label="Filter by project"
+            className="w-auto min-w-40"
+          >
+            <option value="all">All projects</option>
+            <option value="studio">No project</option>
+            {projects?.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </NativeSelect>
+        ) : null}
         <div className="ml-auto">{newButton}</div>
       </div>
+      {studioList ? (
+        <div className="flex flex-wrap gap-1.5">
+          <FilterButton active={kind === "all"} onClick={() => setKind("all")}>
+            All types
+          </FilterButton>
+          {(Object.keys(CREDENTIAL_KIND_LABEL) as CredentialKind[]).map((value) => (
+            <FilterButton key={value} active={kind === value} onClick={() => setKind(value)}>
+              {CREDENTIAL_KIND_LABEL[value]}
+            </FilterButton>
+          ))}
+        </div>
+      ) : null}
 
       {credentials.length === 0 ? (
         <EmptyState icon={KeyRound}
           title="No credentials yet"
-          body="Keep logins, API keys, and server access for this project in one place instead of spreadsheets and chats. Everything is encrypted, and you choose who can see each one."
+          body={
+            studioList
+              ? "Keep logins, API keys, and server access here. Leave the project blank for studio-wide credentials, or attach one when it belongs to a project."
+              : "Keep logins, API keys, and server access for this project in one place instead of spreadsheets and chats. Everything is encrypted, and you choose who can see each one."
+          }
           action={newButton}
         />
       ) : filtered.length === 0 ? (
-        <p className="px-1 text-sm text-muted-foreground">Nothing matches “{query}”.</p>
+        <p className="px-1 text-sm text-muted-foreground">Nothing matches those filters.</p>
       ) : (
         <ul className="grid gap-2.5 xl:grid-cols-2">
           {filtered.map((credential) => (
@@ -588,6 +666,9 @@ export function CredentialsVault({
           key={formFor === "new" ? "new" : formFor.id}
           orgSlug={orgSlug}
           projectId={projectId}
+          projects={projects}
+          teamsByProject={teamsByProject}
+          studioTeam={studioTeam}
           credential={formFor === "new" ? undefined : formFor}
           team={team}
           always={always}

@@ -10,6 +10,7 @@ import {
   FolderKanban,
   Handshake,
   Home,
+  KeyRound,
   LifeBuoy,
   LogOut,
   MailCheck,
@@ -34,7 +35,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command";
 import { signOutAction } from "@/modules/identity/actions";
-import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
+import { canAccessModule, canAccessProjectTab, type MemberPermissions } from "@/modules/identity/permissions";
 import type { Organization } from "@/modules/identity/types";
 import { searchDocs } from "@/modules/docs/search";
 import type { DocSearchEntry } from "@/modules/docs/types";
@@ -97,6 +98,7 @@ export function CommandPalette({
       `${base}/projects`,
       `${base}/board`,
       `${base}/documents`,
+      `${base}/credentials`,
       `${base}/team`,
       `${base}/finance`,
       `${base}/partners`,
@@ -177,6 +179,11 @@ export function CommandPalette({
           {show("documents") ? (
             <CommandItem onSelect={() => go(`${base}/documents`)}>
               <FileText /> Documents
+            </CommandItem>
+          ) : null}
+          {canAccessProjectTab(permissions, "credentials") ? (
+            <CommandItem onSelect={() => go(`${base}/credentials`)}>
+              <KeyRound /> Credentials
             </CommandItem>
           ) : null}
           {show("finance") ? (

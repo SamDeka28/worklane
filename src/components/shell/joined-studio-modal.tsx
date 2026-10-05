@@ -11,6 +11,7 @@ import {
   FileText,
   FolderKanban,
   Handshake,
+  KeyRound,
   LayoutDashboard,
   Lock,
   Plus,
@@ -32,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { markMemberWelcomedAction } from "@/modules/identity/actions";
 import {
   canAccessModule,
+  canAccessProjectTab,
   type MemberPermissions,
 } from "@/modules/identity/permissions";
 import type { OrgRole } from "@/modules/identity/types";
@@ -122,6 +124,7 @@ export function JoinedStudioModal({
       { key: "projects", label: "Projects", blurb: JOURNEY.projects.purpose, icon: FolderKanban, visible: canAccessModule(permissions, "delivery") },
       { key: "board", label: "Board", blurb: "Kanban for delivery work across projects", icon: Columns3, visible: canAccessModule(permissions, "delivery") },
       { key: "documents", label: "Documents", blurb: JOURNEY.documents.purpose, icon: FileText, visible: canAccessModule(permissions, "documents") },
+      { key: "credentials", label: "Credentials", blurb: JOURNEY.credentials.purpose, icon: KeyRound, visible: canAccessProjectTab(permissions, "credentials") },
       { key: "team", label: "Team", blurb: "People, invites, and studio access", icon: UserRound, visible: true },
       { key: "finance", label: "Finance", blurb: JOURNEY.finance.purpose, icon: Wallet, visible: canAccessModule(permissions, "finance") },
       { key: "partners", label: "Partners", blurb: JOURNEY.partners.purpose, icon: Handshake, visible: canAccessModule(permissions, "partners") },

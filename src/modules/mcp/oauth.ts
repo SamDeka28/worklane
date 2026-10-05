@@ -40,7 +40,7 @@ export function isAllowedRedirect(uri: string) {
     if (url.pathname === "/connector_platform_oauth_redirect") return true;
     if (url.pathname.startsWith("/connector/oauth/")) return true;
   }
-  if (url.protocol === "https:" && (url.hostname === "claude.ai" || url.hostname.endsWith(".claude.ai"))) {
+  if (url.protocol === "https:" && (url.hostname === "claude.ai" || url.hostname === "claude.com" || url.hostname.endsWith(".claude.ai") || url.hostname.endsWith(".claude.com"))) {
     return true;
   }
   const loopback = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
@@ -91,13 +91,24 @@ export async function registerOauthClient(input: {
   return { clientId, clientName: name, redirectUris: uris };
 }
 
+const CLAUDE_CIMD_PATHS = new Set([
+  "/api/oauth/mcp-oauth-client-metadata",
+  "/oauth/mcp-oauth-client-metadata",
+  "/oauth/claude-code-client-metadata",
+]);
+
 function cimdDocumentUrl(clientId: string) {
   try {
     const url = new URL(clientId);
-    if (url.protocol !== "https:" || url.hostname !== "chatgpt.com") return null;
+    if (url.protocol !== "https:") return null;
     if (url.username || url.password || url.search || url.hash) return null;
-    if (!url.pathname.startsWith("/oauth/") || !url.pathname.endsWith("/client.json")) return null;
-    return url;
+    if (url.hostname === "chatgpt.com") {
+      if (!url.pathname.startsWith("/oauth/") || !url.pathname.endsWith("/client.json")) return null;
+      return url;
+    }
+    const claudeHost = url.hostname === "claude.ai" || url.hostname === "claude.com";
+    if (claudeHost && CLAUDE_CIMD_PATHS.has(url.pathname.replace(/\/$/, ""))) return url;
+    return null;
   } catch {
     return null;
   }
@@ -116,7 +127,7 @@ async function loadCimdClient(documentUrl: URL): Promise<OauthClient | null> {
   if (redirectUris.length === 0) return null;
   const client: OauthClient = {
     clientId: documentUrl.toString(),
-    clientName: body?.client_name?.trim().slice(0, 80) || "ChatGPT",
+    clientName: body?.client_name?.trim().slice(0, 80) || (documentUrl.hostname.startsWith("claude") ? "Claude" : "ChatGPT"),
     redirectUris,
   };
   const { error } = await admin().from("oauth_clients").upsert(
@@ -131,7 +142,7 @@ async function loadCimdClient(documentUrl: URL): Promise<OauthClient | null> {
   return client;
 }
 
-/** A registered assistant, or ChatGPT identified by its client metadata document. */
+/** A registered assistant, or ChatGPT or Claude identified by its client metadata document. */
 export async function resolveOauthClient(clientId: string): Promise<OauthClient | null> {
   const documentUrl = cimdDocumentUrl(clientId);
   if (documentUrl) return loadCimdClient(documentUrl);

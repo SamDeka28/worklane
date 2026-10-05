@@ -188,7 +188,7 @@ export function DocumentReviewPanel({
             formData.set("send_id", sendId);
             start(async () => {
               const result = await replyDocumentFeedbackAction(orgSlug, documentId, formData);
-              if ("error" in result && result.error) {
+              if ("error" in result) {
                 toast.error(result.error);
                 return;
               }

@@ -702,7 +702,73 @@ export function DocumentEditor({
         bodyClassName="flex flex-col gap-3 p-3 lg:p-0 lg:pb-2"
       >
         <RailCard title="Linked to" description="Tags and tables pull live data from these records.">
-          {canWrite && !editLocked ? (
+          {canWrite && (document.status === "signed" || document.status === "accepted") && (!document.clientId || !document.projectId) ? (
+            <div className="grid gap-3">
+              {document.clientId ? (
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-muted-foreground">Client</span>
+                  <span className="truncate font-medium">{displayClient ?? "N/A"}</span>
+                </div>
+              ) : (
+                <Field label="Client" htmlFor="studio_client">
+                  <NativeSelect
+                    id="studio_client"
+                    value={clientId}
+                    disabled={pending}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setClientId(next);
+                      start(async () => {
+                        const result = await updateDocumentLinksAction(orgSlug, document.id, { clientId: next || null });
+                        if (result.error) toast.error(result.error);
+                        else router.refresh();
+                      });
+                    }}
+                  >
+                    <option value="">No client</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              )}
+              {document.projectId ? (
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-muted-foreground">Project</span>
+                  <span className="truncate font-medium">{displayProject ?? "N/A"}</span>
+                </div>
+              ) : (
+                <Field label="Project" htmlFor="studio_project" hint={clientId ? undefined : "Pick a client first"}>
+                  <NativeSelect
+                    id="studio_project"
+                    value={projectId}
+                    disabled={pending || !clientId}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setProjectId(next);
+                      start(async () => {
+                        const result = await updateDocumentLinksAction(orgSlug, document.id, { projectId: next || null });
+                        if (result.error) toast.error(result.error);
+                        else {
+                          if (result.clientId) setClientId(result.clientId);
+                          router.refresh();
+                        }
+                      });
+                    }}
+                  >
+                    <option value="">No project</option>
+                    {scopedProjects.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              )}
+            </div>
+          ) : canWrite && !editLocked ? (
             <div className="grid gap-3">
               <Field label="Client" htmlFor="studio_client">
                 <NativeSelect

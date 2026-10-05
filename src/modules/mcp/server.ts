@@ -1,6 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { OrgContext } from "@/modules/identity/org";
 import { z } from "zod";
+import { bearerChallenge, READ_SCOPE, WRITE_SCOPE } from "@/modules/mcp/origin";
+import { attentionFor, entityContext, financialSnapshot, projectHealth, studioHealth } from "@/modules/mcp/intelligence";
 import { registerStudioActions } from "@/modules/mcp/writes";
 import { describeStudioData, queryStudio } from "@/modules/mcp/query";
 import {
@@ -13,6 +16,7 @@ import {
   readProject,
   readProjects,
   readStudios,
+  studioFor,
   TOOL_NOTE,
 } from "@/modules/mcp/reads";
 
@@ -42,9 +46,7 @@ export function connectRequired(origin: string) {
     ],
     isError: true as const,
     _meta: {
-      "mcp/www_authenticate": [
-        `'Bearer realm="worklane", resource_metadata="${origin}/.well-known/oauth-protected-resource", error="insufficient_scope", error_description="You need to login to continue", scope="worklane:read"'`,
-      ],
+      "mcp/www_authenticate": [`'${bearerChallenge(origin, READ_SCOPE)}'`],
     },
   };
 }
@@ -61,7 +63,7 @@ export function writeRequired(origin: string) {
     isError: true as const,
     _meta: {
       "mcp/www_authenticate": [
-        `'Bearer realm="worklane", resource_metadata="${origin}/.well-known/oauth-protected-resource", error="insufficient_scope", error_description="Allow changes to continue", scope="worklane:write"'`,
+        `'${bearerChallenge(origin, WRITE_SCOPE, "Allow changes to continue")}'`,
       ],
     },
   };
@@ -84,7 +86,7 @@ export function createWorklaneMcpServer(input: {
     { name: "Worklane", version: "1.0.0" },
     {
       instructions:
-        "Call Worklane tools for this member's studios. If a tool requires authentication, ask them to connect. If changes are not allowed, ask them to connect again and allow changes. Use describe_studio_data, then query_studio, until a cross-record question is answered. Do not invent records. Claim a create, change, send, void, or delete only when the tool result says it happened.",
+        "Call Worklane tools for this member's studios. Pass org when they belong to more than one studio. Create a proposal or SOW with list_document_templates, then create_document, create_proposal, or create_sow using templateId and data. Do not write the document as Markdown in body. preview_document returns previewUrl, the PDF of the current version. send_document is Send by email: it attaches that PDF and emails the client a private link so they can sign. countersign_document signs for the studio after the client has signed. send_signed_copy emails the signed PDF. reply_document emails the client a reply. cc is a comma-separated list of up to 5 addresses on send_document, send_signed_copy, send_email, send_lead_email, send_invoice, and send_timesheet. For how the studio is doing, what needs attention, or one project, client, or lead, call get_studio_health, get_attention_items, get_next_actions, get_project_health, get_entity_context, or get_financial_snapshot. Use query_studio for anything else. billed, collected, outstanding, overdue, and contracted are different, and currencies stay separate. Claim a create, change, send, void, or delete only when the tool result says it happened.",
     },
   );
 
@@ -296,6 +298,91 @@ export function createWorklaneMcpServer(input: {
       ...auth,
     },
     async (input) => (reader ? result(await readLead(reader, input)) : connectRequired(origin)),
+  );
+
+  const withStudio = async (input: { org?: string }, fn: (ctx: OrgContext) => Promise<unknown>) => {
+    if (!reader) return connectRequired(origin);
+    const ctx = await studioFor(reader, input.org);
+    if ("error" in ctx) return result(ctx);
+    return result(await fn(ctx));
+  };
+
+  server.registerTool(
+    "get_studio_health",
+    {
+      title: "Studio health",
+      description: "One view of the studio: active projects, open leads, money by currency, and the first items that need attention.",
+      inputSchema: { org: orgField },
+      ...auth,
+    },
+    async (input) => withStudio(input, (ctx) => studioHealth(ctx)),
+  );
+  server.registerTool(
+    "get_attention_items",
+    {
+      title: "What needs attention",
+      description: "Overdue charges, lead follow-ups, overdue tasks and milestones, and documents still waiting for a signature.",
+      inputSchema: { org: orgField },
+      ...auth,
+    },
+    async (input) => withStudio(input, (ctx) => attentionFor(ctx)),
+  );
+  server.registerTool(
+    "get_next_actions",
+    {
+      title: "Next actions",
+      description: "The due and overdue items to handle next, including each lead's stored next action.",
+      inputSchema: { org: orgField },
+      ...auth,
+    },
+    async (input) => withStudio(input, async (ctx) => ({ actions: await attentionFor(ctx) })),
+  );
+  server.registerTool(
+    "get_project_health",
+    {
+      title: "Project health",
+      description: "Status, client, tasks, hours, milestones, documents, money when visible, and the next action for one project.",
+      inputSchema: { org: orgField, id: z.string().describe("Project id.") },
+      ...auth,
+    },
+    async (input) => withStudio(input, (ctx) => projectHealth(ctx, input.id)),
+  );
+  server.registerTool(
+    "get_entity_context",
+    {
+      title: "Entity context",
+      description: "Context for one client, project, or lead. Pass kind as client, project, or lead, and id.",
+      inputSchema: {
+        org: orgField,
+        id: z.string().describe("Client, project, or lead id."),
+        kind: z.enum(["client", "project", "lead"]).describe("Which record id refers to."),
+      },
+      ...auth,
+    },
+    async (input) =>
+      withStudio(input, (ctx) =>
+        entityContext(ctx, {
+          id: input.id,
+          kind: input.kind,
+          clientId: input.kind === "client" ? input.id : undefined,
+          projectId: input.kind === "project" ? input.id : undefined,
+          leadId: input.kind === "lead" ? input.id : undefined,
+        }),
+      ),
+  );
+  server.registerTool(
+    "get_financial_snapshot",
+    {
+      title: "Financial snapshot",
+      description: "Billed, collected, outstanding, overdue, and contracted, kept separate by currency. Optional client or project scope.",
+      inputSchema: {
+        org: orgField,
+        clientId: z.string().optional(),
+        projectId: z.string().optional(),
+      },
+      ...auth,
+    },
+    async (input) => withStudio(input, (ctx) => financialSnapshot(ctx, input)),
   );
 
   registerStudioActions(server, { origin, reader: reader ?? null, connectRequired, writeRequired, result });

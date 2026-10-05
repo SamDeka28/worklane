@@ -806,7 +806,7 @@ export const DATASETS: Dataset[] = [
     orderField: "name",
     fields: [
       id("id", "Credential id."),
-      id("project_id", "Project id."),
+      id("project_id", "Project id, if this credential is linked to one."),
       text("name", "Name.", true),
       text("kind", "login, api_key, database, server, email, or other."),
       text("url", "Where it is used."),

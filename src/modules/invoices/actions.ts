@@ -1209,7 +1209,7 @@ export async function deleteInvoiceTemplateAction(orgSlug: string, templateId: s
 export async function sendInvoiceForContext(
   ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
   invoiceId: string,
-  input: { to?: string; message?: string; reminder?: boolean } = {},
+  input: { to?: string; cc?: string; message?: string; reminder?: boolean } = {},
 ) {
   const orgSlug = ctx.org.slug;
   const invoice = await getInvoice(orgSlug, invoiceId, ctx);
@@ -1238,6 +1238,11 @@ export async function sendInvoiceForContext(
 
   if (!to) return { error: "Add an email under Billed to, or enter a recipient" };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return { error: "Enter a valid recipient email" };
+  const cc = [...new Set((input.cc ?? "").split(/[,;\s]+/).map((value) => value.trim()).filter(Boolean))]
+    .filter((value) => value.toLowerCase() !== to.toLowerCase());
+  if (cc.length > 5 || cc.some((value) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))) {
+    return { error: "Enter up to 5 valid CC email addresses" };
+  }
 
   const { buffer, clientName, brand, paidMinor } = await renderInvoicePdf(orgSlug, invoice, ctx);
   const balance = invoiceSubtotalMinor(invoice.lines) - paidMinor;
@@ -1259,6 +1264,7 @@ export async function sendInvoiceForContext(
     userId: ctx.userId,
   }, {
     to,
+    cc,
     subject: reminder
       ? `Reminder: invoice ${invoice.number} from ${emailInput.orgName} – ${emailInput.amountLabel} due`
       : `Invoice ${invoice.number} from ${emailInput.orgName} – ${emailInput.amountLabel}`,
@@ -1281,7 +1287,7 @@ export async function sendInvoiceForContext(
     verb: reminder ? "reminded" : "sent",
     entity_type: "invoice",
     entity_id: invoiceId,
-    metadata: { number: invoice.number, to },
+    metadata: { number: invoice.number, to, cc },
   });
   await notifyOwners({
     organizationId: ctx.org.id,
@@ -1305,6 +1311,7 @@ export async function sendInvoiceEmailAction(orgSlug: string, invoiceId: string,
   const ctx = await requireWritableOrg(orgSlug);
   return sendInvoiceForContext(ctx, invoiceId, {
     to: String(formData?.get("to") ?? ""),
+    cc: String(formData?.get("cc") ?? ""),
     message: String(formData?.get("message") ?? ""),
     reminder: String(formData?.get("kind") ?? "") === "reminder",
   });

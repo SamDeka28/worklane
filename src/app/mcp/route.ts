@@ -1,7 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { resolveAccessToken } from "@/modules/mcp/oauth";
-import { requestOrigin } from "@/modules/mcp/origin";
-import { createWorklaneMcpServer } from "@/modules/mcp/server";
+import { bearerChallenge, requestOrigin } from "@/modules/mcp/origin";
+import { connectRequired, createWorklaneMcpServer } from "@/modules/mcp/server";
 import { createMemberSupabaseClient } from "@/modules/mcp/session";
 
 export const runtime = "nodejs";
@@ -74,11 +74,44 @@ function withCors(response: Response) {
   return new Response(response.body, { status: response.status, headers });
 }
 
+async function unauthorized(request: Request, origin: string) {
+  let id: string | number | null = null;
+  const text = await request.clone().text().catch(() => "");
+  try {
+    const body = JSON.parse(text) as { id?: unknown };
+    if (typeof body.id === "string" || typeof body.id === "number") id = body.id;
+  } catch {
+    id = null;
+  }
+  const challenge = connectRequired(origin);
+  return withCors(
+    new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id,
+        error: {
+          code: -32001,
+          message: "Authentication required: no access token provided.",
+          data: { _meta: challenge._meta },
+        },
+      }),
+      {
+        status: 401,
+        headers: {
+          "Content-Type": "application/json",
+          "WWW-Authenticate": bearerChallenge(origin),
+        },
+      },
+    ),
+  );
+}
+
 async function handle(request: Request) {
   const origin = requestOrigin(request);
   const header = request.headers.get("authorization") ?? "";
   const token = /^bearer\s+/i.test(header) ? header.replace(/^bearer\s+/i, "").trim() : "";
   const grant = token ? await resolveAccessToken(token).catch(() => null) : null;
+  if (!grant) return unauthorized(request, origin);
 
   const server = createWorklaneMcpServer({
     origin,

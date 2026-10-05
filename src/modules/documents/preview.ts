@@ -1,6 +1,7 @@
 import type { JSONContent } from "@tiptap/core";
 import { documentsOnProject } from "@/modules/documents/queries";
 import { proseFromDoc } from "@/modules/documents/prose";
+import { documentPreviewUrl, documentWarnings } from "@/modules/documents/structured";
 import type { OrgContext } from "@/modules/identity/org";
 import { previewDocumentText } from "@/modules/records/mutate";
 
@@ -8,13 +9,18 @@ const ONE_LIMIT = 20_000;
 const LIST_LIMIT = 4_000;
 const LIST_CAP = 20;
 
+function previewLinks(ctx: OrgContext, documentId: string, version: number | null) {
+  const previewUrl = documentPreviewUrl(ctx.org.slug, documentId, version);
+  return { previewUrl, pdfUrl: previewUrl };
+}
+
 function clip(text: string, max: number) {
   if (text.length <= max) return { text, truncated: false };
   return { text: `${text.slice(0, max)}\n…`, truncated: true };
 }
 
 async function versionText(ctx: OrgContext, documentIds: string[]) {
-  const text = new Map<string, { body: string; version: number }>();
+  const text = new Map<string, { body: string; version: number; content: JSONContent }>();
   if (documentIds.length === 0) return text;
   const { data } = await ctx.supabase
     .from("document_versions")
@@ -25,9 +31,11 @@ async function versionText(ctx: OrgContext, documentIds: string[]) {
   for (const row of data ?? []) {
     const id = row.document_id as string;
     if (text.has(id)) continue;
+    const content = (row.content_doc as JSONContent) ?? { type: "doc", content: [] };
     text.set(id, {
       version: Number(row.version_number),
-      body: proseFromDoc(row.content_doc as JSONContent),
+      body: proseFromDoc(content),
+      content,
     });
   }
   return text;
@@ -64,13 +72,20 @@ async function previewOne(ctx: OrgContext, id: string) {
     (document.project_id as string | null) ?? null,
   );
   const body = clip(version?.body ?? "", ONE_LIMIT);
+  const versionNumber = version?.version ?? null;
   return {
     id: document.id as string,
     title: document.title as string,
     kind: document.kind as string,
     status: document.status as string,
-    version: version?.version ?? null,
+    version: versionNumber,
     ...names,
+    ...previewLinks(ctx, document.id as string, versionNumber),
+    validation: documentWarnings(version?.content ?? { type: "doc", content: [] }, {
+      title: document.title as string,
+      clientId: (document.client_id as string | null) ?? null,
+      projectId: (document.project_id as string | null) ?? null,
+    }),
     text: body.text,
     truncated: body.truncated,
   };
@@ -109,6 +124,7 @@ async function previewProject(ctx: OrgContext, projectId: string) {
         status: doc.status,
         version: versions.get(doc.id)?.version ?? null,
         linkedBy: doc.mentionedVia === "client" ? "client" : doc.projectId === projectId ? "project" : "mention",
+        ...previewLinks(ctx, doc.id, versions.get(doc.id)?.version ?? null),
         text: body.text,
         truncated: body.truncated,
       };
@@ -167,11 +183,27 @@ async function previewClient(ctx: OrgContext, clientId: string) {
         version: versions.get(id)?.version ?? null,
         projectId,
         projectName: projectId ? projectNames.get(projectId) ?? null : null,
+        ...previewLinks(ctx, id, versions.get(id)?.version ?? null),
         text: body.text,
         truncated: body.truncated,
       };
     }),
     documentsTruncated: rows.length > shown.length,
+  };
+}
+
+export async function validateDocumentForContext(ctx: OrgContext, id: string) {
+  if (!ctx.org.modules.documents) return { error: "Documents are turned off for this studio." };
+  const preview = await previewOne(ctx, id);
+  if ("error" in preview) return preview;
+  return {
+    id: preview.id,
+    title: preview.title,
+    version: preview.version,
+    status: preview.status,
+    previewUrl: preview.previewUrl,
+    pdfUrl: preview.pdfUrl,
+    validation: preview.validation,
   };
 }
 

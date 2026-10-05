@@ -94,6 +94,9 @@ function PasswordInput({
 export function CredentialFormSheet({
   orgSlug,
   projectId,
+  projects,
+  teamsByProject,
+  studioTeam,
   credential,
   team,
   always,
@@ -101,7 +104,11 @@ export function CredentialFormSheet({
   onOpenChange,
 }: {
   orgSlug: string;
-  projectId: string;
+  projectId: string | null;
+  /** When set, the sheet can attach the credential to a project or leave it on the studio. */
+  projects?: { id: string; name: string }[];
+  teamsByProject?: Record<string, CredentialPerson[]>;
+  studioTeam?: CredentialPerson[];
   /** Omit to create. */
   credential?: CredentialRecord;
   team: CredentialPerson[];
@@ -119,6 +126,14 @@ export function CredentialFormSheet({
   useEffect(() => {
     onOpenChangeRef.current = onOpenChange;
   });
+  const choosingProject = Boolean(projects);
+  const [assignedProject, setAssignedProject] = useState(credential?.projectId ?? projectId ?? "");
+  const activeTeam = choosingProject
+    ? assignedProject
+      ? (teamsByProject?.[assignedProject] ?? [])
+      : (studioTeam ?? team)
+    : team;
+  const onProject = choosingProject ? Boolean(assignedProject) : Boolean(projectId);
   const [name, setName] = useState(credential?.name ?? "");
   const [kind, setKind] = useState<CredentialKind>(credential?.kind ?? "login");
   const [url, setUrl] = useState(credential?.url ?? "");
@@ -161,7 +176,7 @@ export function CredentialFormSheet({
       return;
     }
     start(async () => {
-      const result = await saveCredentialAction(orgSlug, projectId, {
+      const result = await saveCredentialAction(orgSlug, choosingProject ? assignedProject || null : projectId, {
         id: credential?.id,
         name,
         kind,
@@ -238,7 +253,32 @@ export function CredentialFormSheet({
               ))}
             </NativeSelect>
           </div>
-          <div className="grid gap-1.5">
+          {choosingProject ? (
+            <div className="grid gap-1.5">
+              <Label htmlFor="cred-project">Project</Label>
+              <NativeSelect
+                id="cred-project"
+                value={assignedProject}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setAssignedProject(next);
+                  const nextTeam = next
+                    ? (teamsByProject?.[next] ?? [])
+                    : (studioTeam ?? team);
+                  const allowed = new Set(nextTeam.map((person) => person.userId));
+                  setAccessIds((prev) => prev.filter((id) => allowed.has(id)));
+                }}
+              >
+                <option value="">No project</option>
+                {projects?.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          ) : null}
+          <div className={cn("grid gap-1.5", choosingProject && "sm:col-span-2")}>
             <Label htmlFor="cred-url">URL or host</Label>
             <Input
               id="cred-url"
@@ -381,8 +421,8 @@ export function CredentialFormSheet({
               {[
                 {
                   value: false,
-                  title: "Everyone on this project",
-                  body: "Project team and assigned partners",
+                  title: onProject ? "Everyone on this project" : "Everyone who can open credentials",
+                  body: onProject ? "Project team and assigned partners" : "People with access to the credentials tab",
                   Icon: Users,
                 },
                 {
@@ -418,9 +458,9 @@ export function CredentialFormSheet({
             </div>
 
             {restricted ? (
-              team.length > 0 ? (
+              activeTeam.length > 0 ? (
                 <ul className="grid gap-1 sm:grid-cols-2">
-                  {team.map((person) => {
+                  {activeTeam.map((person) => {
                     const checked = accessIds.includes(person.userId);
                     return (
                       <li key={person.userId}>
@@ -451,7 +491,9 @@ export function CredentialFormSheet({
                 </ul>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No one else is on this project yet. Add teammates from the Split tab.
+                  {onProject
+                    ? "No one else is on this project yet. Add teammates from the Split tab."
+                    : "No other members to choose. Owners and admins can always open credentials."}
                 </p>
               )
             ) : null}

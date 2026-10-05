@@ -20,6 +20,15 @@ export function mcpResource(origin: string) {
   return `${origin}/mcp`;
 }
 
+/** Discovery URL Claude and other clients read from a 401. */
+export function protectedResourceMetadataUrl(origin: string) {
+  return `${origin}/.well-known/oauth-protected-resource/mcp`;
+}
+
+export function bearerChallenge(origin: string, scope = READ_SCOPE, description = "You need to login to continue") {
+  return `Bearer realm="worklane", resource_metadata="${protectedResourceMetadataUrl(origin)}", error="insufficient_scope", error_description="${description}", scope="${scope}"`;
+}
+
 export function protectedResourceMetadata(origin: string) {
   return {
     resource: mcpResource(origin),

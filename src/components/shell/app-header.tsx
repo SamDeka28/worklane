@@ -40,6 +40,7 @@ const TITLES: Record<string, string> = {
   invoices: "Invoices",
   partners: "Partners",
   documents: "Documents",
+  credentials: "Credentials",
   emails: "Emails",
   notifications: "Notifications",
   team: "Team",

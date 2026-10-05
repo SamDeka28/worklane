@@ -1,8 +1,10 @@
+import type { JSONContent } from "@tiptap/core";
 import type { OrgContext } from "@/modules/identity/org";
 import { canAccessModule, canDeleteModule, canWriteModule } from "@/modules/identity/permissions";
 import type { ModuleKey } from "@/modules/identity/types";
 import { proseFromDoc, proseToDoc } from "@/modules/documents/prose";
-import { getDocumentTemplate } from "@/modules/documents/templates";
+import { applyStructuredFills, collectPlaceholders, documentPreviewUrl, documentWarnings, type TemplateFieldValue } from "@/modules/documents/structured";
+import { getDocumentTemplate, type DocumentTemplate } from "@/modules/documents/templates";
 import { invoiceLayoutSpec, INVOICE_LAYOUT_SPECS } from "@/modules/invoices/layouts";
 import { INVOICE_LAYOUTS, type InvoiceLayout } from "@/modules/invoices/settings";
 import { chargeFromWorkLog, hoursToMillis } from "@/modules/delivery/ledger";
@@ -791,21 +793,95 @@ export async function logLeadNoteRecord(ctx: OrgContext, leadId: string, body: s
   return { id: data.id as string };
 }
 
+async function clientMention(ctx: OrgContext, id: string | null) {
+  if (!id) return null;
+  const { data } = await ctx.supabase
+    .from("clients")
+    .select("id, name")
+    .eq("organization_id", ctx.org.id)
+    .eq("id", id)
+    .maybeSingle();
+  if (!data?.name) return null;
+  return { id: data.id as string, label: data.name as string, type: "client" as const };
+}
+
+async function projectMention(ctx: OrgContext, id: string | null) {
+  if (!id) return null;
+  const { data } = await ctx.supabase
+    .from("projects")
+    .select("id, name, client_id")
+    .eq("organization_id", ctx.org.id)
+    .eq("id", id)
+    .maybeSingle();
+  if (!data?.name) return null;
+  return {
+    id: data.id as string,
+    label: data.name as string,
+    type: "project" as const,
+    clientId: (data.client_id as string | null) ?? null,
+  };
+}
+
+function templateForKind(kind: string): DocumentTemplate | null {
+  const normalized = kind === "msa" ? "contract" : kind;
+  return (
+    getDocumentTemplate(
+      normalized === "contract" ? "msa" : normalized === "report" ? "status_report" : normalized,
+    ) ?? null
+  );
+}
+
 export async function createDocumentRecord(
   ctx: OrgContext,
-  input: { title: string; templateId?: string; clientId?: string; projectId?: string; body?: string },
+  input: {
+    title: string;
+    templateId?: string;
+    kind?: string;
+    clientId?: string;
+    projectId?: string;
+    /** Plain text kept for older callers. Ignored when a template, kind, or field data is set. */
+    body?: string;
+    data?: Record<string, TemplateFieldValue>;
+  },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "documents");
   if (blocked) return blocked;
   const title = input.title.trim();
   if (!title) return { error: "Title is required" };
+  if (input.templateId && !getDocumentTemplate(input.templateId)) {
+    return { error: "That document template does not exist." };
+  }
+  if (input.kind && !input.templateId && !templateForKind(input.kind)) {
+    return { error: "That document kind does not have a template." };
+  }
   const supplied = input.body?.trim() ?? "";
-  const template = getDocumentTemplate(input.templateId || "proposal");
-  const content = supplied
-    ? proseToDoc(supplied)
-    : template
-      ? template.build({ title, orgName: ctx.org.name, client: null, project: null })
-      : { type: "doc", content: [{ type: "paragraph" }] };
+  const hasFields = Boolean(input.data && Object.keys(input.data).length > 0);
+  const structured = Boolean(input.templateId || input.kind || hasFields);
+  const template =
+    (input.templateId ? getDocumentTemplate(input.templateId) : null) ??
+    (input.kind ? templateForKind(input.kind) : null) ??
+    (structured || !supplied ? getDocumentTemplate("proposal") : null);
+  let content: JSONContent;
+  let templateId = "custom";
+  let clientId = input.clientId || null;
+  const projectId = input.projectId || null;
+  if (!structured && supplied) {
+    content = proseToDoc(supplied);
+  } else if (template) {
+    const project = await projectMention(ctx, projectId);
+    if (!clientId && project?.clientId) clientId = project.clientId;
+    const client = await clientMention(ctx, clientId);
+    content = template.build({
+      title,
+      orgName: ctx.org.name,
+      client,
+      project: project ? { id: project.id, label: project.label, type: "project" } : null,
+    });
+    if (hasFields && input.data) content = applyStructuredFills(content, input.data);
+    templateId = template.id;
+  } else {
+    return { error: "That document template does not exist." };
+  }
   const { data: document, error } = await ctx.supabase
     .from("documents")
     .insert({
@@ -813,8 +889,8 @@ export async function createDocumentRecord(
       kind: template?.kind ?? "proposal",
       title,
       status: "draft",
-      client_id: input.clientId || null,
-      project_id: input.projectId || null,
+      client_id: clientId,
+      project_id: projectId,
       created_by: ctx.userId,
     })
     .select("id")
@@ -829,10 +905,20 @@ export async function createDocumentRecord(
     created_by: ctx.userId,
   });
   if (versionError) return { error: versionError.message };
+  const previewUrl = documentPreviewUrl(ctx.org.slug, document.id as string, 1);
   return {
     id: document.id as string,
     title,
-    template: supplied ? "custom" : template?.id ?? "blank",
+    template: templateId,
+    version: 1,
+    status: "draft",
+    previewUrl,
+    pdfUrl: previewUrl,
+    validation: documentWarnings(content, {
+      title,
+      clientId,
+      projectId,
+    }),
     text: proseFromDoc(content),
   };
 }
@@ -844,8 +930,10 @@ export function previewDocumentText(input: { title: string; templateId?: string;
   return {
     template: template.id,
     name: template.name,
+    kind: template.kind,
     description: template.description,
     outline: template.outline,
+    fields: collectPlaceholders(content),
     text: textFromContent(content),
   };
 }

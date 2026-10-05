@@ -10,6 +10,7 @@ import {
   FileText,
   FolderKanban,
   Handshake,
+  KeyRound,
   LayoutDashboard,
   MailCheck,
   Plus,
@@ -33,7 +34,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { canAccessModule, type MemberPermissions } from "@/modules/identity/permissions";
+import { canAccessModule, canAccessProjectTab, type MemberPermissions } from "@/modules/identity/permissions";
 import type { ModuleKey, Organization, OrgRole } from "@/modules/identity/types";
 
 type NavItem = {
@@ -62,6 +63,7 @@ const SECTIONS: Array<{ label: string | null; items: NavItem[] }> = [
       { href: "/projects", label: "Projects", icon: FolderKanban, module: "delivery" },
       { href: "/board", label: "Board", icon: Columns3, module: "delivery" },
       { href: "/documents", label: "Documents", icon: FileText, module: "documents" },
+      { href: "/credentials", label: "Credentials", icon: KeyRound, module: "delivery" },
       { href: "/team", label: "Team", icon: UserRound, module: null },
     ],
   },
@@ -79,7 +81,7 @@ function switchOrgPath(pathname: string, fromSlug: string, toSlug: string) {
   if (!pathname.startsWith(`/${fromSlug}`)) return `/${toSlug}`;
   const rest = pathname.slice(`/${fromSlug}`.length) || "";
   const kept = rest.match(
-    /^(\/(?:crm|clients|emails|projects|board|documents|team|finance|partners|settings|profile|invoices)(?:\/[^/]+)?)/,
+    /^(\/(?:crm|clients|emails|projects|board|documents|credentials|team|finance|partners|settings|profile|invoices)(?:\/[^/]+)?)/,
   );
   if (kept?.[1]) return `/${toSlug}${kept[1]}`;
   if (rest === "" || rest === "/") return `/${toSlug}`;
@@ -237,6 +239,9 @@ export function AppSidebar({
       <nav className="mt-5 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-2 group-data-[expanded=true]/rail:items-stretch xl:items-stretch">
         {SECTIONS.map((section) => {
           const items = section.items.filter((item) => {
+            if (item.href === "/credentials" && !canAccessProjectTab(permissions, "credentials")) {
+              return false;
+            }
             if (!item.module) return true;
             if (!org.modules[item.module]) return false;
             return canAccessModule(permissions, item.module);

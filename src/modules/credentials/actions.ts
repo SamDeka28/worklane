@@ -59,9 +59,14 @@ function hasCredentialsTab(ctx: OrgContext) {
   return canAccessProjectTab(ctx.permissions, "credentials");
 }
 
+function revalidateCredential(orgSlug: string, projectId: string | null) {
+  revalidatePath(`/${orgSlug}/credentials`);
+  if (projectId) revalidatePath(`/${orgSlug}/projects/${projectId}`);
+}
+
 async function logEvent(
   ctx: OrgContext,
-  row: { id: string | null; projectId: string; name: string },
+  row: { id: string | null; projectId: string | null; name: string },
   action: CredentialEventAction,
 ) {
   const admin = createAdminSupabaseClient();
@@ -88,7 +93,7 @@ async function loadVisible(ctx: OrgContext, credentialId: string) {
   if (!data) return null;
   return {
     id: data.id as string,
-    projectId: data.project_id as string,
+    projectId: (data.project_id as string | null) ?? null,
     name: data.name as string,
     restricted: Boolean(data.restricted),
     createdBy: (data.created_by as string | null) ?? null,
@@ -106,7 +111,7 @@ function canManage(ctx: OrgContext, createdBy: string | null) {
 async function syncAccess(
   ctx: OrgContext,
   credentialId: string,
-  projectId: string,
+  projectId: string | null,
   orgSlug: string,
   wanted: string[],
 ): Promise<{ changed: boolean; error?: string }> {
@@ -147,7 +152,7 @@ async function syncAccess(
 
 export async function saveCredentialAction(
   orgSlug: string,
-  projectId: string,
+  projectId: string | null,
   input: CredentialInput & { id?: string },
 ): Promise<Result<{ id: string }>> {
   const ctx = await requireOrg(orgSlug);
@@ -168,6 +173,16 @@ export async function saveCredentialAction(
   const secret = cleanSecret(input.secret);
   const admin = createAdminSupabaseClient()!;
   const now = new Date().toISOString();
+  const assignedProject = projectId?.trim() || null;
+  if (assignedProject) {
+    const { data: project } = await ctx.supabase
+      .from("projects")
+      .select("id")
+      .eq("id", assignedProject)
+      .eq("organization_id", ctx.org.id)
+      .maybeSingle();
+    if (!project) return { error: "That project isn't in this studio" };
+  }
 
   if (!input.id) {
     if (!secret) return { error: "Missing credential details" };
@@ -175,7 +190,7 @@ export async function saveCredentialAction(
     const { error } = await ctx.supabase.from("project_credentials").insert({
       id,
       organization_id: ctx.org.id,
-      project_id: projectId,
+      project_id: assignedProject,
       name,
       kind,
       url,
@@ -183,7 +198,7 @@ export async function saveCredentialAction(
       created_by: ctx.userId,
       updated_by: ctx.userId,
     });
-    if (error) return { error: "You can't add credentials to this project" };
+    if (error) return { error: "You can't add this credential" };
 
     const sealed = sealSecret(JSON.stringify(secret), secretContext(ctx.org.id, id));
     const { error: secretError } = await admin.from("project_credential_secrets").insert({
@@ -200,24 +215,26 @@ export async function saveCredentialAction(
     }
 
     if (restricted) {
-      const access = await syncAccess(ctx, id, projectId, orgSlug, accessUserIds);
+      const access = await syncAccess(ctx, id, assignedProject, orgSlug, accessUserIds);
       if (access.error) return { error: access.error };
     }
-    await logEvent(ctx, { id, projectId, name }, "created");
-    revalidatePath(`/${orgSlug}/projects/${projectId}`);
+    await logEvent(ctx, { id, projectId: assignedProject, name }, "created");
+    revalidateCredential(orgSlug, assignedProject);
     return { ok: true, id };
   }
 
   const existing = await loadVisible(ctx, input.id);
-  if (!existing || existing.projectId !== projectId) {
-    return { error: "Credential not found" };
-  }
+  if (!existing) return { error: "Credential not found" };
   const manager = canManage(ctx, existing.createdBy);
+  if (assignedProject !== existing.projectId && !manager) {
+    return { error: "Only owners, admins, or whoever added it can move this credential" };
+  }
 
   const patch: Record<string, unknown> = {
     name,
     kind,
     url,
+    project_id: assignedProject,
     updated_by: ctx.userId,
     updated_at: now,
   };
@@ -250,7 +267,7 @@ export async function saveCredentialAction(
     const access = await syncAccess(
       ctx,
       existing.id,
-      projectId,
+      assignedProject,
       orgSlug,
       restricted ? accessUserIds : [],
     );
@@ -258,11 +275,12 @@ export async function saveCredentialAction(
     accessChanged = access.changed || existing.restricted !== restricted;
   }
 
-  await logEvent(ctx, { id: existing.id, projectId, name }, "updated");
+  await logEvent(ctx, { id: existing.id, projectId: assignedProject, name }, "updated");
   if (accessChanged) {
-    await logEvent(ctx, { id: existing.id, projectId, name }, "access_changed");
+    await logEvent(ctx, { id: existing.id, projectId: assignedProject, name }, "access_changed");
   }
-  revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  revalidateCredential(orgSlug, existing.projectId);
+  revalidateCredential(orgSlug, assignedProject);
   return { ok: true, id: existing.id };
 }
 
@@ -332,7 +350,7 @@ export async function deleteCredentialAction(
   if (error || !count) return { error: "You can't delete this credential" };
 
   await logEvent(ctx, { id: null, projectId: row.projectId, name: row.name }, "deleted");
-  revalidatePath(`/${orgSlug}/projects/${row.projectId}`);
+  revalidateCredential(orgSlug, row.projectId);
   return { ok: true };
 }
 
