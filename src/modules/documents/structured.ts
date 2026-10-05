@@ -94,6 +94,45 @@ export function listDocumentTemplates() {
   return DOCUMENT_TEMPLATES.map((template) => describeTemplate(template));
 }
 
+const DESIGN: Record<string, string> = {
+  sow: [
+    "Keep this statement of work. Do not replace it with Markdown, a new outline, or write_document.",
+    "Cover, then an info grid (Client, Service provider, SOW number, Effective date, Project, Governing agreement).",
+    "1 Purpose. 2 Background & objectives: one paragraph, then three objective bullets.",
+    "3 Scope of services: three numbered workstreams, then the fixed out-of-scope bullets.",
+    "4 Deliverables table, columns #, Deliverable, Acceptance criteria, Due, rows D1 D2 D3.",
+    "5 Milestones table, columns ID, Milestone, Start, End, rows M1 Discovery & planning, M2 Design / build, M3 Testing & launch.",
+    "6 Roles table, columns Role, Name, Responsibilities, rows Provider project lead, Client sponsor, Client approver.",
+    "7 Fees: one pricing-model sentence, then a payment table with rows Signature, M2 complete, M3 complete, and a total row.",
+    "8 Assumptions & dependencies: two bullets. 9 Change management. 10 Acceptance. 11 Term & termination. Then the signature block.",
+    "Fill with data. sowNumber, effectiveDate, governingAgreement, masterServicesAgreement, businessContext, objectives (up to 3), workstreams (up to 3), assumption, dependency, pricingModel.",
+    "deliverables is one object per row: id, title, description, acceptanceCriteria, dueDate. description is a second line in the Deliverable cell.",
+    "milestones is one object per row: id, title, start, end. roles is one object per row: role, name, responsibilities. name is the person, responsibilities is the duties.",
+    "paymentSchedule is one object per row: milestone, percent, amount, invoicedOn.",
+    "Leave unknown fees, dates, and the MSA as the existing placeholders. Do not invent them. A lead id is not a client.",
+    "preview_document must include the document id. Without an id it returns this blank template, not the saved document.",
+  ].join(" "),
+};
+
+function designFor(template: DocumentTemplate, content: JSONContent) {
+  const specific = DESIGN[template.id];
+  if (specific) return specific;
+  const tables = documentTables(content);
+  const tableLine = tables.length
+    ? `Tables: ${tables.map((table) => `${table.columns.join(", ")} (${table.rows.join(", ") || "rows"})`).join("; ")}.`
+    : "";
+  const sections = template.outline.length ? `Sections: ${template.outline.join(", ")}.` : "";
+  return [
+    `Keep the ${template.name} layout. Fill its highlighted placeholders and table rows.`,
+    sections,
+    tableLine,
+    "Do not replace the layout with Markdown or write_document. Leave unknown fees and dates as placeholders.",
+    "preview_document must include the document id. Without an id it returns this blank template, not the saved document.",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function describeTemplate(template: DocumentTemplate) {
   const content = template.build({ title: template.name, orgName: "Studio" });
   return {
@@ -102,6 +141,7 @@ export function describeTemplate(template: DocumentTemplate) {
     kind: template.kind,
     description: template.description,
     outline: template.outline,
+    design: designFor(template, content),
     fields: collectPlaceholders(content),
     tables: documentTables(content),
   };

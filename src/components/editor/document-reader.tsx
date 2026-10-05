@@ -6,7 +6,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { EditorContent, useEditor, type JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import Image from "@tiptap/extension-image";
+import { DocumentImage } from "@/components/editor/document-image";
 import TextAlign from "@tiptap/extension-text-align";
 import Highlight from "@tiptap/extension-highlight";
 import { TextStyleKit } from "@tiptap/extension-text-style";
@@ -74,7 +74,7 @@ export function DocumentReader({
       StarterKit.configure({ heading: false, paragraph: false, link: { openOnClick: true } }),
       IndentableParagraph,
       IndentableHeading.configure({ levels: [1, 2, 3] }),
-      Image,
+      DocumentImage,
       TextStyleKit.configure({ fontSize: false }),
       DocumentFontSize,
       Highlight.configure({ multicolor: true }),

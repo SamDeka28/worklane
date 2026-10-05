@@ -9,8 +9,8 @@ const ONE_LIMIT = 20_000;
 const LIST_LIMIT = 4_000;
 const LIST_CAP = 20;
 
-function previewLinks(ctx: OrgContext, documentId: string, version: number | null) {
-  const previewUrl = documentPreviewUrl(ctx.org.slug, documentId, version);
+function previewLinks(ctx: OrgContext, documentId: string) {
+  const previewUrl = documentPreviewUrl(ctx.org.slug, documentId);
   return { previewUrl, pdfUrl: previewUrl };
 }
 
@@ -80,7 +80,8 @@ async function previewOne(ctx: OrgContext, id: string) {
     status: document.status as string,
     version: versionNumber,
     ...names,
-    ...previewLinks(ctx, document.id as string, versionNumber),
+    ...previewLinks(ctx, document.id as string),
+    note: "previewUrl is the saved document, the same version the editor opens. text is only a reading aid.",
     leadId: (document.lead_id as string | null) ?? null,
     validation: documentWarnings(version?.content ?? { type: "doc", content: [] }, {
       title: document.title as string,
@@ -126,7 +127,7 @@ async function previewProject(ctx: OrgContext, projectId: string) {
         status: doc.status,
         version: versions.get(doc.id)?.version ?? null,
         linkedBy: doc.mentionedVia === "client" ? "client" : doc.projectId === projectId ? "project" : "mention",
-        ...previewLinks(ctx, doc.id, versions.get(doc.id)?.version ?? null),
+        ...previewLinks(ctx, doc.id),
         text: body.text,
         truncated: body.truncated,
       };
@@ -185,7 +186,7 @@ async function previewClient(ctx: OrgContext, clientId: string) {
         version: versions.get(id)?.version ?? null,
         projectId,
         projectName: projectId ? projectNames.get(projectId) ?? null : null,
-        ...previewLinks(ctx, id, versions.get(id)?.version ?? null),
+        ...previewLinks(ctx, id),
         text: body.text,
         truncated: body.truncated,
       };

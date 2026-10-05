@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { documentWarnings } from "@/modules/documents/structured";
+import { describeTemplate, documentWarnings } from "@/modules/documents/structured";
 import { applyDocumentData, readTable } from "@/modules/documents/template-fill";
 import { getDocumentTemplate } from "@/modules/documents/templates";
 
@@ -158,6 +158,16 @@ describe("native SOW template fill", () => {
     expect(listText(filled).filter((item) => item.includes("Third-party"))).toEqual([]);
     const payments = readTable(filled, "payments").slice(1);
     expect(payments.every((row) => row[2] === "[$0]")).toBe(true);
+  });
+
+  it("describes the statement of work layout the model must fill", () => {
+    const sow = getDocumentTemplate("sow");
+    expect(sow).toBeTruthy();
+    const design = describeTemplate(sow!).design;
+    expect(design).toMatch(/Do not replace it with Markdown/);
+    expect(design).toMatch(/D1 D2 D3/);
+    expect(design).toMatch(/Provider project lead/);
+    expect(design).toMatch(/blank template, not the saved document/);
   });
 
   it("reports a lead that has not been converted", () => {

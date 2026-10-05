@@ -16,10 +16,13 @@ import {
   Italic,
   Link2,
   List,
+  LayoutGrid,
   ListChecks,
   ListOrdered,
   Minus,
+  PanelTop,
   Paperclip,
+  PenLine,
   Quote,
   Redo2,
   RemoveFormatting,
@@ -47,7 +50,10 @@ import {
   LINE_SPACING_STEPS,
   setBlockLineHeight,
 } from "@/components/editor/indentable-blocks";
+import { shapeNode } from "@/modules/documents/blocks";
 import { cn } from "@/lib/utils";
+
+const CELL_FILLS = ["#ffffff", "#f8fafc", "#f1f5f9", "#0f172a", "#dbeafe", "#dcfce7", "#fef3c7", "#fee2e2"] as const;
 
 function ToolbarButton({
   active,
@@ -194,14 +200,108 @@ function InsertTableMenu({ editor }: { editor: Editor }) {
   );
 }
 
+function InsertShapeMenu({ editor }: { editor: Editor }) {
+  const shapes = [
+    { type: "cover" as const, label: "Cover band", icon: PanelTop },
+    { type: "facts" as const, label: "Fact grid", icon: LayoutGrid },
+    { type: "callout" as const, label: "Callout", icon: Quote },
+    { type: "signatures" as const, label: "Signature block", icon: PenLine },
+  ];
+  return (
+    <>
+      {shapes.map((shape) => {
+        const Icon = shape.icon;
+        return (
+          <ToolbarButton
+            key={shape.type}
+            label={shape.label}
+            onClick={() => editor.chain().focus().insertContent(shapeNode(shape.type)).run()}
+          >
+            <Icon className="size-3.5" />
+          </ToolbarButton>
+        );
+      })}
+    </>
+  );
+}
+
+function ImageSizeControls({ editor }: { editor: Editor }) {
+  if (!editor.isActive("image")) return null;
+  const width = (editor.getAttributes("image").width as number | null) ?? null;
+  return (
+    <>
+      <ToolbarDivider />
+      <span className="px-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+        Image
+      </span>
+      {[160, 320, 480].map((size) => (
+        <ToolbarButton
+          key={size}
+          label={`${size} pixels wide`}
+          active={width === size}
+          onClick={() => editor.chain().focus().updateAttributes("image", { width: size }).run()}
+        >
+          <span className="px-0.5 text-[10px] font-bold">{size}</span>
+        </ToolbarButton>
+      ))}
+      <ToolbarButton
+        label="Full width"
+        active={width == null}
+        onClick={() => editor.chain().focus().updateAttributes("image", { width: null }).run()}
+      >
+        <span className="px-0.5 text-[10px] font-bold">Full</span>
+      </ToolbarButton>
+    </>
+  );
+}
+
 function TableEditControls({ editor }: { editor: Editor }) {
   if (!editor.isActive("table")) return null;
+  const fill = (editor.getAttributes("tableCell").backgroundColor as string | null)
+    ?? (editor.getAttributes("tableHeader").backgroundColor as string | null);
+  const border = (editor.getAttributes("tableCell").borderStyle as string | null)
+    ?? (editor.getAttributes("tableHeader").borderStyle as string | null)
+    ?? "grid";
 
   return (
     <>
       <ToolbarDivider />
       <span className="px-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
         Table
+      </span>
+      <ToolbarSelect
+        label="Cell border"
+        value={border === "bottom" ? "line" : border || "grid"}
+        className="max-w-[6.5rem]"
+        onChange={(value) =>
+          editor
+            .chain()
+            .focus()
+            .setCellAttribute("borderStyle", value === "line" ? "bottom" : value === "grid" ? null : value)
+            .run()
+        }
+      >
+        <option value="grid">Grid</option>
+        <option value="none">Open</option>
+        <option value="line">Rule</option>
+        <option value="band">Band</option>
+      </ToolbarSelect>
+      <span className="inline-flex items-center gap-0.5 px-1" aria-label="Cell fill">
+        {CELL_FILLS.map((color) => (
+          <button
+            key={color}
+            type="button"
+            aria-label={`Cell fill ${color}`}
+            title={`Cell fill ${color}`}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => editor.chain().focus().setCellAttribute("backgroundColor", color === "#ffffff" ? null : color).run()}
+            className={cn(
+              "size-4 rounded-full ring-1 ring-border/70",
+              fill === color && "ring-2 ring-sky-600",
+            )}
+            style={{ backgroundColor: color }}
+          />
+        ))}
       </span>
       <ToolbarButton
         label="Add column after"
@@ -556,7 +656,9 @@ export function DocumentToolbar({
         <Link2 className="size-3.5" />
       </ToolbarButton>
       <InsertTableMenu editor={editor} />
+      <InsertShapeMenu editor={editor} />
       <TableEditControls editor={editor} />
+      <ImageSizeControls editor={editor} />
       {orgSlug && entityType && entityId && onAttachClick ? (
         <ToolbarButton label="Attach file" onClick={onAttachClick}>
           <Paperclip className="size-3.5" />

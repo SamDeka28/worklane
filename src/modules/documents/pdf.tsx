@@ -178,8 +178,9 @@ function Block({ node, depth = 0 }: { node: JSONContent; depth?: number }) {
     case "image": {
       const src = typeof node.attrs?.src === "string" ? node.attrs.src : null;
       if (!src || !/^https?:/.test(src)) return null;
+      const width = typeof node.attrs?.width === "number" ? node.attrs.width : null;
       // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf images have no alt attribute
-      return <Image src={src} style={s.image} />;
+      return <Image src={src} style={width ? [s.image, { width }] : s.image} />;
     }
     case "table":
       return <Table node={node} />;

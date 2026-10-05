@@ -6,7 +6,7 @@ import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
+import { DocumentImage } from "@/components/editor/document-image";
 import TextAlign from "@tiptap/extension-text-align";
 import Highlight from "@tiptap/extension-highlight";
 import { TextStyleKit } from "@tiptap/extension-text-style";
@@ -114,7 +114,7 @@ export function DocumentStudioEditor({
       IndentableParagraph,
       IndentableHeading.configure({ levels: [1, 2, 3] }),
       IndentShortcuts,
-      Image,
+      DocumentImage,
       Placeholder.configure({ placeholder }),
       TextStyleKit.configure({
         fontSize: false,

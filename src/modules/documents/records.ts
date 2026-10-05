@@ -6,6 +6,7 @@ import { documentSendToken, documentViewPath } from "@/modules/documents/sends";
 import { resolveDocumentLinks } from "@/modules/documents/parties";
 import { renderStoredDocumentPdf } from "@/modules/documents/render-pdf";
 import { documentPreviewUrl, documentWarnings, type TemplateFieldValue } from "@/modules/documents/structured";
+import { appendBlocks, blocksToDoc, parseDocumentBlocks } from "@/modules/documents/blocks";
 import { applyDocumentData } from "@/modules/documents/template-fill";
 import { buildBasicDocumentTemplate } from "@/modules/documents/templates";
 import { asDocumentKind, DOCUMENT_KIND_LABEL } from "@/modules/documents/types";
@@ -111,6 +112,52 @@ export async function writeDocumentRecord(
   return { id: input.id, versionId: version.id, text };
 }
 
+export async function composeDocumentRecord(
+  ctx: OrgContext,
+  input: { id: string; content: unknown; placement?: string; title?: string },
+): Promise<WriteResult> {
+  const blocked = assertWrite(ctx, "documents");
+  if (blocked) return blocked;
+  const parsed = parseDocumentBlocks(input.content);
+  if ("error" in parsed) return parsed;
+  const built = blocksToDoc(parsed.blocks);
+  if ("error" in built) return built;
+  const placement = input.placement === "replace" || input.placement === "start" ? input.placement : "append";
+  const loaded = await latestVersion(ctx, input.id);
+  if ("error" in loaded) return loaded;
+  const version = loaded.version;
+  if (version.locked_at || version.status === "signed" || version.status === "accepted") {
+    return { error: "Signed or accepted versions cannot be edited." };
+  }
+  if (version.status === "sent") {
+    return { error: "This version was already sent. Start a new revision before changing it." };
+  }
+  const content = appendBlocks((version.content_doc ?? { type: "doc" }) as JSONContent, built.doc.content ?? [], placement);
+  const { error } = await ctx.supabase
+    .from("document_versions")
+    .update({ content_doc: content })
+    .eq("id", version.id)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+  if (input.title?.trim()) {
+    await ctx.supabase
+      .from("documents")
+      .update({ title: input.title.trim() })
+      .eq("id", input.id)
+      .eq("organization_id", ctx.org.id);
+  }
+  const previewUrl = documentPreviewUrl(ctx.org.slug, input.id);
+  return {
+    id: input.id,
+    versionId: version.id,
+    version: version.version_number,
+    placement,
+    previewUrl,
+    pdfUrl: previewUrl,
+    text: docToPlainText(content),
+  };
+}
+
 export async function fillDocumentRecord(
   ctx: OrgContext,
   input: { id: string; body?: string; title?: string; data?: Record<string, unknown> },
@@ -146,7 +193,7 @@ export async function fillDocumentRecord(
       .eq("id", input.id)
       .eq("organization_id", ctx.org.id);
   }
-  const previewUrl = documentPreviewUrl(ctx.org.slug, input.id, version.version_number);
+  const previewUrl = documentPreviewUrl(ctx.org.slug, input.id);
   return {
     id: input.id,
     versionId: version.id,
@@ -285,7 +332,7 @@ export async function createSowRecord(
     status: "draft",
     created_by: ctx.userId,
   });
-  const previewUrl = documentPreviewUrl(ctx.org.slug, sow.id as string, 1);
+  const previewUrl = documentPreviewUrl(ctx.org.slug, sow.id as string);
   return {
     id: sow.id as string,
     title: sowTitle,

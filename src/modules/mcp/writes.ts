@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { sendLeadEmailForContext } from "@/modules/crm/email-actions";
 import { countersignDocumentForContext, emailSignedCopyForContext } from "@/modules/documents/actions";
+import { documentBlockGuide } from "@/modules/documents/blocks";
 import { previewDocumentsForContext, validateDocumentForContext } from "@/modules/documents/preview";
 import { listDocumentTemplates } from "@/modules/documents/structured";
 import { sendTrackedEmailForContext } from "@/modules/emails/actions";
@@ -26,6 +27,7 @@ import { sendProjectTimesheetForContext } from "@/modules/delivery/timesheet-sen
 import { replyDocumentForContext } from "@/modules/documents/reply";
 import { readDocumentForContext } from "@/modules/mcp/document-read";
 import {
+  composeDocumentRecord,
   createSowRecord,
   fillDocumentRecord,
   linkDocumentRecord,
@@ -92,6 +94,13 @@ const toolShapes: Record<string, z.ZodRawShape> = {
   get_document_preview_url: { id: recordId },
   validate_document: { id: recordId },
   list_document_templates: {},
+  list_document_blocks: {},
+  compose_document: {
+    id: recordId,
+    content: z.string().describe("JSON array of layout blocks from list_document_blocks: paragraph, heading, bullets, numbered, checklist, quote, divider, image, table, cover, facts, callout, signatures."),
+    placement: z.string().optional().describe("append, start, or replace. append keeps the current document and adds the blocks."),
+    title: z.string().optional(),
+  },
   create_document: {
     title: z.string().describe("Document title."),
     templateId: z.string().optional().describe("Template id from list_document_templates. Defaults from kind, or proposal."),
@@ -358,6 +367,8 @@ const toolTitles: Record<string, string> = {
   send_signed_copy: "Email signed PDF",
   reply_document: "Email the client",
   get_document: "Get document",
+  list_document_blocks: "List document blocks",
+  compose_document: "Compose document",
 };
 
 type ToolInput = {
@@ -396,6 +407,8 @@ type ToolInput = {
   sendId?: string;
   emailClient?: boolean | string;
   data?: string;
+  content?: string;
+  placement?: string;
 };
 
 function documentFields(raw?: string): { data: Record<string, unknown> } | { error: string } {
@@ -506,10 +519,13 @@ export function registerStudioActions(
     pending.push({ name, description, destructive, writing, handle });
   };
 
-  add("list_document_templates", "List the studio document templates: id, name, kind, scalar fields, and tables with their columns and row ids. Fill tables with row objects such as deliverables, milestones, roles, and paymentSchedule. Do not copy one string into every row.", false, false, async () =>
+  add("list_document_templates", "List the studio document templates. Each result includes design, the layout to keep: cover, sections, and tables. Fill that design with data. Do not replace it with Markdown or write_document.", false, false, async () =>
     result({ templates: listDocumentTemplates() }),
   );
-  add("preview_document", "Preview a saved document, the documents on a project, or the documents on a client. Pass id for one document. The result includes previewUrl and pdfUrl for the current version PDF. With none of those, preview a template and its fields before saving. Does not save or send.", false, false, (input) =>
+  add("list_document_blocks", "Describe the layout blocks the document editor can place: cover, fact grid, table formatting, images, callouts, and signature blocks. Use compose_document with this content. Does not save.", false, false, async () =>
+    result(documentBlockGuide()),
+  );
+  add("preview_document", "Preview a saved document. Pass id. previewUrl is the current saved document, the same one the editor opens. Without an id this returns the blank template, not a saved document. Does not save or send.", false, false, (input) =>
     run(input, (ctx) =>
       previewDocumentsForContext(ctx, {
         id: input.id,
@@ -636,7 +652,7 @@ export function registerStudioActions(
       }),
     );
   });
-  add("create_document", "Create a draft from an existing template. Pass templateId or kind, and data as JSON. For an SOW, pass deliverables, milestones, roles, workstreams, and paymentSchedule as row objects. Do not copy one string into every row, and do not invent fees or dates. A lead id is not a client. Returns previewUrl. Does not send.", false, true, async (input) => {
+  add("create_document", "Create a draft from an existing template. Call list_document_templates first and follow its design. Pass templateId or kind, and data as JSON that fills that layout. For an SOW, pass deliverables, milestones, roles, workstreams, and paymentSchedule as row objects. Do not copy one string into every row, and do not invent fees or dates. A lead id is not a client. Returns previewUrl for the saved document. Does not send.", false, true, async (input) => {
     const fields = documentFields(input.data);
     if ("error" in fields) return result(fields);
     return run(input, (ctx) =>
@@ -652,7 +668,7 @@ export function registerStudioActions(
       }),
     );
   });
-  add("create_proposal", "Create a draft proposal from the proposal template. Pass data as JSON of the template's field labels. Do not invent fees. Returns previewUrl. Does not send.", false, true, async (input) => {
+  add("create_proposal", "Create a draft proposal from the proposal template. Follow the design from list_document_templates. Pass data as JSON of that layout's fields. Do not invent fees or replace the layout. Returns previewUrl for the saved document. Does not send.", false, true, async (input) => {
     const fields = documentFields(input.data);
     if ("error" in fields) return result(fields);
     return run(input, (ctx) =>
@@ -666,10 +682,20 @@ export function registerStudioActions(
       }),
     );
   });
-  add("write_document", "Legacy. Replaces a draft with plain text and drops the template layout. Prefer create_document with templateId and data, or fill_document. Does not send or sign.", false, true, (input) =>
+  add("compose_document", "Place editor blocks into a draft: cover, facts, tables with cell fill and borders, images, lists, callouts, and signature blocks. content is the JSON from list_document_blocks. placement append adds them, start puts them first, replace rewrites the draft. Does not send or sign.", false, true, (input) =>
+    run(input, (ctx) =>
+      composeDocumentRecord(ctx, {
+        id: input.id || "",
+        content: input.content || input.body || "",
+        placement: input.placement,
+        title: input.title,
+      }),
+    ),
+  );
+  add("write_document", "Legacy plain text. Replaces the designed template with paragraphs and drops tables, images, and layout. Use compose_document for layout, or fill_document for a template. Does not send or sign.", false, true, (input) =>
     run(input, (ctx) => writeDocumentRecord(ctx, { id: input.id || "", body: input.body || "", title: input.title })),
   );
-  add("fill_document", "Fill a draft from the template's own tables. data is JSON with deliverables, milestones, roles, workstreams, and paymentSchedule rows. Each row is written into its own cells. A single string is not copied into every row. Returns previewUrl. Does not send or sign.", false, true, async (input) => {
+  add("fill_document", "Fill the existing template layout. Follow the design from list_document_templates. data is JSON with deliverables, milestones, roles, workstreams, and paymentSchedule, one object per table row. A single string is not copied into every row. Returns previewUrl for the saved document. Does not send or sign.", false, true, async (input) => {
     const fields = documentFields(input.data);
     if ("error" in fields) return result(fields);
     return run(input, (ctx) =>
@@ -684,7 +710,7 @@ export function registerStudioActions(
   add("get_document", "Read one document: status, version, client, project, previewUrl, validation, sends, and signatures. Does not send or sign.", false, false, (input) =>
     run(input, (ctx) => readDocumentForContext(ctx, input.id || "")),
   );
-  add("get_document_preview_url", "Return the authenticated preview URL for the current document version. Opening it shows the PDF. Does not send.", false, false, (input) =>
+  add("get_document_preview_url", "Return the preview URL for the saved document the editor opens. Opening it shows that document, not the blank template. Does not send.", false, false, (input) =>
     run(input, (ctx) => validateDocumentForContext(ctx, input.id || "")),
   );
   add("validate_document", "Check a document for unfilled template fields and a missing client, project, or title. Does not invent values and does not send.", false, false, (input) =>
@@ -693,7 +719,7 @@ export function registerStudioActions(
   add("link_document", "Attach a client, project, or lead using their real ids. A lead id is not a client. If the lead has no client, the document stays unlinked and the result says so. On a signed document, only a missing client or project can be set. Does not rewrite a locked version.", false, true, (input) =>
     run(input, (ctx) => linkDocumentRecord(ctx, { id: input.id || "", clientId: input.clientId, projectId: input.projectId, leadId: input.leadId })),
   );
-  add("create_sow", "Create a draft statement of work from the existing SOW template. Pass data with deliverables, milestones, roles, workstreams, and paymentSchedule as row objects. Do not copy one string into every row, and do not invent fees, dates, or an MSA. Pass leadId when the client does not exist yet. Returns previewUrl. Does not send.", false, true, async (input) => {
+  add("create_sow", "Create a draft statement of work from the SOW template. Follow the design from list_document_templates: cover, info grid, sections 1–11, and the deliverable, milestone, role, and payment tables. Pass those rows as objects. Do not copy one string into every row, and do not invent fees, dates, or an MSA. Pass leadId when the client does not exist yet. Returns previewUrl for the saved document. Does not send.", false, true, async (input) => {
     const fields = documentFields(input.data);
     if ("error" in fields) return result(fields);
     return run(input, (ctx) => {
@@ -881,6 +907,8 @@ export function registerStudioActions(
     "create_document",
     "create_proposal",
     "create_sow",
+    "list_document_blocks",
+    "compose_document",
     "write_document",
     "fill_document",
     "link_document",

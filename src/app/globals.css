@@ -1373,8 +1373,16 @@
   font-size: 14px;
 }
 
-.doc-wysiwyg td[data-border="none"] {
+.doc-wysiwyg td[data-border="none"],
+.doc-wysiwyg th[data-border="none"] {
+  border-color: transparent;
   padding: 0.7rem 0.9rem;
+}
+
+.doc-wysiwyg td[data-border="bottom"],
+.doc-wysiwyg th[data-border="bottom"] {
+  border-color: transparent;
+  border-bottom: 1px solid #334155;
 }
 
 .doc-wysiwyg .tableWrapper:has(td[data-border="band"]) {

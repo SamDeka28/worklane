@@ -42,8 +42,7 @@ export async function readDocumentForContext(ctx: OrgContext, id: string) {
       : Promise.resolve({ data: [] }),
   ]);
 
-  const versionNumber = version ? Number(version.version_number) : null;
-  const previewUrl = documentPreviewUrl(ctx.org.slug, document.id as string, versionNumber);
+  const previewUrl = documentPreviewUrl(ctx.org.slug, document.id as string);
   return {
     id: document.id,
     title: document.title,

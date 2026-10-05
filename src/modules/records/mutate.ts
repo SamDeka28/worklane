@@ -914,7 +914,7 @@ export async function createDocumentRecord(
     created_by: ctx.userId,
   });
   if (versionError) return { error: versionError.message };
-  const previewUrl = documentPreviewUrl(ctx.org.slug, document.id as string, 1);
+  const previewUrl = documentPreviewUrl(ctx.org.slug, document.id as string);
   return {
     id: document.id as string,
     title,
@@ -939,6 +939,7 @@ export function previewDocumentText(input: { title: string; templateId?: string;
   if (!template) return { error: "Unknown document template." };
   const content = template.build({ title: input.title || template.name, orgName: input.orgName });
   return {
+    blankTemplate: true,
     template: template.id,
     name: template.name,
     kind: template.kind,
@@ -946,6 +947,7 @@ export function previewDocumentText(input: { title: string; templateId?: string;
     outline: template.outline,
     fields: collectPlaceholders(content),
     text: textFromContent(content),
+    note: "This is the blank template, not a saved document. Call preview_document with the document id to open the saved document.",
   };
 }
 

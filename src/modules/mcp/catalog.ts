@@ -583,7 +583,7 @@ export const DATASETS: Dataset[] = [
   {
     name: "documents",
     table: "documents",
-    description: "Proposals and statements of work. The body is document_versions.text. Use preview_document for the readable preview.",
+    description: "Proposals and statements of work. The document is the designed template in document_versions.content_doc. preview_document with the document id opens that saved document. A preview without an id is the blank template.",
     module: "documents",
     dateField: "updated_at",
     orderField: "updated_at",
@@ -608,7 +608,7 @@ export const DATASETS: Dataset[] = [
   {
     name: "document_versions",
     table: "document_versions",
-    description: "A saved version. text is the document body as headings and paragraphs.",
+    description: "A saved version of the designed document. text is a flattened reading of content_doc, not a separate body. The editor and the preview PDF use content_doc.",
     module: "documents",
     dateField: "created_at",
     orderField: "version_number",
@@ -616,7 +616,7 @@ export const DATASETS: Dataset[] = [
       id("id", "Version id."),
       id("document_id", "Document id."),
       num("version_number", "Version number."),
-      text("text", "Document body as paragraphs and headings. Not the editor file.", true, "content_doc"),
+      text("text", "Flattened reading of the designed document. The editor and preview use content_doc.", true, "content_doc"),
       text("status", "draft, sent, accepted, signed, or void."),
       date("created_at", "When this version was saved."),
       date("locked_at", "When it was locked for sending."),
