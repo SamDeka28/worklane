@@ -176,13 +176,8 @@ function Block({ node, depth = 0 }: { node: JSONContent; depth?: number }) {
       return (
         <Text style={s.code}>{clean((node.content ?? []).map((child) => child.text ?? "").join(""))}</Text>
       );
-    case "image": {
-      const src = typeof node.attrs?.src === "string" ? node.attrs.src : null;
-      if (!src || !/^https?:/.test(src)) return null;
-      const width = typeof node.attrs?.width === "number" ? node.attrs.width : null;
-      // eslint-disable-next-line jsx-a11y/alt-text -- react-pdf images have no alt attribute
-      return <Image src={src} style={width ? [s.image, { width }] : s.image} />;
-    }
+    case "image":
+      return <PdfImage node={node} />;
     case "diagram":
       return <PdfDiagram node={node} />;
     case "table":
@@ -196,6 +191,34 @@ function Block({ node, depth = 0 }: { node: JSONContent; depth?: number }) {
         </View>
       ) : null;
   }
+}
+
+function PdfImage({ node }: { node: JSONContent }) {
+  const src = typeof node.attrs?.src === "string" ? node.attrs.src : "";
+  const alt = typeof node.attrs?.alt === "string" && node.attrs.alt ? node.attrs.alt : "Image unavailable";
+  const caption = typeof node.attrs?.caption === "string" ? node.attrs.caption.trim() : "";
+  const width = typeof node.attrs?.width === "number" && node.attrs.width > 0 ? Math.min(node.attrs.width, 460) : 460;
+  const align = node.attrs?.align === "center" || node.attrs?.align === "right" ? node.attrs.align : "left";
+  const embeddable =
+    !node.attrs?.unresolved &&
+    (src.startsWith("data:image/png") ||
+      src.startsWith("data:image/jpeg") ||
+      src.startsWith("data:image/jpg") ||
+      /^https?:/.test(src));
+  if (!embeddable) {
+    return (
+      <View style={s.missingImage}>
+        <Text>{clean(alt)}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={[s.imageWrap, { alignSelf: align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start" }]}>
+      {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf images have no alt attribute */}
+      <Image src={src} style={[s.image, { width }]} />
+      {caption ? <Text style={s.caption}>{clean(caption)}</Text> : null}
+    </View>
+  );
 }
 
 function PdfDiagram({ node }: { node: JSONContent }) {
@@ -397,21 +420,8 @@ async function renderBuffer(input: DocumentPdfInput) {
   return Buffer.from(await blob.arrayBuffer());
 }
 
-function withoutImages(node: JSONContent): JSONContent {
-  return {
-    ...node,
-    content: node.content?.filter((child) => child.type !== "image").map(withoutImages),
-  };
-}
-
 export async function renderDocumentPdfBuffer(input: DocumentPdfInput): Promise<Buffer> {
-  try {
-    return await renderBuffer(input);
-  } catch (error) {
-    // Remote images (expired or private URLs) are the usual failure; retry without them.
-    console.error("document pdf render failed, retrying without images", error);
-    return renderBuffer({ ...input, content: withoutImages(input.content) });
-  }
+  return renderBuffer(input);
 }
 
 export function documentPdfFilename(title: string, suffix = "signed") {
@@ -454,7 +464,16 @@ const s = StyleSheet.create({
     padding: 8,
     marginBottom: 8,
   },
-  image: { maxWidth: "100%", marginBottom: 8, objectFit: "contain" },
+  imageWrap: { marginBottom: 8, maxWidth: "100%" },
+  image: { maxWidth: "100%", objectFit: "contain" },
+  caption: { fontSize: 8, color: MUTED, marginTop: 3 },
+  missingImage: {
+    marginBottom: 8,
+    padding: 8,
+    borderWidth: 0.6,
+    borderColor: LINE,
+    color: MUTED,
+  },
   table: { marginBottom: 10 },
   row: { flexDirection: "row" },
   footerRule: {

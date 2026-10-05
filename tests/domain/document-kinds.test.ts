@@ -19,6 +19,7 @@ describe("document kinds", () => {
     expect(json).toContain("Definition of done");
     expect(json).toContain("Document control");
     expect(json).toContain('"type":"diagram"');
+    expect(json).not.toContain('"type":"image"');
     expect(json).not.toContain("Valid until");
   });
 

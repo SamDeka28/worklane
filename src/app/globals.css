@@ -1139,6 +1139,30 @@
   margin: 0.5em 0;
 }
 
+.ProseMirror figure.document-image {
+  margin: 0.75rem 0;
+}
+
+.ProseMirror figure.document-image img {
+  display: inline-block;
+  margin: 0;
+}
+
+.ProseMirror figure.document-image figcaption {
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.ProseMirror p.image-missing {
+  margin: 0.75rem 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.75rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
 .ProseMirror p.is-editor-empty:first-child::before {
   color: var(--muted-foreground);
   content: attr(data-placeholder);

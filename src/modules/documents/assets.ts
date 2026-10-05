@@ -1,3 +1,4 @@
+import { Resvg } from "@resvg/resvg-js";
 import type { JSONContent } from "@tiptap/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { uploadStoredFile } from "@/modules/files/store";
@@ -157,6 +158,91 @@ export function persistDocumentAssets(doc: JSONContent): JSONContent {
     attrs: fileId ? { ...doc.attrs, src: null } : doc.attrs,
     content: doc.content?.map(persistDocumentAssets),
   };
+}
+
+/** Rasterize an SVG to PNG. react-pdf can embed PNG and JPEG, not SVG. */
+export function rasterizeSvg(svg: Uint8Array | string, width = 1400): Uint8Array {
+  const source = typeof svg === "string" ? svg : Buffer.from(svg);
+  const resvg = new Resvg(source, {
+    fitTo: { mode: "width", value: Math.max(1, Math.min(Math.round(width), 1600)) },
+  });
+  return new Uint8Array(resvg.render().asPng());
+}
+
+/** PNG and JPEG pass through. SVG becomes PNG. Anything else cannot be embedded. */
+export function bytesForPdf(
+  bytes: Uint8Array,
+  mime: string,
+  width?: number,
+): { mime: "image/png" | "image/jpeg"; bytes: Uint8Array } | null {
+  if (isPng(bytes)) return { mime: "image/png", bytes };
+  if (isJpeg(bytes)) return { mime: "image/jpeg", bytes };
+  const kind = mime.toLowerCase();
+  if (kind === "image/svg+xml" || detectedMime(bytes) === "image/svg+xml") {
+    try {
+      return { mime: "image/png", bytes: rasterizeSvg(bytes, width) };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve each image fileId to PNG or JPEG bytes for the PDF only.
+ * The saved document keeps fileId and does not store this data URL.
+ */
+export async function embedDocumentImagesForPdf(
+  client: SupabaseClient,
+  doc: JSONContent,
+  organizationId?: string,
+): Promise<JSONContent> {
+  const ids = imageAssetIds(doc);
+  const stored = new Map<string, { mime: string; bytes: Uint8Array }>();
+  if (ids.length > 0) {
+    let query = client.from("files").select("id, mime, storage_path").in("id", ids).is("deleted_at", null);
+    if (organizationId) query = query.eq("organization_id", organizationId);
+    const { data } = await query;
+    for (const row of data ?? []) {
+      const { data: file } = await client.storage.from("org-files").download(row.storage_path as string);
+      if (!file) continue;
+      stored.set(row.id as string, {
+        mime: String(row.mime ?? ""),
+        bytes: new Uint8Array(await file.arrayBuffer()),
+      });
+    }
+  }
+  return embedImageNodes(doc, stored);
+}
+
+function embedImageNodes(node: JSONContent, stored: Map<string, { mime: string; bytes: Uint8Array }>): JSONContent {
+  if (node.type === "image") {
+    const fileId = typeof node.attrs?.fileId === "string" ? node.attrs.fileId : "";
+    const width = typeof node.attrs?.width === "number" ? node.attrs.width : undefined;
+    const alt = typeof node.attrs?.alt === "string" && node.attrs.alt ? node.attrs.alt : "Image unavailable";
+    if (fileId) {
+      const file = stored.get(fileId);
+      const ready = file ? bytesForPdf(file.bytes, file.mime, width) : null;
+      if (!ready) return { ...node, attrs: { ...node.attrs, src: null, unresolved: true, alt } };
+      return { ...node, attrs: { ...node.attrs, src: dataUrl(ready), unresolved: false } };
+    }
+    const src = typeof node.attrs?.src === "string" ? node.attrs.src : "";
+    const embeddable = src.startsWith("data:image/png") || src.startsWith("data:image/jpeg") || src.startsWith("data:image/jpg") || /^https?:/.test(src);
+    return { ...node, attrs: { ...node.attrs, unresolved: !embeddable, alt } };
+  }
+  return { ...node, content: node.content?.map((child) => embedImageNodes(child, stored)) };
+}
+
+function dataUrl(image: { mime: "image/png" | "image/jpeg"; bytes: Uint8Array }) {
+  return `data:${image.mime};base64,${Buffer.from(image.bytes).toString("base64")}`;
+}
+
+function isPng(bytes: Uint8Array) {
+  return bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+}
+
+function isJpeg(bytes: Uint8Array) {
+  return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
 }
 
 export function applySignedAssetUrls(doc: JSONContent, urls: Map<string, string>): JSONContent {

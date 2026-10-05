@@ -43,6 +43,7 @@ export type BlockInput = {
   alt?: unknown;
   width?: unknown;
   fileId?: unknown;
+  caption?: unknown;
   layout?: unknown;
   nodes?: unknown;
   edges?: unknown;
@@ -63,7 +64,7 @@ const BLOCK_GUIDE = [
   "bullets and numbered: items are strings or runs. checklist: items are {text, checked}.",
   "quote: text. divider: no fields. spacer: an empty line.",
   "Upload the asset first using upload_asset. Use the returned fileId in compose_document image blocks. Do not invent fileIds.",
-  "image: fileId from upload_asset, or src as an https URL. Optional alt and width in pixels. A fileId is stored on the document. Do not pass a local path or a temporary link.",
+  "image: fileId from upload_asset, or src as an https URL. Optional alt, width in pixels, align (left, center, or right), and caption. A fileId is stored on the document. Do not pass a local path or a temporary link.",
   "diagram: layout is row, stack, hub, or timeline. nodes are {id, label, caption}. edges are {from, to}. The editor and the PDF draw this as boxes and lines, not as a table or an image.",
   "table: columns are header labels. rows are cells. A cell is a string or {text, header, fill, border, align}. border is grid, none, line, or band. fill is a #hex color.",
   "cover: kicker, title, subtitle. A full-width dark band.",
@@ -270,6 +271,8 @@ function image(block: BlockInput): JSONContent[] | { error: string } {
   if (src && !HTTPS.test(src)) return { error: "An image src must be an https URL." };
   if (!fileId && !HTTPS.test(src)) return { error: "An image src must be an https URL, or pass fileId from upload_asset." };
   const width = typeof block.width === "number" && block.width > 0 ? Math.min(Math.round(block.width), 1200) : null;
+  const align = block.align === "center" || block.align === "right" || block.align === "left" ? block.align : null;
+  const caption = typeof block.caption === "string" ? block.caption.trim().slice(0, 240) : "";
   return [
     {
       type: "image",
@@ -278,6 +281,8 @@ function image(block: BlockInput): JSONContent[] | { error: string } {
         alt: typeof block.alt === "string" ? block.alt.slice(0, 180) : null,
         width,
         fileId: fileId || null,
+        align,
+        caption: caption || null,
       },
     },
   ];

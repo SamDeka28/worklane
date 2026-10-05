@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { JSONContent } from "@tiptap/core";
-import { refreshDocumentFileUrls } from "@/modules/documents/assets";
+import { embedDocumentImagesForPdf, refreshDocumentFileUrls } from "@/modules/documents/assets";
 import { renderCompositionPdfBuffer } from "@/modules/documents/composition/pdf";
 import { isComposition } from "@/modules/documents/composition/schema";
 import {
@@ -76,7 +76,9 @@ export async function buildSignedDocumentFiles(
     ipAddress: row.ip_address ? String(row.ip_address) : null,
   }));
   const source = (input.content as JSONContent) ?? { type: "doc", content: [] };
-  const content = isComposition(source) ? source : await refreshDocumentFileUrls(client, source);
+  const content = isComposition(source)
+    ? source
+    : await embedDocumentImagesForPdf(client, await refreshDocumentFileUrls(client, source));
   const pdfInput = {
     title: input.title,
     orgName: input.orgName,
