@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { AvatarMark } from "@/components/studio/avatar-mark";
-import { TagRow, projectToneClass } from "@/components/studio/project-chip";
+import { TagRow, projectTextClass } from "@/components/studio/project-chip";
 import {
   Popover,
   PopoverContent,
@@ -523,10 +523,11 @@ export function TaskDetailFields({
                 <span
                   key={label}
                   className={cn(
-                    "inline-flex max-w-full items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold tracking-tight ring-1",
-                    projectToneClass(label),
+                    "inline-flex max-w-full items-center gap-1.5 text-xs font-medium",
+                    projectTextClass(label),
                   )}
                 >
+                  <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden />
                   <span className="truncate">{label}</span>
                   {canWrite ? (
                     <button

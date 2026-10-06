@@ -11,8 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { createDocumentAction } from "@/modules/documents/actions";
-import { DOCUMENT_TEMPLATES } from "@/modules/documents/templates";
-import { DOCUMENT_KIND_SHORT, asDocumentKind } from "@/modules/documents/types";
+import { getCompositionTemplate } from "@/modules/documents/composition/templates";
+import { documentPickerOptions } from "@/modules/documents/picker-options";
+import { getDocumentTemplate } from "@/modules/documents/templates";
+import { DOCUMENT_KIND_LABEL, DOCUMENT_KIND_SHORT, DOCUMENT_KINDS, asDocumentKind } from "@/modules/documents/types";
 import { shareRequest } from "@/lib/share-request";
 import { listLeadDocumentsAction, type LeadDocumentRow } from "@/modules/crm/follow-actions";
 
@@ -31,10 +33,6 @@ const STATUS_LABEL: Record<string, string> = {
   signed: "Signed",
   void: "Void",
 };
-
-const SALES_TEMPLATES = DOCUMENT_TEMPLATES.filter((template) =>
-  ["proposal", "sow", "contract", "nda"].includes(template.kind),
-);
 
 export function LeadDocuments({
   orgSlug,
@@ -57,7 +55,8 @@ export function LeadDocuments({
   const [docs, setDocs] = useState<LeadDocumentRow[] | null>(null);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState(`${leadName} proposal`);
-  const [templateId, setTemplateId] = useState(SALES_TEMPLATES[0]?.id ?? "proposal");
+  const [templateId, setTemplateId] = useState("proposal");
+  const selected = getDocumentTemplate(templateId) ?? getCompositionTemplate(templateId);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,12 +123,23 @@ export function LeadDocuments({
             aria-label="Template"
             className="bg-card"
           >
-            {SALES_TEMPLATES.map((template) => (
-              <option key={template.id} value={template.id}>
-                {template.name}
-              </option>
-            ))}
+            {DOCUMENT_KINDS.map((kind) => {
+              const options = documentPickerOptions(kind);
+              if (options.length === 0) return null;
+              return (
+                <optgroup key={kind} label={DOCUMENT_KIND_LABEL[kind]}>
+                  {options.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
           </NativeSelect>
+          {selected ? (
+            <p className="text-xs leading-5 text-muted-foreground">{selected.description}</p>
+          ) : null}
           <div className="flex justify-end gap-2">
             <Button type="button" size="sm" variant="ghost" onClick={() => setCreating(false)}>
               Cancel

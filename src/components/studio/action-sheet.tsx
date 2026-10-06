@@ -141,7 +141,7 @@ export function ActionSheet({
           {children}
         </div>
         {footer ? (
-          <div className="shrink-0 border-t border-border/50 bg-background/95 px-6 py-4 backdrop-blur-sm">
+          <div className="shrink-0 border-t border-border/50 bg-card px-6 py-4">
             {footer}
           </div>
         ) : null}

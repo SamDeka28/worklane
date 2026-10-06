@@ -123,7 +123,7 @@ export function ComposeEmailButton({
         {triggerLabel}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[92dvh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>
@@ -227,7 +227,7 @@ export function ComposeEmailButton({
             </div>
             <EmailAttachments value={attachments} onChange={setAttachments} disabled={sending} />
           </form>
-          <DialogFooter className="items-center sm:justify-between">
+          <DialogFooter className="justify-between">
             <p className="hidden text-xs text-muted-foreground sm:block">
               It won’t appear in your own mail app’s Sent folder.
             </p>

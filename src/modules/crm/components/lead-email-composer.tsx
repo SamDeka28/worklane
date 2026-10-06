@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { CornerUpLeft, Mail, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ import {
   VariableField,
   insertVariableAt,
 } from "@/modules/crm/components/email-variables";
-import { sendLeadEmailAction } from "@/modules/crm/email-actions";
+import type { SendLeadEmailInput } from "@/modules/crm/email-actions";
 import type { LeadEmailHistory, LeadEmailSender } from "@/modules/crm/queries";
 import {
   addDays,
@@ -52,7 +53,8 @@ const FOLLOW_UP_PRESETS = [
   { label: "2 weeks", days: 14 },
 ];
 
-const fieldClass = `h-11 w-full px-0 ${BARE_FIELD}`;
+const fieldClass = `h-auto w-full px-0 py-0.5 text-sm font-normal leading-6 tracking-normal text-foreground ${BARE_FIELD}`;
+const bodyClass = `min-h-64 resize-y px-0 py-1 text-base font-normal leading-7 tracking-normal text-foreground ${BARE_FIELD}`;
 
 const NO_HISTORY: LeadEmailHistory = { proposalSent: false, previous: [] };
 const historyCache = new Map<string, LeadEmailHistory>();
@@ -108,10 +110,20 @@ function Toggle({
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 px-3.5">
-      <span className="w-16 shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
+    <div className="grid gap-1 px-4 py-3">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 items-center gap-2 text-sm leading-6 text-foreground">{children}</div>
     </div>
+  );
+}
+
+/** Follow-up, stage, and tracking, kept apart from the message itself. */
+export function ComposerSettings({ children }: { children: ReactNode }) {
+  return (
+    <section className="grid gap-3 border-t border-border/60 pt-5">
+      <h3 className="text-xs font-medium text-muted-foreground">After sending</h3>
+      {children}
+    </section>
   );
 }
 
@@ -133,10 +145,7 @@ export function AfterSending({
   onTrack: (value: boolean) => void;
 }) {
   return (
-    <div className="grid gap-3 rounded-xl bg-muted/40 px-3.5 py-3">
-      <p className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-        After sending
-      </p>
+    <div className="grid gap-2.5">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Toggle checked={followUp} onChange={onFollowUp}>
           Follow up if no reply in
@@ -150,10 +159,10 @@ export function AfterSending({
               disabled={!followUp}
               onClick={() => onFollowDays(preset.days)}
               className={cn(
-                "rounded-full px-2.5 py-1 text-xs font-semibold ring-1 transition-colors disabled:opacity-50",
+                "rounded-full px-2 py-0.5 text-xs font-medium transition-colors disabled:opacity-40",
                 followUp && followDays === preset.days
-                  ? "bg-primary text-primary-foreground ring-primary"
-                  : "bg-card text-muted-foreground ring-foreground/10 hover:text-foreground",
+                  ? "bg-primary/15 text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
               )}
             >
               {preset.label}
@@ -202,22 +211,40 @@ export function LeadEmailButton({
   sender: LeadEmailSender;
 }) {
   const [mode, setMode] = useState<"closed" | "open" | "sending">("closed");
+  const [emailed, setEmailed] = useState<boolean | null>(() => {
+    const cached = historyCache.get(historyKey(orgSlug, lead.id));
+    return cached ? cached.previous.length > 0 : null;
+  });
 
   useEffect(() => {
-    if (sender.configured) loadEmailHistory(orgSlug, lead.id, true).catch(() => {});
+    if (!sender.configured) return;
+    let cancelled = false;
+    loadEmailHistory(orgSlug, lead.id)
+      .then((history) => {
+        if (!cancelled) setEmailed(history.previous.length > 0);
+      })
+      .catch(() => {
+        if (!cancelled) setEmailed((current) => current ?? false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [orgSlug, lead.id, sender.configured]);
+
+  const label =
+    mode === "sending" ? "Sending…" : emailed ? "Follow up" : "Send an email";
 
   return (
     <>
       <Button
         type="button"
-        variant="outline"
         size="sm"
+        className="rounded-full"
         disabled={mode === "sending"}
         onClick={() => setMode("open")}
       >
         <Mail />
-        {mode === "sending" ? "Sending…" : "Send email"}
+        {label}
       </Button>
       {mode !== "closed" ? (
         <LeadEmailComposer
@@ -228,7 +255,10 @@ export function LeadEmailButton({
           sender={sender}
           visible={mode === "open"}
           onSending={() => setMode("sending")}
-          onSent={() => setMode("closed")}
+          onSent={() => {
+            setEmailed(true);
+            setMode("closed");
+          }}
           onFailed={() => setMode("open")}
           onClose={() => setMode("closed")}
         />
@@ -270,6 +300,7 @@ function LeadEmailComposer({
 }) {
   const sending = useRef(false);
   const subjectRef = useRef<FieldElement | null>(null);
+  const router = useRouter();
   const bodyRef = useRef<FieldElement | null>(null);
   const lastField = useRef<FieldElement | null>(null);
   const templates = settings.emailTemplates;
@@ -377,7 +408,7 @@ function LeadEmailComposer({
     const movedTo = advance && nextStage ? nextStage : null;
     const subject = fillTemplate(draft.subject, values);
     try {
-      const result = await sendLeadEmailAction(orgSlug, lead.id, {
+      const payload: SendLeadEmailInput = {
         to: recipient,
         cc: showCc ? cc : "",
         subject,
@@ -391,13 +422,20 @@ function LeadEmailComposer({
           : null,
         moveToStage: movedTo?.slug ?? null,
         attachments,
+      };
+      const response = await fetch(`/${orgSlug}/crm/leads/${lead.id}/emails`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
       });
+      const result = (await response.json()) as { error?: string };
       if (result.error) {
         toast.error(result.error, { id: toastId });
         onFailed();
         return;
       }
       loadEmailHistory(orgSlug, lead.id, true).catch(() => {});
+      router.refresh();
       toast.success(`Email sent to ${recipient}`, {
         id: toastId,
         description: [
@@ -424,7 +462,7 @@ function LeadEmailComposer({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="max-h-[92dvh] grid-cols-[minmax(0,1fr)] gap-5 overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Email {firstName || lead.name}</DialogTitle>
           <DialogDescription>
@@ -438,42 +476,45 @@ function LeadEmailComposer({
             an owner or admin to connect the studio’s in Settings.
           </p>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-6">
             {templates.length > 0 ? (
-              <div role="radiogroup" aria-label="Template" className="flex flex-wrap gap-1.5">
-                {templates.map((template) => {
-                  const active = draft.templateId === template.id;
-                  return (
-                    <button
-                      key={template.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      onClick={() =>
-                        edit(
-                          compose(
-                            template,
-                            known,
-                            template.purpose !== "intro" ? draft.threadId : null,
-                          ),
-                        )
-                      }
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition-colors",
-                        active
-                          ? "bg-foreground text-background ring-foreground"
-                          : "bg-card text-muted-foreground ring-foreground/10 hover:text-foreground",
-                      )}
-                    >
-                      {template.id === suggestedId ? <Sparkles className="size-3" /> : null}
-                      {template.name}
-                    </button>
-                  );
-                })}
+              <div className="grid gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Template</p>
+                <div role="radiogroup" aria-label="Template" className="flex flex-wrap gap-2">
+                  {templates.map((template) => {
+                    const active = draft.templateId === template.id;
+                    return (
+                      <button
+                        key={template.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() =>
+                          edit(
+                            compose(
+                              template,
+                              known,
+                              template.purpose !== "intro" ? draft.threadId : null,
+                            ),
+                          )
+                        }
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors",
+                          active
+                            ? "bg-primary/15 font-medium text-foreground ring-1 ring-primary/30"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        {template.id === suggestedId ? <Sparkles className="size-3.5" /> : null}
+                        {template.name}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
 
-            <div className="grid gap-2">
+            <div className="grid gap-4">
               <div className="rounded-xl ring-1 ring-foreground/10 [&>*+*]:border-t [&>*+*]:border-border/60">
                 <Row label="To">
                   <Input
@@ -524,25 +565,28 @@ function LeadEmailComposer({
                     className={fieldClass}
                   />
                 </Row>
-                <VariableField
-                  multiline
-                  value={draft.body}
-                  onValueChange={(body) => edit((current) => ({ ...current, body }))}
-                  values={values}
-                  fieldRef={bodyRef}
-                  onFocusField={(el) => (lastField.current = el)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                      event.preventDefault();
-                      send();
-                    }
-                  }}
-                  rows={12}
-                  maxLength={20_000}
-                  aria-label="Message"
-                  placeholder="Write your email. Type @ to insert a variable."
-                  className={`min-h-56 resize-y px-3.5 py-3 leading-6 ${BARE_FIELD}`}
-                />
+                <div className="grid gap-1.5 px-4 py-3.5">
+                  <span className="text-xs font-medium text-muted-foreground">Message</span>
+                  <VariableField
+                    multiline
+                    value={draft.body}
+                    onValueChange={(body) => edit((current) => ({ ...current, body }))}
+                    values={values}
+                    fieldRef={bodyRef}
+                    onFocusField={(el) => (lastField.current = el)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                        event.preventDefault();
+                        send();
+                      }
+                    }}
+                    rows={12}
+                    maxLength={20_000}
+                    aria-label="Message"
+                    placeholder="Write your email. Type @ to insert a variable."
+                    className={bodyClass}
+                  />
+                </div>
                 <ComposerSignature
                   signature={sender.signature}
                   include={withSignature}
@@ -561,48 +605,49 @@ function LeadEmailComposer({
               </p>
             ) : null}
 
-            {lastEmail ? (
-              <Toggle
-                checked={Boolean(draft.threadId)}
-                onChange={(checked) => {
-                  const template = templates.find((item) => item.id === draft.templateId) ?? null;
-                  const next = compose(template, known, checked ? lastEmail.id : null);
-                  edit((current) => ({ ...current, threadId: next.threadId, subject: next.subject }));
-                }}
-              >
-                <CornerUpLeft className="size-3.5 text-muted-foreground" />
-                <span className="min-w-0 truncate">
-                  Reply in the thread “{lastEmail.subject}”
-                  <span className="text-muted-foreground">
-                    {lastEmail.opened ? " · opened" : " · not opened yet"}
+            <ComposerSettings>
+              {lastEmail ? (
+                <Toggle
+                  checked={Boolean(draft.threadId)}
+                  onChange={(checked) => {
+                    const template = templates.find((item) => item.id === draft.templateId) ?? null;
+                    const next = compose(template, known, checked ? lastEmail.id : null);
+                    edit((current) => ({ ...current, threadId: next.threadId, subject: next.subject }));
+                  }}
+                >
+                  <CornerUpLeft className="size-3.5 text-muted-foreground" />
+                  <span className="min-w-0 truncate">
+                    Reply in the thread “{lastEmail.subject}”
+                    <span className="text-muted-foreground">
+                      {lastEmail.opened ? " · opened" : " · not opened yet"}
+                    </span>
                   </span>
-                </span>
-              </Toggle>
-            ) : null}
-
-            <AfterSending
-              followUp={followUp}
-              onFollowUp={setFollowUp}
-              followDays={followDays}
-              onFollowDays={setFollowDays}
-              stageToggle={
-                nextStage
-                  ? { label: `Move to ${nextStage.name}`, checked: advance, onChange: setAdvance }
-                  : null
-              }
-              track={track}
-              onTrack={setTrack}
-            />
+                </Toggle>
+              ) : null}
+              <AfterSending
+                followUp={followUp}
+                onFollowUp={setFollowUp}
+                followDays={followDays}
+                onFollowDays={setFollowDays}
+                stageToggle={
+                  nextStage
+                    ? { label: `Move to ${nextStage.name}`, checked: advance, onChange: setAdvance }
+                    : null
+                }
+                track={track}
+                onTrack={setTrack}
+              />
+            </ComposerSettings>
           </div>
         )}
 
-        <DialogFooter className="items-center sm:justify-between">
+        <DialogFooter className="justify-between">
           <SenderNote sender={sender} />
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="button" onClick={send} disabled={!canSend}>
+            <Button type="button" size="lg" onClick={send} disabled={!canSend}>
               <Mail />
               Send
             </Button>

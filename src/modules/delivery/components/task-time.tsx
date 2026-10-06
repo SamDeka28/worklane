@@ -226,7 +226,7 @@ function LogTimeForm({
         <Field label="What shipped" htmlFor="log_note">
           <Input id="log_note" value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
-        <DialogFooter className="mx-0 mb-0 rounded-none border-0 bg-transparent p-0">
+        <DialogFooter>
           <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
             Later
           </Button>

@@ -232,10 +232,9 @@ export function KanbanBoard({
   }
 
   const filteredTasks = useMemo(() => {
-    if (!orgMode) return tasks;
     return tasks.filter((task) => {
-      if (filterProject && task.projectId !== filterProject) return false;
-      if (filterClient && task.clientId !== filterClient) return false;
+      if (orgMode && filterProject && task.projectId !== filterProject) return false;
+      if (orgMode && filterClient && task.clientId !== filterClient) return false;
       if (filterAssignees.size > 0) {
         const ids = task.assigneeUserIds?.length
           ? task.assigneeUserIds
@@ -244,7 +243,7 @@ export function KanbanBoard({
             : [];
         if (!ids.some((id) => filterAssignees.has(id))) return false;
       }
-      if (filterPriority && task.priority !== filterPriority) return false;
+      if (orgMode && filterPriority && task.priority !== filterPriority) return false;
       return true;
     });
   }, [orgMode, tasks, filterProject, filterClient, filterAssignees, filterPriority]);
@@ -590,7 +589,7 @@ export function KanbanBoard({
                     }
                     onClick={() => setFilterPriority(tab.value)}
                     className={cn(
-                      "min-w-8 rounded-lg px-2.5 py-1.5 text-sm font-bold transition-colors duration-150",
+                      "min-w-8 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors duration-150",
                       active
                         ? tab.activeClass
                         : "text-muted-foreground hover:bg-card hover:text-foreground",
@@ -602,7 +601,7 @@ export function KanbanBoard({
               })}
             </div>
 
-            <p className="ml-auto shrink-0 text-sm font-bold tabular-nums text-muted-foreground">
+            <p className="ml-auto shrink-0 text-sm tabular-nums text-muted-foreground">
               {filteredTasks.length}
             </p>
             <div data-slot="segmented" className="flex shrink-0 items-center gap-1 rounded-full bg-muted p-1">
@@ -631,6 +630,19 @@ export function KanbanBoard({
               ))}
             </div>
           </div>
+        </div>
+      ) : assignees.length > 0 ? (
+        <div className="flex shrink-0 items-center border-b border-border/40 px-4 py-2 sm:px-5">
+          <AvatarFilterStack
+            people={assignees.map((member) => ({
+              id: member.userId,
+              name: member.label,
+              src: member.avatarUrl,
+            }))}
+            selectedIds={filterAssignees}
+            onToggle={toggleAssigneeFilter}
+            size="sm"
+          />
         </div>
       ) : null}
 
@@ -758,7 +770,7 @@ export function KanbanBoard({
                   {overlayColumn ? (
                     <div className="flex w-80 cursor-grabbing items-center gap-2 rounded-[1.75rem] bg-muted/90 px-3.5 py-3 shadow-soft ring-1 ring-border/40">
                       <DragHandleDots className="opacity-60" />
-                      <p className="text-[15px] font-semibold">{overlayColumn.name}</p>
+                      <p className="text-sm font-medium leading-6">{overlayColumn.name}</p>
                     </div>
                   ) : null}
                 </DragOverlay>,
@@ -882,7 +894,7 @@ function KanbanColumn({
             <input
               defaultValue={column.name}
               disabled={pendingRename}
-              className="min-w-0 flex-1 bg-transparent px-1 text-[12px] font-bold tracking-[0.08em] text-foreground/70 uppercase outline-none"
+              className="min-w-0 flex-1 bg-transparent px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase outline-none"
               onBlur={(event) => {
                 const name = event.target.value.trim();
                 if (!name || name === column.name) return;
@@ -896,11 +908,11 @@ function KanbanColumn({
               }}
             />
           ) : (
-            <h2 className="flex-1 px-1 text-[12px] font-bold tracking-[0.08em] text-foreground/70 uppercase">
+            <h2 className="flex-1 px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               {column.name}
             </h2>
           )}
-          <span className="rounded-md bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm ring-1 ring-foreground/10">
+          <span className="px-1.5 text-xs tabular-nums text-muted-foreground">
             {tasks.length}
           </span>
           {manageLists && canWrite && canManageColumns ? (
@@ -938,7 +950,7 @@ function KanbanColumn({
         canWrite ? (
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
             onClick={onAddCard}
           >
             <Plus className="size-4" />

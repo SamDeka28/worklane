@@ -13,10 +13,30 @@ const PROJECT_TONES = [
   "bg-fuchsia-500/15 text-fuchsia-700 ring-fuchsia-500/25 dark:bg-fuchsia-400/20 dark:text-fuchsia-200 dark:ring-fuchsia-400/30",
 ] as const;
 
-export function projectToneClass(label: string) {
+const PROJECT_TEXT = [
+  "text-sky-700 dark:text-sky-300",
+  "text-emerald-700 dark:text-emerald-300",
+  "text-amber-800 dark:text-amber-200",
+  "text-rose-700 dark:text-rose-300",
+  "text-violet-700 dark:text-violet-300",
+  "text-cyan-800 dark:text-cyan-200",
+  "text-orange-800 dark:text-orange-200",
+  "text-fuchsia-700 dark:text-fuchsia-300",
+] as const;
+
+function toneIndex(label: string) {
   let sum = 0;
   for (const char of label) sum += char.charCodeAt(0);
-  return PROJECT_TONES[sum % PROJECT_TONES.length];
+  return sum % PROJECT_TONES.length;
+}
+
+export function projectToneClass(label: string) {
+  return PROJECT_TONES[toneIndex(label)];
+}
+
+/** Color only, for text marks that should not wear a filled badge. */
+export function projectTextClass(label: string) {
+  return PROJECT_TEXT[toneIndex(label)];
 }
 
 export function ProjectChip({
@@ -31,12 +51,13 @@ export function ProjectChip({
     <span
       title={label}
       className={cn(
-        "inline-flex max-w-full truncate rounded-lg px-2.5 py-1 text-xs font-bold tracking-tight ring-1",
-        projectToneClass(label),
+        "inline-flex max-w-full min-w-0 items-center gap-1 text-[11px] font-medium",
+        projectTextClass(label),
         className,
       )}
     >
-      {label}
+      <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden />
+      <span className="truncate">{label}</span>
     </span>
   );
 }

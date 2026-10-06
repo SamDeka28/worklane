@@ -48,7 +48,7 @@ const COLUMNS: { key: ColumnKey; label: string; width: string }[] = [
   { key: "project", label: "Project", width: "10rem" },
   { key: "status", label: "Status", width: "8.5rem" },
   { key: "assignee", label: "Assignee", width: "6.5rem" },
-  { key: "priority", label: "Priority", width: "4.5rem" },
+  { key: "priority", label: "Priority", width: "6.5rem" },
   { key: "due", label: "Due", width: "7rem" },
   { key: "milestone", label: "Milestone", width: "9rem" },
   { key: "labels", label: "Labels", width: "9rem" },
@@ -63,10 +63,10 @@ const GROUPS: { key: GroupKey; label: string }[] = [
   { key: "assignee", label: "Assignee" },
 ];
 
-const STATUS_TONE: Record<TaskStatus, { dot: string; badge: string }> = {
-  todo: { dot: "bg-slate-400", badge: "bg-slate-500/12 text-slate-700 dark:text-slate-200" },
-  doing: { dot: "bg-sky-500", badge: "bg-sky-500/14 text-sky-800 dark:text-sky-200" },
-  done: { dot: "bg-emerald-500", badge: "bg-emerald-500/14 text-emerald-800 dark:text-emerald-200" },
+const STATUS_TONE: Record<TaskStatus, { dot: string; text: string }> = {
+  todo: { dot: "bg-slate-400", text: "text-muted-foreground" },
+  doing: { dot: "bg-sky-600", text: "text-sky-700 dark:text-sky-300" },
+  done: { dot: "bg-emerald-600", text: "text-emerald-700 dark:text-emerald-300" },
 };
 
 const PRIORITY_RANK = { high: 0, medium: 1, low: 2 } as const;
@@ -428,8 +428,8 @@ function StatusBadge({
     </>
   );
   const badgeClass = cn(
-    "inline-flex h-6 max-w-full items-center gap-1.5 rounded-md px-2 text-[11px] font-bold tracking-wide uppercase",
-    tone.badge,
+    "inline-flex max-w-full items-center gap-1.5 text-xs font-medium",
+    tone.text,
   );
   if (!canWrite) return <span className={badgeClass}>{badge}</span>;
   return (
@@ -491,13 +491,13 @@ function TaskRow({
       case "assignee":
         return people.length > 0 ? <AvatarStack people={people} size="sm" max={3} /> : dash;
       case "priority":
-        return <PriorityMark priority={task.priority} className="h-6 px-2" />;
+        return <PriorityMark priority={task.priority} />;
       case "due":
         return task.dueOn ? (
           <span
             className={cn(
               "inline-flex items-center gap-1.5 text-xs font-medium whitespace-nowrap",
-              overdue ? "rounded-md bg-status-overdue px-1.5 py-0.5 text-status-overdue-fg" : "text-muted-foreground",
+              overdue ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground",
             )}
           >
             <CalendarDays className="size-3 opacity-80" />
@@ -512,12 +512,7 @@ function TaskRow({
         return task.labels.length ? (
           <span className="flex min-w-0 gap-1">
             {task.labels.slice(0, 2).map((label) => (
-              <span
-                key={label}
-                className="max-w-20 truncate rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground"
-              >
-                {label}
-              </span>
+              <ProjectChip key={label} label={label} className="max-w-20" />
             ))}
             {task.labels.length > 2 ? (
               <span className="text-[11px] text-muted-foreground">+{task.labels.length - 2}</span>
@@ -546,10 +541,10 @@ function TaskRow({
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
-        {task.kind !== "task" ? <KindMark kind={task.kind} className="h-6 px-1.5" /> : null}
+        {task.kind !== "task" ? <KindMark kind={task.kind} showLabel /> : null}
         <button
           type="button"
-          className="min-w-0 truncate text-left text-sm font-medium tracking-tight hover:underline"
+          className="min-w-0 truncate text-left text-sm font-medium leading-6 hover:underline"
           onClick={(event) => {
             event.stopPropagation();
             onOpen();

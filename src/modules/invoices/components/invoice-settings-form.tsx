@@ -87,7 +87,7 @@ export function InvoiceSettingsDialog({
         {label}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+        <DialogContent framed={false} className="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
           <div className="shrink-0 border-b border-border/50 px-6 pt-5">
             <DialogTitle className="text-lg font-semibold">Invoice settings</DialogTitle>
             <DialogDescription className="mt-1">

@@ -205,6 +205,7 @@ export function TaskModal({
       }}
     >
       <DialogContent
+        framed={false}
         showCloseButton
         className={cn(
           "flex max-h-[min(94vh,58rem)] w-full max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden rounded-[1.75rem] p-0 text-base transition-[max-width] duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",

@@ -657,7 +657,12 @@ export default async function ProjectDetailPage({
       </div>
 
       <TabPanel>
-      <HubBody className="gap-4">
+      <HubBody
+        className={cn(
+          "gap-4",
+          tab === "work" && panel === "board" && "overflow-hidden",
+        )}
+      >
         {tab === "overview" ? (
           <div
             className={
@@ -889,6 +894,9 @@ export default async function ProjectDetailPage({
           <HubSection
             id="work"
             title="Work"
+            className={
+              panel === "board" ? "flex min-h-0 flex-1 flex-col overflow-hidden" : undefined
+            }
             action={
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <FilterChips className="px-0 py-0">
@@ -922,7 +930,7 @@ export default async function ProjectDetailPage({
             }
           >
             {panel === "board" ? (
-              <div className="flex min-h-[min(70vh,42rem)] flex-1 flex-col overflow-hidden lane-inset">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden lane-inset">
                 <KanbanBoard
                   orgSlug={orgSlug}
                   scope="project"
@@ -937,18 +945,17 @@ export default async function ProjectDetailPage({
                   comments={comments}
                   canWrite={ctx.canWrite}
                   currentUserId={ctx.userId}
-                  assignees={projectMembers.map((member) => {
-                    const orgMember = orgMembers.find((row) => row.userId === member.userId);
-                    return {
+                  assignees={orgMembers
+                    .filter((member) => member.status === "active")
+                    .map((member) => ({
                       userId: member.userId,
                       label: member.isYou
                         ? "You"
-                        : orgMember?.displayName ||
-                          orgMember?.email ||
+                        : member.displayName ||
+                          member.email ||
                           `Member ${member.userId.slice(0, 8)}`,
-                      avatarUrl: orgMember?.avatarUrl ?? null,
-                    };
-                  })}
+                      avatarUrl: member.avatarUrl ?? null,
+                    }))}
                   className="min-h-0 flex-1"
                 />
               </div>

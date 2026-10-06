@@ -358,10 +358,10 @@ function LeadColumn({
         <header className="shrink-0 px-3 pt-3.5 pb-3">
           <div className="flex items-center gap-1.5">
             <span className={cn("ml-1 size-2.5 shrink-0 rounded-full", dot)} aria-hidden />
-            <h2 className="min-w-0 flex-1 truncate px-1 text-[12px] font-bold tracking-[0.08em] text-foreground/70 uppercase">
+            <h2 className="min-w-0 flex-1 truncate px-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
               {stage.name}
             </h2>
-            <span className="rounded-md bg-card px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground shadow-sm ring-1 ring-foreground/10">
+            <span className="px-1.5 text-xs tabular-nums text-muted-foreground">
               {leads.length}
             </span>
           </div>
@@ -371,7 +371,7 @@ function LeadColumn({
         canWrite && state === "open" ? (
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm font-semibold text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
             onClick={() => openNewLead(stage.slug)}
           >
             <Plus className="size-4" />

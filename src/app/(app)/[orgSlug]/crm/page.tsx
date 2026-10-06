@@ -11,6 +11,7 @@ import {
   SummaryStrip,
 } from "@/components/studio/index-layout";
 import { AvatarMark } from "@/components/studio/avatar-mark";
+import { ProjectChip } from "@/components/studio/project-chip";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { LeadBoard } from "@/modules/crm/components/lead-board";
@@ -270,14 +271,14 @@ export default async function CrmPage({
             />
           ) : (
             <DenseListPanel
+              columnsClassName="font-medium"
               columns={
                 <>
                   <span className="min-w-0 flex-1">Lead</span>
+                  <span className="hidden min-w-0 flex-1 lg:block">Next</span>
                   <span className="hidden w-36 md:block">Owner</span>
-                  <span className="hidden w-28 text-right md:block">Stage</span>
-                  {seeMoney ? (
-                    <span className="hidden w-28 text-right md:block">Value</span>
-                  ) : null}
+                  <span className="hidden w-32 md:block">Stage</span>
+                  {seeMoney ? <span className="hidden w-24 text-right md:block">Value</span> : null}
                 </>
               }
               footer="Win a lead, then Become a client: no retyping."
@@ -285,65 +286,69 @@ export default async function CrmPage({
               {leads.map((lead) => {
                 const follow = isOpen(lead) ? followState(lead) : "none";
                 const owner = lead.ownerUserId ? members.find((member) => member.userId === lead.ownerUserId) : null;
+                const nameKey = lead.name.trim().toLowerCase();
+                const seen = new Set<string>();
                 const facts = [lead.company, lead.contactName, lead.email, lead.phone].filter(
-                  (value): value is string => Boolean(value),
+                  (value): value is string => {
+                    if (!value?.trim()) return false;
+                    const key = value.trim().toLowerCase();
+                    if (key === nameKey || seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                  },
+                );
+                const next = !isOpen(lead) ? (
+                  <span className="text-xs text-muted-foreground">—</span>
+                ) : lead.nextAction ? (
+                  <p
+                    className="truncate text-xs leading-5"
+                    title={[lead.nextActionOn ? dueLabel(lead.nextActionOn) : null, lead.nextAction]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    {lead.nextActionOn ? (
+                      <span
+                        className={cn(
+                          "mr-1.5",
+                          follow === "overdue"
+                            ? "text-rose-600 dark:text-rose-400"
+                            : follow === "today"
+                              ? "text-amber-700 dark:text-amber-300"
+                              : "text-muted-foreground",
+                        )}
+                      >
+                        {dueLabel(lead.nextActionOn)}
+                      </span>
+                    ) : null}
+                    <span className="text-foreground">{lead.nextAction}</span>
+                  </p>
+                ) : (
+                  <span className="text-xs text-muted-foreground">No next step</span>
                 );
                 return (
-                  <DenseRow key={lead.id} className="items-start sm:items-start">
+                  <DenseRow key={lead.id} className="sm:py-3">
                     <DenseCell className="min-w-0 flex-1">
                       <LeadOpenLink
                         leadId={lead.id}
                         href={`/${orgSlug}/crm?view=list&lead=${lead.id}`}
                         className="block min-w-0"
                       >
-                        <p className="truncate text-sm font-medium">{lead.name}</p>
-                        {facts.map((fact) => (
-                          <p key={fact} className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {fact}
-                          </p>
-                        ))}
+                        <p className="truncate text-sm font-semibold leading-6 text-foreground">{lead.name}</p>
+                        {facts.length > 0 ? (
+                          <p className="mt-0.5 truncate text-xs leading-5 text-muted-foreground">{facts.join(" · ")}</p>
+                        ) : null}
                         {lead.source || lead.tags.length > 0 ? (
-                          <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            {lead.source ? (
-                              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                                {lead.source}
-                              </span>
-                            ) : null}
+                          <p className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                            {lead.source ? <ProjectChip label={lead.source} className="max-w-40" /> : null}
                             {lead.tags.map((tag) => (
-                              <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                                {tag}
-                              </span>
+                              <ProjectChip key={tag} label={tag} className="max-w-28" />
                             ))}
                           </p>
                         ) : null}
-                        {isOpen(lead) ? (
-                          <p className="mt-1.5 text-xs text-muted-foreground">
-                            {lead.nextAction ? (
-                              <>
-                                {lead.nextActionOn ? (
-                                  <span
-                                    className={cn(
-                                      "mr-1 font-semibold",
-                                      follow === "overdue"
-                                        ? "text-destructive"
-                                        : follow === "today"
-                                          ? "text-amber-700 dark:text-amber-300"
-                                          : "text-muted-foreground",
-                                    )}
-                                  >
-                                    {dueLabel(lead.nextActionOn)}
-                                  </span>
-                                ) : null}
-                                {lead.nextAction}
-                              </>
-                            ) : (
-                              "No next step"
-                            )}
-                          </p>
-                        ) : null}
-                        <p className="mt-2 flex flex-wrap items-center gap-2 md:hidden">
+                        <div className="mt-1 lg:hidden">{next}</div>
+                        <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 md:hidden">
                           {owner ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs">
+                            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                               <AvatarMark name={owner.name} src={owner.avatarUrl} size="sm" />
                               {owner.name}
                             </span>
@@ -357,28 +362,33 @@ export default async function CrmPage({
                           <StatusChip tone={stageTone(lead.stage, stages)}>
                             {stageLabel(lead.stage, stages)}
                           </StatusChip>
-                          {seeMoney && lead.estimatedValueMinor != null
-                            ? formatMoney({
-                                amountMinor: lead.estimatedValueMinor,
-                                currency: lead.currency,
-                              })
-                            : null}
+                          {seeMoney ? (
+                            <span className="text-xs tabular-nums text-foreground">
+                              {lead.estimatedValueMinor != null
+                                ? formatMoney({
+                                    amountMinor: lead.estimatedValueMinor,
+                                    currency: lead.currency,
+                                  })
+                                : "—"}
+                            </span>
+                          ) : null}
                         </p>
                       </LeadOpenLink>
                     </DenseCell>
-                    <DenseCell width="hidden w-36 md:flex" className="items-center gap-2 text-xs">
+                    <DenseCell width="hidden min-w-0 flex-1 lg:block">{next}</DenseCell>
+                    <DenseCell width="hidden w-36 md:flex" className="items-center gap-2 text-sm text-muted-foreground">
                       {owner ? (
                         <>
                           <AvatarMark name={owner.name} src={owner.avatarUrl} size="sm" />
-                          <span className="truncate">{owner.name}</span>
+                          <span className="truncate text-foreground">{owner.name}</span>
                         </>
                       ) : lead.ownerUserId ? (
                         <span className="truncate">{memberName.get(lead.ownerUserId) ?? "Former teammate"}</span>
                       ) : (
-                        <span className="text-muted-foreground">Unassigned</span>
+                        <span>Unassigned</span>
                       )}
                     </DenseCell>
-                    <DenseCell align="right" width="hidden w-28 md:block">
+                    <DenseCell width="hidden w-32 md:flex" className="items-center">
                       <StatusChip tone={stageTone(lead.stage, stages)}>
                         {stageLabel(lead.stage, stages)}
                       </StatusChip>
@@ -386,15 +396,17 @@ export default async function CrmPage({
                     {seeMoney ? (
                       <DenseCell
                         align="right"
-                        width="hidden w-28 md:block"
-                        className="text-sm font-medium"
+                        width="hidden w-24 md:block"
+                        className="text-sm tabular-nums text-foreground"
                       >
-                        {lead.estimatedValueMinor != null
-                          ? formatMoney({
-                              amountMinor: lead.estimatedValueMinor,
-                              currency: lead.currency,
-                            })
-                          : "-"}
+                        {lead.estimatedValueMinor != null ? (
+                          formatMoney({
+                            amountMinor: lead.estimatedValueMinor,
+                            currency: lead.currency,
+                          })
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </DenseCell>
                     ) : null}
                   </DenseRow>

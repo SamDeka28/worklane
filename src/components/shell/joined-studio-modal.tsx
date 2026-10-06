@@ -164,6 +164,7 @@ export function JoinedStudioModal({
       }}
     >
       <DialogContent
+        framed={false}
         initialFocus={continueRef}
         className="grid max-h-[calc(100dvh-2rem)] gap-0 overflow-hidden rounded-[1.75rem] border-0 bg-[color:var(--shell)] p-0 shadow-lift ring-1 ring-foreground/10 sm:max-w-[min(58rem,calc(100%-2rem))] md:h-[min(40rem,calc(100dvh-2rem))] md:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]"
       >

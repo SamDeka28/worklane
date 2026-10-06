@@ -244,7 +244,7 @@ function SignatureEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(84rem,calc(100%-4rem))] lg:min-h-[min(46rem,calc(100dvh-4rem))]">
+      <DialogContent framed={false} className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(84rem,calc(100%-4rem))] lg:min-h-[min(46rem,calc(100dvh-4rem))]">
         <DialogHeader className="gap-1 px-6 pt-6 pb-4">
           <DialogTitle className="text-lg">{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

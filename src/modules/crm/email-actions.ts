@@ -76,20 +76,21 @@ async function sendAllowed(
   ctx: Ctx,
 ): Promise<{ error: string } | { sender: ResolvedSender; signature: RenderedSignature | null }> {
   if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
-  const [sender, { count }, signature] = await Promise.all([
+  const [sender, recent, signature] = await Promise.all([
     resolveSender(ctx.org.id, ctx.userId, { module: "crm", ownMailbox: canUseOwnMailbox(ctx) }),
     ctx.supabase
       .from("lead_emails")
-      .select("id", { count: "exact", head: true })
+      .select("id")
       .eq("organization_id", ctx.org.id)
       .eq("sent_by", ctx.userId)
-      .gt("sent_at", new Date(Date.now() - SEND_WINDOW_MS).toISOString()),
+      .gt("sent_at", new Date(Date.now() - SEND_WINDOW_MS).toISOString())
+      .limit(SEND_LIMIT),
     senderSignature(ctx, "leads"),
   ]);
   if (!sender.via) {
     return { error: "Email sending isn't set up. Connect a mailbox in CRM settings → Mailbox, or ask an admin to set the studio's in Settings." };
   }
-  if ((count ?? 0) >= SEND_LIMIT) {
+  if ((recent.data?.length ?? 0) >= SEND_LIMIT) {
     return { error: "You've sent a lot of emails in the last few minutes. Try again shortly." };
   }
   return { sender, signature };
@@ -202,26 +203,29 @@ async function deliverLeadEmail(
   if (options.stageTo && options.stageTo !== lead.stage) leadUpdate.stage = options.stageTo;
   if (!lead.email) leadUpdate.email = email.to;
 
-  const { error: activityError } = await ctx.supabase.from("lead_activities").insert({
-    id: activityId,
-    organization_id: ctx.org.id,
-    lead_id: lead.id,
-    kind: "email",
-    body: email.body.slice(0, 4000),
-    actor_id: ctx.userId,
-  });
-  await Promise.all([
-    ctx.supabase
-      .from("lead_emails")
-      .update({
-        activity_id: activityError ? null : activityId,
-        message_id: result.messageId ?? null,
-      })
-      .eq("id", emailId),
+  const [{ error: activityError }] = await Promise.all([
+    ctx.supabase.from("lead_activities").insert({
+      id: activityId,
+      organization_id: ctx.org.id,
+      lead_id: lead.id,
+      kind: "email",
+      body: email.body.slice(0, 4000),
+      actor_id: ctx.userId,
+    }),
     Object.keys(leadUpdate).length > 0
       ? ctx.supabase.from("leads").update(leadUpdate).eq("id", lead.id).eq("organization_id", ctx.org.id)
       : Promise.resolve(),
+    ctx.supabase
+      .from("lead_emails")
+      .update({
+        activity_id: activityId,
+        message_id: result.messageId ?? null,
+      })
+      .eq("id", emailId),
   ]);
+  if (activityError) {
+    await ctx.supabase.from("lead_emails").update({ activity_id: null }).eq("id", emailId);
+  }
   return { ok: true as const };
 }
 
@@ -231,20 +235,13 @@ export async function sendLeadEmailForContext(
   leadId: string,
   input: SendLeadEmailInput,
 ) {
-  const allowed = await sendAllowed(ctx);
-  if ("error" in allowed) return { error: allowed.error };
   const parsed = parseEmail(input);
   if ("error" in parsed) return { error: parsed.error };
   const attachments = parseEmailAttachments(input.attachments);
   if ("error" in attachments) return attachments;
-  const signature = input.includeSignature
-    ? (allowed.signature ?? (await senderSignature(ctx, "leads", { force: true })))
-    : null;
-  if (input.includeSignature && !signature) {
-    return { error: "No email signature is saved. Add one on your profile, then send again." };
-  }
 
-  const [{ data: lead }, { data: parentRow }, stageTo] = await Promise.all([
+  const [allowed, { data: lead }, { data: parentRow }, stageTo] = await Promise.all([
+    sendAllowed(ctx),
     ctx.supabase
       .from("leads")
       .select("id, email, contact_name, stage")
@@ -262,6 +259,13 @@ export async function sendLeadEmailForContext(
       : Promise.resolve({ data: null }),
     openStageSlug(ctx, input.moveToStage),
   ]);
+  if ("error" in allowed) return { error: allowed.error };
+  const signature = input.includeSignature
+    ? (allowed.signature ?? (await senderSignature(ctx, "leads", { force: true })))
+    : null;
+  if (input.includeSignature && !signature) {
+    return { error: "No email signature is saved. Add one on your profile, then send again." };
+  }
   if (!lead) return { error: "Lead not found" };
 
   const sent = await deliverLeadEmail(
@@ -299,10 +303,7 @@ export async function sendLeadEmailAction(
 ) {
   const ctx = await requireWritableOrg(orgSlug);
   const sent = await sendLeadEmailForContext(ctx, leadId, input);
-  if (!("error" in sent)) {
-    revalidatePath(`/${orgSlug}/crm`);
-    revalidatePath(`/${orgSlug}`);
-  }
+  if (!("error" in sent)) revalidatePath(`/${orgSlug}/crm`);
   return sent;
 }
 
@@ -397,6 +398,5 @@ export async function startLeadWithEmailAction(orgSlug: string, input: StartLead
   });
 
   revalidatePath(`/${orgSlug}/crm`);
-  revalidatePath(`/${orgSlug}`);
   return { ok: true as const, leadId, signatureIncluded: Boolean(signature) };
 }

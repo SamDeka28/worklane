@@ -264,8 +264,8 @@ export function VariableChips({
   fields?: VariableList;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-      <span className="mr-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
         <Braces className="size-3.5" aria-hidden />
         Insert
       </span>
@@ -288,10 +288,10 @@ export function VariableChips({
               if (el) onInsert(el, token(field.key));
             }}
             className={cn(
-              "rounded-full px-2.5 py-1 text-xs font-medium ring-1 transition-colors",
+              "text-xs transition-colors",
               filled
-                ? "bg-card text-muted-foreground ring-foreground/10 hover:text-foreground"
-                : "bg-amber-500/10 text-amber-800 ring-amber-500/20 dark:text-amber-200",
+                ? "text-muted-foreground hover:text-foreground"
+                : "text-amber-700 hover:text-amber-800 dark:text-amber-300",
             )}
           >
             {shortLabel(field.label)}

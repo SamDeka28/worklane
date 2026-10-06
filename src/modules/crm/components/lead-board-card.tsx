@@ -2,7 +2,7 @@
 
 import { ArrowRight, Building2, CalendarClock, CalendarDays, Hourglass, Signpost } from "lucide-react";
 import { AvatarMark } from "@/components/studio/avatar-mark";
-import { TagRow, projectToneClass } from "@/components/studio/project-chip";
+import { ProjectChip, TagRow } from "@/components/studio/project-chip";
 import { cn } from "@/lib/utils";
 import { formatDay } from "@/modules/finance/presentation";
 import { dueLabel } from "@/modules/crm/presentation";
@@ -34,7 +34,7 @@ function ValueMark({ lead, state }: { lead: LeadRecord; state: LeadCardState }) 
     <span
       title="Estimated value"
       className={cn(
-        "shrink-0 text-[13px] font-semibold tabular-nums tracking-tight",
+        "shrink-0 text-sm font-medium tabular-nums",
         state === "won"
           ? "text-emerald-600 dark:text-emerald-400"
           : state === "lost"
@@ -80,33 +80,11 @@ export function LeadBoardCard({
 
   const body = (
     <>
-      {visibleTags.length > 0 ? (
-        <TagRow className="mb-2 gap-1.5">
-          {visibleTags.map((tag) => (
-            <span
-              key={tag}
-              title={tag}
-              className={cn(
-                "inline-block max-w-32 truncate rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold tracking-tight ring-1",
-                projectToneClass(tag),
-              )}
-            >
-              {tag}
-            </span>
-          ))}
-          {extraTagCount > 0 ? (
-            <span className="text-[11px] font-semibold text-muted-foreground">
-              +{extraTagCount}
-            </span>
-          ) : null}
-        </TagRow>
-      ) : null}
-
       <div className="flex items-start justify-between gap-3">
         <p
           className={cn(
-            "min-w-0 flex-1 text-[13px] leading-snug font-medium tracking-tight text-foreground",
-            state === "lost" && "text-muted-foreground",
+            "min-w-0 flex-1 text-sm font-medium leading-6 text-foreground",
+            state === "lost" && "font-medium text-muted-foreground",
           )}
         >
           {lead.name}
@@ -114,9 +92,20 @@ export function LeadBoardCard({
         {showValue ? <ValueMark lead={lead} state={state} /> : null}
       </div>
 
+      {visibleTags.length > 0 ? (
+        <TagRow className="mt-2.5 gap-x-3 gap-y-1.5">
+          {visibleTags.map((tag) => (
+            <ProjectChip key={tag} label={tag} className="max-w-32" />
+          ))}
+          {extraTagCount > 0 ? (
+            <span className="text-[11px] text-muted-foreground">+{extraTagCount}</span>
+          ) : null}
+        </TagRow>
+      ) : null}
+
       {company || reach ? (
         <p
-          className="mt-0.5 flex min-w-0 items-center gap-1 text-xs text-muted-foreground"
+          className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs leading-5 text-muted-foreground"
           title={[company, reach].filter(Boolean).join(" · ")}
         >
           {company ? <Building2 className="size-3 shrink-0 opacity-70" aria-hidden /> : null}
@@ -125,17 +114,17 @@ export function LeadBoardCard({
       ) : null}
 
       {state === "open" && (lead.nextAction || stale) ? (
-        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+        <div className="mt-2.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
           {lead.nextAction ? (
             <span
               title={`Next step: ${lead.nextAction}`}
               className={cn(
-                "inline-flex max-w-full min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium",
+                "inline-flex max-w-full min-w-0 items-center gap-1.5 text-xs leading-5",
                 follow === "overdue"
-                  ? "bg-status-overdue text-status-overdue-fg"
+                  ? "text-rose-600 dark:text-rose-400"
                   : follow === "today"
-                    ? "bg-amber-500/15 text-amber-800 dark:text-amber-200"
-                    : "bg-muted text-muted-foreground",
+                    ? "text-amber-700 dark:text-amber-300"
+                    : "text-foreground",
               )}
             >
               <CalendarClock className="size-3 shrink-0" aria-hidden />
@@ -148,7 +137,7 @@ export function LeadBoardCard({
           {stale ? (
             <span
               title="No calls, emails, or stage moves logged recently"
-              className="inline-flex items-center gap-1 rounded-md bg-orange-500/12 px-1.5 py-0.5 text-[11px] font-semibold text-orange-700 dark:text-orange-300"
+              className="inline-flex items-center gap-1 text-[11px] text-orange-700 dark:text-orange-300"
             >
               <Hourglass className="size-3" aria-hidden />
               {daysSince(lead.lastTouchedAt)}d quiet
@@ -157,10 +146,10 @@ export function LeadBoardCard({
         </div>
       ) : null}
 
-      <div className="mt-3 flex items-center justify-between gap-2">
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/40 pt-3">
         <div className="flex min-w-0 items-center gap-2.5">
           {convertible ? (
-            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/12 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
               Become a client
               <ArrowRight className="size-3" />
             </span>
@@ -169,9 +158,7 @@ export function LeadBoardCard({
               title="Expected close"
               className={cn(
                 "inline-flex shrink-0 items-center gap-1 text-[11px] font-medium",
-                overdue
-                  ? "rounded-md bg-status-overdue px-1.5 py-0.5 text-status-overdue-fg"
-                  : "text-muted-foreground",
+                overdue ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground",
               )}
             >
               <CalendarDays className="size-3 opacity-80" />
@@ -216,10 +203,8 @@ export function LeadBoardCard({
   return (
     <div
       className={cn(
-        "group/card relative w-full rounded-xl bg-card shadow-sm ring-1 ring-foreground/10 transition-[box-shadow,transform,ring-color,background-color] duration-150",
-        onOpen &&
-          !selected &&
-          "hover:-translate-y-px hover:shadow-md hover:ring-foreground/16",
+        "group/card relative w-full rounded-2xl bg-card ring-1 ring-border/50 transition-[ring-color,background-color] duration-150",
+        onOpen && !selected && "hover:ring-border",
         selected &&
           "bg-primary/10 ring-2 ring-primary/60 dark:bg-primary/15 dark:ring-primary",
         state === "lost" && !selected && "opacity-75",
@@ -228,11 +213,11 @@ export function LeadBoardCard({
       )}
     >
       {onOpen ? (
-        <button type="button" className="block w-full px-3 py-2.5 text-left" onClick={onOpen}>
+        <button type="button" className="block w-full px-3.5 py-3.5 text-left" onClick={onOpen}>
           {body}
         </button>
       ) : (
-        <div className="px-3 py-2.5">{body}</div>
+        <div className="px-3.5 py-3.5">{body}</div>
       )}
     </div>
   );

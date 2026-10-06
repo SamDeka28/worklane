@@ -46,6 +46,7 @@ function CommandDialog({
   return (
     <Dialog {...props}>
       <DialogContent
+        framed={false}
         className={cn(
           "top-[18%] left-1/2 flex w-[min(100%-2rem,32rem)] max-w-lg translate-x-[-50%] translate-y-0 flex-col overflow-hidden rounded-xl p-0 sm:max-w-lg",
           className

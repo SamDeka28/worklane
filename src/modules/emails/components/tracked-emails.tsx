@@ -382,12 +382,11 @@ export function TrackedEmailList({
                   <span className="truncate text-sm font-medium">{trackedEmailTitle(email)}</span>
                   <span
                     className={cn(
-                      "shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold tracking-wide uppercase",
-                      email.sentAt
-                        ? "bg-primary/10 text-primary"
-                        : "bg-muted text-muted-foreground",
+                      "inline-flex shrink-0 items-center gap-1 text-[11px] font-medium",
+                      email.sentAt ? "text-primary" : "text-muted-foreground",
                     )}
                   >
+                    <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden />
                     {email.source === "lead" ? "Lead email" : email.sentAt ? "Sent" : "Pixel"}
                   </span>
                 </p>

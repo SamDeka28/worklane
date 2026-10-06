@@ -107,7 +107,7 @@ export function TemplateGallery({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] overflow-hidden p-0 sm:max-w-4xl">
+      <DialogContent framed={false} className="max-h-[88vh] overflow-hidden p-0 sm:max-w-4xl">
         <DialogHeader className="border-b border-border/50 px-6 pt-5 pb-4">
           <DialogTitle className="flex items-center gap-2">
             <LayoutTemplate className="size-4 text-muted-foreground" />

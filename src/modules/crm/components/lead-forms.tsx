@@ -128,12 +128,12 @@ function AttachDropzone({
         const dropped = Array.from(event.dataTransfer.files);
         if (dropped.length > 0) onFiles(dropped);
       }}
-      className={cn(
-        "flex w-full flex-col items-center justify-center gap-1 rounded-2xl border border-dashed text-center transition-colors",
-        compact ? "px-4 py-3" : "px-4 py-7",
+        className={cn(
+        "flex w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dotted text-center transition-colors",
+        compact ? "px-4 py-3.5" : "px-4 py-7",
         dragging
-          ? "border-primary/60 bg-primary/10"
-          : "border-border/70 bg-muted/20 hover:border-border hover:bg-muted/40",
+          ? "border-primary bg-primary/15"
+          : "border-foreground/35 bg-muted/25 hover:border-foreground/55 hover:bg-muted/40",
         disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
       )}
     >
@@ -475,6 +475,7 @@ function LeadFormFields({
   tab,
   tabIdPrefix = "lead",
   proposals,
+  spotlight,
 }: {
   orgSlug: string;
   idPrefix: string;
@@ -496,6 +497,8 @@ function LeadFormFields({
   tab?: LeadTab;
   tabIdPrefix?: string;
   proposals?: ReactNode;
+  /** Sits under the deal fields, in the open column, so it stays on screen. */
+  spotlight?: ReactNode;
 }) {
   const creating = !lead;
   const [notesDoc, setNotesDoc] = useState<JSONContent | null>(
@@ -816,6 +819,7 @@ function LeadFormFields({
           <>
             {leading}
             {mainFields}
+            {spotlight}
           </>,
         )}
       </div>
@@ -1064,15 +1068,15 @@ export function LeadDetailSheet({
       ) : null}
     </div>
   ) : lost ? null : (
-    <div className="rounded-2xl bg-muted/40 p-4">
+    <div className="rounded-2xl bg-card p-4 ring-1 ring-border/70">
       <p className="text-sm font-medium">{won ? "Deal won" : "Ready to convert?"}</p>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
         Creates the client (or adds to an existing one) and a project from this lead.
       </p>
       <Button
         type="button"
         size="sm"
-        className="mt-3 w-full"
+        className="mt-3"
         variant={won ? "default" : "outline"}
         onClick={() => setConvertFor(lead.id)}
       >
@@ -1110,10 +1114,21 @@ export function LeadDetailSheet({
         )
       }
       headerAction={
-        <ActivityToggle
-          active={showActivity}
-          onToggle={() => setActivityFor(showActivity ? null : lead.id)}
-        />
+        <div className="flex items-center gap-2">
+          {canWrite && !lost && !showActivity ? (
+            <LeadEmailButton
+              orgSlug={orgSlug}
+              lead={lead}
+              stages={stages}
+              settings={settings}
+              sender={sender}
+            />
+          ) : null}
+          <ActivityToggle
+            active={showActivity}
+            onToggle={() => setActivityFor(showActivity ? null : lead.id)}
+          />
+        </div>
       }
       footer={
         canWrite && !showActivity ? (
@@ -1200,17 +1215,6 @@ export function LeadDetailSheet({
                 canWrite={canWrite}
                 onConvert={() => setConvertFor(lead.id)}
               />
-              {canWrite && !lost ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <LeadEmailButton
-                    orgSlug={orgSlug}
-                    lead={lead}
-                    stages={stages}
-                    settings={settings}
-                    sender={sender}
-                  />
-                </div>
-              ) : null}
               {!won && !lost ? (
                 <LeadNextStep
                   key={`${lead.id}:${lead.nextAction ?? ""}:${lead.nextActionOn ?? ""}`}
@@ -1252,9 +1256,9 @@ export function LeadDetailSheet({
                 members={members}
                 canWrite={canWrite}
               />
-              {clientCard}
             </>
           }
+          spotlight={clientCard}
           proposals={
             <LeadDocuments
               key={lead.id}

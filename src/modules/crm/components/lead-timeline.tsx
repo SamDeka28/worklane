@@ -45,12 +45,12 @@ const KIND_ICON: Record<LeadActivityKind, LucideIcon> = {
 };
 
 const KIND_TONE: Record<LeadActivityKind, string> = {
-  call: "bg-sky-500/12 text-sky-700 dark:text-sky-300",
-  email: "bg-violet-500/12 text-violet-700 dark:text-violet-300",
-  meeting: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
-  message: "bg-teal-500/12 text-teal-700 dark:text-teal-300",
-  note: "bg-amber-500/12 text-amber-700 dark:text-amber-300",
-  form: "bg-rose-500/12 text-rose-700 dark:text-rose-300",
+  call: "text-sky-700 dark:text-sky-300",
+  email: "text-violet-700 dark:text-violet-300",
+  meeting: "text-emerald-700 dark:text-emerald-300",
+  message: "text-teal-700 dark:text-teal-300",
+  note: "text-amber-700 dark:text-amber-300",
+  form: "text-rose-700 dark:text-rose-300",
 };
 
 const PLACEHOLDER: Record<string, string> = {
@@ -139,7 +139,7 @@ export function LeadTimeline({
   }
 
   return (
-    <section className="space-y-4" aria-label={showTitle ? undefined : "Timeline"}>
+    <section className="space-y-6" aria-label={showTitle ? undefined : "Timeline"}>
       {showTitle ? (
         <h3 className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
           Timeline
@@ -147,8 +147,8 @@ export function LeadTimeline({
       ) : null}
 
       {canWrite ? (
-        <div className="rounded-2xl bg-muted/40 p-3 ring-1 ring-foreground/6">
-          <div role="radiogroup" aria-label="Activity type" className="flex flex-wrap gap-1.5">
+        <div className="grid gap-3 rounded-2xl bg-card p-4 ring-1 ring-border/70">
+          <div role="radiogroup" aria-label="Activity type" className="flex flex-wrap gap-x-3 gap-y-1.5">
             {LEAD_ACTIVITY_KINDS.map((option) => {
               const Icon = KIND_ICON[option];
               const active = kind === option;
@@ -160,10 +160,8 @@ export function LeadTimeline({
                   aria-checked={active}
                   onClick={() => setKind(option)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition-colors",
-                    active
-                      ? "bg-foreground text-background ring-foreground"
-                      : "bg-card text-muted-foreground ring-foreground/10 hover:text-foreground",
+                    "inline-flex items-center gap-1.5 text-xs font-medium transition-colors",
+                    active ? KIND_TONE[option] : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   <Icon className="size-3.5" />
@@ -187,15 +185,18 @@ export function LeadTimeline({
             className="mt-3 min-h-16 bg-card"
             aria-label="Summary"
           />
-          <div className="mt-2.5 flex items-center justify-between gap-2">
-            <input
-              type="date"
-              value={day}
-              max={todayIso()}
-              onChange={(event) => setDay(event.target.value || todayIso())}
-              aria-label="When it happened"
-              className="h-8 rounded-full bg-card px-3 text-xs font-medium text-muted-foreground ring-1 ring-foreground/10 outline-none"
-            />
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+              When
+              <input
+                type="date"
+                value={day}
+                max={todayIso()}
+                onChange={(event) => setDay(event.target.value || todayIso())}
+                aria-label="When it happened"
+                className="h-9 rounded-lg bg-background px-3 text-sm text-foreground ring-1 ring-foreground/25 outline-none"
+              />
+            </label>
             <Button type="button" size="sm" disabled={pending || !body.trim()} onClick={submit}>
               {pending ? "Logging…" : `Log ${LEAD_ACTIVITY_LABEL[kind as LeadActivityKind].toLowerCase()}`}
             </Button>
@@ -217,7 +218,7 @@ export function LeadTimeline({
           Nothing logged yet. Log calls, emails, and meetings so anyone can pick this up.
         </p>
       ) : (
-        <ol className="space-y-1">
+        <ol className="space-y-1 border-t border-border/50 pt-5">
           {visible.map((item, index) => (
             <TimelineRow
               key={item.type === "activity" ? item.activity.id : item.id}
@@ -271,13 +272,13 @@ function TimelineRow({
   if (item.type === "stage") {
     const actor = item.actorLabel ?? "Worklane";
     return (
-      <li className={cn("relative flex gap-3", !last && "pb-3")}>
-        {!last ? <span className="absolute top-9 bottom-0 left-4 w-px bg-border/60" aria-hidden /> : null}
-        <span className="relative inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+      <li className={cn("relative flex gap-3", !last && "pb-5")}>
+        {!last ? <span className="absolute top-7 bottom-0 left-[7px] w-px bg-border/60" aria-hidden /> : null}
+        <span className="relative mt-1 inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground">
           <ArrowRight className="size-3.5" />
         </span>
-        <p className="min-w-0 flex-1 pt-1.5 text-[13px] text-muted-foreground">
-          <span className="font-semibold text-foreground">{actor}</span>{" "}
+        <p className="min-w-0 flex-1 text-sm leading-6 text-muted-foreground">
+          <span className="font-medium text-foreground">{actor}</span>{" "}
           {item.from ? (
             <>
               moved it from <span className="font-medium text-foreground">{item.from}</span> to{" "}
@@ -287,7 +288,7 @@ function TimelineRow({
           )}
           <span className="font-medium text-foreground">{item.to}</span>
         </p>
-        <time className="shrink-0 pt-1.5 text-xs text-muted-foreground/70" dateTime={item.at}>
+        <time className="shrink-0 text-xs leading-6 text-muted-foreground" dateTime={item.at}>
           {when(item.at)}
         </time>
       </li>
@@ -298,24 +299,19 @@ function TimelineRow({
   const Icon = activity.body?.startsWith("Sent “") ? FileText : KIND_ICON[activity.kind];
   const actor = activity.actorLabel ?? (activity.kind === "form" ? "Website form" : "Worklane");
   return (
-    <li className={cn("group/row relative flex gap-3", !last && "pb-3")}>
-      {!last ? <span className="absolute top-9 bottom-0 left-4 w-px bg-border/60" aria-hidden /> : null}
-      <span
-        className={cn(
-          "relative inline-flex size-8 shrink-0 items-center justify-center rounded-full",
-          KIND_TONE[activity.kind],
-        )}
-      >
+    <li className={cn("group/row relative flex gap-3", !last && "pb-5")}>
+      {!last ? <span className="absolute top-6 bottom-0 left-[7px] w-px bg-border/60" aria-hidden /> : null}
+      <span className={cn("relative mt-1 inline-flex size-4 shrink-0 items-center justify-center", KIND_TONE[activity.kind])}>
         <Icon className="size-3.5" />
       </span>
-      <div className="min-w-0 flex-1 pt-1">
+      <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <p className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-            <span className="font-semibold text-foreground">{LEAD_ACTIVITY_LABEL[activity.kind]}</span>
+          <p className="min-w-0 flex-1 truncate text-sm leading-6 text-muted-foreground">
+            <span className={cn("font-medium", KIND_TONE[activity.kind])}>{LEAD_ACTIVITY_LABEL[activity.kind]}</span>
             {" · "}
             {actor}
           </p>
-          <time className="shrink-0 text-xs text-muted-foreground/70" dateTime={activity.happenedAt}>
+          <time className="shrink-0 text-xs text-muted-foreground" dateTime={activity.happenedAt}>
             {when(activity.happenedAt)}
           </time>
           {canRemove ? (
@@ -332,7 +328,7 @@ function TimelineRow({
         {activity.email ? (
           <SentEmail email={activity.email} body={activity.body} />
         ) : activity.body ? (
-          <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
+          <p className="mt-1 text-sm leading-6 whitespace-pre-wrap text-foreground/90">
             {activity.body}
           </p>
         ) : null}
@@ -344,19 +340,19 @@ function TimelineRow({
 function SentEmail({ email, body }: { email: LeadEmailInfo; body: string | null }) {
   const [open, setOpen] = useState(false);
   const status = !email.trackOpens
-    ? { label: "Opens not tracked", tone: "bg-muted text-muted-foreground" }
+    ? { label: "Opens not tracked", tone: "text-muted-foreground" }
     : email.openCount > 0 && email.lastOpenedAt
       ? {
           label: `Opened${email.openCount > 1 ? ` ${email.openCount}×` : ""} · ${when(email.lastOpenedAt)}`,
-          tone: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-300",
+          tone: "text-emerald-700 dark:text-emerald-300",
         }
-      : { label: "Not opened yet", tone: "bg-muted text-muted-foreground" };
+      : { label: "Not opened yet", tone: "text-muted-foreground" };
   return (
-    <div className="mt-1.5 rounded-xl bg-card px-3 py-2.5 ring-1 ring-foreground/6">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold">{email.subject}</p>
+    <div className="mt-2 rounded-xl bg-muted/30 px-3 py-2.5">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <p className="min-w-0 flex-1 truncate text-sm font-medium leading-6">{email.subject}</p>
         <span
-          className={cn("shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-semibold", status.tone)}
+          className={cn("shrink-0 text-xs", status.tone)}
           title={email.firstOpenedAt ? `First opened ${new Date(email.firstOpenedAt).toLocaleString()}` : undefined}
           suppressHydrationWarning
         >

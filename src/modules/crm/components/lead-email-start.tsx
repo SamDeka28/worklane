@@ -24,6 +24,7 @@ import {
 import {
   AfterSending,
   BARE_FIELD,
+  ComposerSettings,
   SenderNote,
 } from "@/modules/crm/components/lead-email-composer";
 import { startLeadWithEmailAction } from "@/modules/crm/email-actions";
@@ -41,17 +42,20 @@ import type { LeadEmailSender } from "@/modules/crm/queries";
 import type { CrmSettings } from "@/modules/crm/settings";
 import { openPipelineStages, type LeadStageRecord } from "@/modules/crm/types";
 import { ComposerSignature } from "@/modules/email-signatures/components/signature-forms";
+import { EmailAttachments } from "@/modules/emails/components/email-attachments";
+import type { EmailAttachmentPayload } from "@/modules/emails/types";
 
-const fieldClass = `h-11 w-full px-0 ${BARE_FIELD}`;
+const fieldClass = `h-auto w-full px-0 py-0.5 text-sm font-normal leading-6 tracking-normal text-foreground ${BARE_FIELD}`;
+const bodyClass = `min-h-60 resize-y px-0 py-1 text-base font-normal leading-7 tracking-normal text-foreground ${BARE_FIELD}`;
 
 type Existing = { id: string; name: string };
 type FieldElement = HTMLInputElement | HTMLTextAreaElement;
 
 function Row({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
-    <div className={cn("flex min-w-0 items-center gap-3 px-3.5", className)}>
-      <span className="w-16 shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
-      <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
+    <div className={cn("grid gap-1 px-4 py-3", className)}>
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 items-center gap-2 text-sm leading-6 text-foreground">{children}</div>
     </div>
   );
 }
@@ -161,6 +165,7 @@ function StartLeadEmailDialog({
   const [withSignature, setWithSignature] = useState(true);
   const [followUp, setFollowUp] = useState(true);
   const [followDays, setFollowDays] = useState(3);
+  const [attachments, setAttachments] = useState<EmailAttachmentPayload[]>([]);
 
   const nextStage = openPipelineStages(stages)[1];
   const [advance, setAdvance] = useState(Boolean(nextStage));
@@ -218,6 +223,7 @@ function StartLeadEmailDialog({
         templateId,
         followUp: followUpOn ? { text: `Follow up on “${finalSubject}”`, on: followUpOn } : null,
         moveToStage: movedTo?.slug ?? null,
+        attachments,
       });
       if ("error" in result) {
         toast.error(result.error, { id: toastId });
@@ -252,7 +258,7 @@ function StartLeadEmailDialog({
         if (!next) onClose();
       }}
     >
-      <DialogContent className="max-h-[92dvh] grid-cols-[minmax(0,1fr)] gap-5 overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Email a new lead</DialogTitle>
           <DialogDescription>
@@ -266,38 +272,41 @@ function StartLeadEmailDialog({
             an owner or admin to connect the studio’s in Settings.
           </p>
         ) : (
-          <div className="grid gap-4">
+          <div className="grid gap-6">
             {templates.length > 0 ? (
-              <div role="radiogroup" aria-label="Template" className="flex flex-wrap gap-1.5">
-                {templates.map((item) => {
-                  const active = templateId === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      role="radio"
-                      aria-checked={active}
-                      onClick={() => {
-                        setTemplateId(item.id);
-                        setSubject(item.subject);
-                        setBody(item.body);
-                      }}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition-colors",
-                        active
-                          ? "bg-foreground text-background ring-foreground"
-                          : "bg-card text-muted-foreground ring-foreground/10 hover:text-foreground",
-                      )}
-                    >
-                      {item.purpose === "intro" ? <Sparkles className="size-3" /> : null}
-                      {item.name}
-                    </button>
-                  );
-                })}
+              <div className="grid gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Template</p>
+                <div role="radiogroup" aria-label="Template" className="flex flex-wrap gap-2">
+                  {templates.map((item) => {
+                    const active = templateId === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => {
+                          setTemplateId(item.id);
+                          setSubject(item.subject);
+                          setBody(item.body);
+                        }}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors",
+                          active
+                            ? "bg-primary/15 font-medium text-foreground ring-1 ring-primary/30"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        {item.purpose === "intro" ? <Sparkles className="size-3.5" /> : null}
+                        {item.name}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ) : null}
 
-            <div className="grid gap-2">
+            <div className="grid gap-4">
               <div className="overflow-visible rounded-xl ring-1 ring-foreground/10 [&>*+*]:border-t [&>*+*]:border-border/60">
                 <Row label="To">
                   <Input
@@ -379,25 +388,28 @@ function StartLeadEmailDialog({
                     className={fieldClass}
                   />
                 </Row>
-                <VariableField
-                  multiline
-                  value={body}
-                  onValueChange={setBody}
-                  values={values}
-                  fieldRef={bodyRef}
-                  onFocusField={(el) => (lastField.current = el)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                      event.preventDefault();
-                      send();
-                    }
-                  }}
-                  rows={10}
-                  maxLength={20_000}
-                  aria-label="Message"
-                  placeholder="Write your email. Type @ to insert a variable."
-                  className={`min-h-52 resize-y px-3.5 py-3 leading-6 ${BARE_FIELD}`}
-                />
+                <div className="grid gap-1.5 px-4 py-3.5">
+                  <span className="text-xs font-medium text-muted-foreground">Message</span>
+                  <VariableField
+                    multiline
+                    value={body}
+                    onValueChange={setBody}
+                    values={values}
+                    fieldRef={bodyRef}
+                    onFocusField={(el) => (lastField.current = el)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                        event.preventDefault();
+                        send();
+                      }
+                    }}
+                    rows={10}
+                    maxLength={20_000}
+                    aria-label="Message"
+                    placeholder="Write your email. Type @ to insert a variable."
+                    className={bodyClass}
+                  />
+                </div>
                 <ComposerSignature
                   signature={sender.signature}
                   include={withSignature}
@@ -406,6 +418,11 @@ function StartLeadEmailDialog({
                 />
               </div>
               <VariableChips values={values} target={lastField} fallback={bodyRef} onInsert={insert} />
+              <EmailAttachments
+                value={attachments}
+                onChange={setAttachments}
+                disabled={sending.current}
+              />
             </div>
 
             {existing ? (
@@ -431,27 +448,29 @@ function StartLeadEmailDialog({
               </p>
             ) : null}
 
-            <AfterSending
-              followUp={followUp}
-              onFollowUp={setFollowUp}
-              followDays={followDays}
-              onFollowDays={setFollowDays}
-              stageToggle={
-                nextStage ? { label: `Put the lead in ${nextStage.name}`, checked: advance, onChange: setAdvance } : null
-              }
-              track={track}
-              onTrack={setTrack}
-            />
+            <ComposerSettings>
+              <AfterSending
+                followUp={followUp}
+                onFollowUp={setFollowUp}
+                followDays={followDays}
+                onFollowDays={setFollowDays}
+                stageToggle={
+                  nextStage ? { label: `Put the lead in ${nextStage.name}`, checked: advance, onChange: setAdvance } : null
+                }
+                track={track}
+                onTrack={setTrack}
+              />
+            </ComposerSettings>
           </div>
         )}
 
-        <DialogFooter className="items-center sm:justify-between">
+        <DialogFooter className="justify-between">
           <SenderNote sender={sender} />
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="button" onClick={send} disabled={!canSend}>
+            <Button type="button" size="lg" onClick={send} disabled={!canSend}>
               <Mail />
               Send and create lead
             </Button>

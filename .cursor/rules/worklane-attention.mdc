@@ -1,0 +1,35 @@
+---
+description: Worklane visual hierarchy — clarity with richness, not minimalism
+globs: src/**/*.tsx
+alwaysApply: false
+---
+
+# Worklane visual quality
+
+Worklane should feel like a premium studio operating system: structured, dense, polished, and expressive. Do not flatten it into a generic minimal SaaS layout.
+
+Hierarchy means the important thing is one level stronger. It does not mean everything else gets removed or washed out.
+
+## Keep structure
+
+Cards, borders, shadows, badges, and surfaces are tools. Use them at different weights:
+
+- Dominant — the object (name, title, main number)
+- Primary — project, client, current state
+- Secondary — owner, due date, supporting context
+- Muted — extra metadata
+
+A rich component is correct when those weights are different. Do not strip badges, metric surfaces, or row columns just to make a screen quieter.
+
+## Shared pieces
+
+- Wide records use `DetailedRow`: identity, a labeled context column, a labeled signal column, then actions. Do not drop billed, collected, tracking, signatures, or project names to make the row shorter.
+- Compact scans use `EntityRow` when the object really is one line.
+- Figures use `MetricGroup` / `SummaryStat`. Each figure keeps its own surface. Mark one figure stronger; do not shrink the rest into plain text.
+- Board cards keep a project badge and priority, with the task title as the strongest line.
+- Secondary actions stay outline or tonal. Ghost is for rare or icon actions.
+- Empty states stay compact and still look designed.
+
+## Before changing a component
+
+Name the actual problem: hierarchy, layout, density, alignment, interaction, styling, or information architecture. Fix that. Do not start by deleting visual elements.

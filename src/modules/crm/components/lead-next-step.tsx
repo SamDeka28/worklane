@@ -66,13 +66,16 @@ function DayPicker({ value, onChange }: { value: string; onChange: (day: string)
           </button>
         );
       })}
-      <input
-        type="date"
-        aria-label="Pick a date"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-8 rounded-full bg-card px-3 text-xs font-medium text-muted-foreground ring-1 ring-foreground/10 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-      />
+      <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+        Due
+        <input
+          type="date"
+          aria-label="Pick a date"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-9 rounded-lg bg-card px-3 text-sm text-foreground ring-1 ring-foreground/25 outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        />
+      </label>
     </div>
   );
 }
@@ -113,41 +116,31 @@ export function LeadNextStep({
     });
   }
 
-  const tone =
-    state === "overdue"
-      ? "bg-status-overdue/60 ring-status-overdue-fg/25"
-      : state === "today"
-        ? "bg-amber-500/10 ring-amber-500/25"
-        : "bg-muted/40 ring-foreground/6";
-
   if (!canWrite && !lead.nextAction) return null;
 
+  const dateTone =
+    state === "overdue"
+      ? "text-rose-600 dark:text-rose-400"
+      : state === "today"
+        ? "text-amber-700 dark:text-amber-300"
+        : "text-foreground";
+
   return (
-    <section className={cn("rounded-2xl p-4 ring-1", tone)}>
-      <div className="flex items-center gap-2">
-        <CalendarClock className="size-4 text-muted-foreground" />
-        <h3 className="text-[11px] font-semibold tracking-[0.14em] text-muted-foreground uppercase">
-          Next step
-        </h3>
-        {lead.nextAction && lead.nextActionOn && !editing ? (
-          <span
-            className={cn(
-              "ml-auto rounded-md px-2 py-0.5 text-[11px] font-semibold",
-              state === "overdue"
-                ? "bg-status-overdue text-status-overdue-fg"
-                : state === "today"
-                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
-                  : "bg-card text-muted-foreground ring-1 ring-foreground/8",
-            )}
-          >
-            {dueLabel(lead.nextActionOn)}
-          </span>
-        ) : null}
-      </div>
+    <section
+      className={cn(
+        "rounded-2xl bg-primary/8 p-4 ring-1 ring-primary/35",
+        state === "overdue" && "bg-rose-500/10 ring-rose-500/45",
+        state === "today" && "bg-amber-500/10 ring-amber-500/45",
+      )}
+    >
+      <h3 className={cn("text-xs font-medium text-primary", state === "overdue" && "text-rose-600 dark:text-rose-400", state === "today" && "text-amber-700 dark:text-amber-300")}>
+        Next step
+      </h3>
 
       {lead.nextAction && !editing ? (
-        <div className="mt-2.5 flex flex-wrap items-center gap-2">
-          <p className="min-w-0 flex-1 text-sm font-medium">{lead.nextAction}</p>
+        <div className="mt-2 grid gap-2.5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <p className="min-w-0 flex-1 text-sm font-medium leading-6">{lead.nextAction}</p>
           {canWrite ? (
             <div className="flex items-center gap-1">
               <Button
@@ -181,6 +174,13 @@ export function LeadNextStep({
                 <X />
               </Button>
             </div>
+          ) : null}
+          </div>
+          {lead.nextActionOn ? (
+            <p className={cn("inline-flex items-center gap-1.5 text-sm font-medium", dateTone)}>
+              <CalendarClock className="size-4" aria-hidden />
+              {dueLabel(lead.nextActionOn)}
+            </p>
           ) : null}
         </div>
       ) : canWrite ? (

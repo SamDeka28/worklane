@@ -207,7 +207,13 @@ export function CrmSettingsSheet({
               icon: AtSign,
               badge: mailbox.saved && mailbox.allowed ? "On" : null,
             },
-            { id: "intake", label: "Form", icon: Globe, badge: intake.enabled ? "On" : null },
+            {
+              id: "intake",
+              label: "Form",
+              icon: Globe,
+              badge: intake.enabled ? "On" : null,
+              hint: "A public page people fill in to become a lead. Share the link, or embed it on your site. Each submission lands in the pipeline with a follow-up due today.",
+            },
           ]}
         />
       }

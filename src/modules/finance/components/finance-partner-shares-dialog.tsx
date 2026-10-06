@@ -132,6 +132,7 @@ export function PartnerSharesDetailDialog({
         {triggerLabel}
       </DialogTrigger>
       <DialogContent
+        framed={false}
         className="flex max-h-[min(90vh,52rem)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
         showCloseButton
       >
