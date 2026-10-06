@@ -219,29 +219,28 @@ async function deliverLeadEmail(
   if (options.stageTo && options.stageTo !== lead.stage) leadUpdate.stage = options.stageTo;
   if (!lead.email) leadUpdate.email = email.to;
 
-  const [{ error: activityError }] = await Promise.all([
-    ctx.supabase.from("lead_activities").insert({
-      id: activityId,
-      organization_id: ctx.org.id,
-      lead_id: lead.id,
-      kind: "email",
-      body: email.body.slice(0, 4000),
-      actor_id: ctx.userId,
-    }),
+  const { error: activityError } = await ctx.supabase.from("lead_activities").insert({
+    id: activityId,
+    organization_id: ctx.org.id,
+    lead_id: lead.id,
+    kind: "email",
+    body: email.body.slice(0, 4000),
+    actor_id: ctx.userId,
+  });
+  await Promise.all([
+    activityError
+      ? Promise.resolve()
+      : ctx.supabase
+          .from("lead_emails")
+          .update({
+            activity_id: activityId,
+            message_id: result.messageId ?? null,
+          })
+          .eq("id", emailId),
     Object.keys(leadUpdate).length > 0
       ? ctx.supabase.from("leads").update(leadUpdate).eq("id", lead.id).eq("organization_id", ctx.org.id)
       : Promise.resolve(),
-    ctx.supabase
-      .from("lead_emails")
-      .update({
-        activity_id: activityId,
-        message_id: result.messageId ?? null,
-      })
-      .eq("id", emailId),
   ]);
-  if (activityError) {
-    await ctx.supabase.from("lead_emails").update({ activity_id: null }).eq("id", emailId);
-  }
   return { ok: true as const };
 }
 
