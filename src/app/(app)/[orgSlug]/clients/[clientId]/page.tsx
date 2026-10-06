@@ -306,6 +306,9 @@ export default async function ClientProfilePage({
                         href={`/${orgSlug}/projects/${project.id}`}
                         className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/40"
                       >
+                        {project.logoUrl ? (
+                          <AvatarMark name={project.name} src={project.logoUrl} size="sm" />
+                        ) : null}
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-[15px] font-semibold tracking-tight group-hover:text-primary">
                             {project.name}

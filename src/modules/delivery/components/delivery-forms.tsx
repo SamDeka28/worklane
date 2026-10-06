@@ -9,7 +9,7 @@ import { SoftDocField } from "@/components/editor/soft-doc-field";
 import { ActionSheet } from "@/components/studio/action-sheet";
 import { Composer, ComposerBar } from "@/components/studio/composer";
 import { DangerZone } from "@/components/studio/type-to-confirm";
-import { composerControlClassName } from "@/components/studio/chrome";
+import { AvatarMark, composerControlClassName } from "@/components/studio/chrome";
 import { Field } from "@/components/studio/field";
 import { Button } from "@/components/ui/button";
 import type { ClientRecord } from "@/modules/clients/types";
@@ -44,6 +44,8 @@ import {
   createTaskAction,
   createWorkLogAction,
   deleteProjectAction,
+  removeProjectLogoAction,
+  uploadProjectLogoAction,
   postContractedChargeAction,
   updateProjectAction,
   updateTaskStatusAction,
@@ -333,6 +335,7 @@ export function EditProjectForm({
 
   return (
     <>
+    <ProjectLogoField orgSlug={orgSlug} project={project} />
     <form
       ref={formRef}
       className="grid gap-4"
@@ -490,6 +493,90 @@ export function EditProjectForm({
       </DialogContent>
     </Dialog>
     </>
+  );
+}
+
+function ProjectLogoField({
+  orgSlug,
+  project,
+}: {
+  orgSlug: string;
+  project: ProjectRecord;
+}) {
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pending, start] = useTransition();
+  const [logoUrl, setLogoUrl] = useState(project.logoUrl);
+  useEffect(() => {
+    setLogoUrl(project.logoUrl);
+  }, [project.logoUrl]);
+
+  return (
+    <div className="mb-4 flex items-center gap-4 rounded-xl px-4 py-3.5 ring-1 ring-border">
+      <AvatarMark name={project.name} src={logoUrl} size="lg" className="size-16 text-lg" />
+      <div className="min-w-0">
+        <p className="text-sm font-medium">Logo</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Optional. Shown instead of the initials wherever this project is listed.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() => fileRef.current?.click()}
+          >
+            {pending ? "Saving…" : logoUrl ? "Change logo" : "Add logo"}
+          </Button>
+          {logoUrl ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={pending}
+              onClick={() => {
+                start(async () => {
+                  const result = await removeProjectLogoAction(orgSlug, project.id);
+                  if ("error" in result) {
+                    toast.error(result.error);
+                    return;
+                  }
+                  setLogoUrl(null);
+                  toast.success("Logo removed");
+                  router.refresh();
+                });
+              }}
+            >
+              Remove
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          start(async () => {
+            const body = new FormData();
+            body.set("file", file);
+            const result = await uploadProjectLogoAction(orgSlug, project.id, body);
+            if ("error" in result) {
+              toast.error(result.error);
+              return;
+            }
+            setLogoUrl(result.logoUrl);
+            toast.success("Logo added");
+            router.refresh();
+          });
+        }}
+      />
+    </div>
   );
 }
 

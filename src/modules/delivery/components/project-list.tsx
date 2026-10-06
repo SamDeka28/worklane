@@ -40,6 +40,7 @@ export type ProjectListCard = {
   project: {
     id: string;
     name: string;
+    logoUrl: string | null;
     status: string;
     clientId: string;
     clientName: string;
@@ -140,7 +141,7 @@ function ProjectListRow({
             href={`/${orgSlug}/projects/${card.project.id}`}
             className="mt-0.5 shrink-0"
           >
-            <AvatarMark name={card.project.name} size="sm" />
+            <AvatarMark name={card.project.name} src={card.project.logoUrl} size="sm" />
           </Link>
           <div className="min-w-0">
             <div className="flex min-w-0 flex-wrap items-center gap-2">

@@ -618,6 +618,67 @@ export async function updateProjectAction(
   return { ok: true as const };
 }
 
+const LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+function logoExtension(type: string) {
+  if (type === "image/png") return "png";
+  if (type === "image/webp") return "webp";
+  if (type === "image/gif") return "gif";
+  return "jpg";
+}
+
+export async function uploadProjectLogoAction(orgSlug: string, projectId: string, formData: FormData) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const project = await loadProjectRow(ctx, projectId);
+  if (!project) return { error: "Project not found" };
+  const file = formData.get("file");
+  if (!(file instanceof File)) return { error: "Choose an image" };
+  if (file.size <= 0 || file.size > 5 * 1024 * 1024) return { error: "Image must be under 5 MB" };
+  if (file.type && !LOGO_TYPES.has(file.type)) return { error: "Use PNG, JPEG, WebP, or GIF" };
+
+  const ext = logoExtension(file.type);
+  const path = `${ctx.org.id}/${projectId}.${ext}`;
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const { error: uploadError } = await ctx.supabase.storage.from("project-logos").upload(path, bytes, {
+    contentType: file.type || "image/jpeg",
+    upsert: true,
+  });
+  if (uploadError) return { error: uploadError.message };
+
+  const { data: pub } = ctx.supabase.storage.from("project-logos").getPublicUrl(path);
+  const logoUrl = `${pub.publicUrl}?v=${Date.now()}`;
+  const { error } = await ctx.supabase
+    .from("projects")
+    .update({ logo_url: logoUrl })
+    .eq("id", projectId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+
+  revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  revalidatePath(`/${orgSlug}/projects`);
+  revalidatePath(`/${orgSlug}/clients/${project.client_id}`);
+  return { ok: true as const, logoUrl };
+}
+
+export async function removeProjectLogoAction(orgSlug: string, projectId: string) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const project = await loadProjectRow(ctx, projectId);
+  if (!project) return { error: "Project not found" };
+  const { error } = await ctx.supabase
+    .from("projects")
+    .update({ logo_url: null })
+    .eq("id", projectId)
+    .eq("organization_id", ctx.org.id);
+  if (error) return { error: error.message };
+  await ctx.supabase.storage
+    .from("project-logos")
+    .remove(["png", "jpg", "webp", "gif"].map((ext) => `${ctx.org.id}/${projectId}.${ext}`));
+  revalidatePath(`/${orgSlug}/projects/${projectId}`);
+  revalidatePath(`/${orgSlug}/projects`);
+  revalidatePath(`/${orgSlug}/clients/${project.client_id}`);
+  return { ok: true as const };
+}
+
 export async function setProjectStatusAction(
   orgSlug: string,
   projectId: string,

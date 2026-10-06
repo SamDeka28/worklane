@@ -48,6 +48,7 @@ function mapProject(row: {
   organization_id: string;
   client_id: string;
   name: string;
+  logo_url?: string | null;
   status: string;
   billing_mode: string;
   default_fee_bps: number;
@@ -70,6 +71,7 @@ function mapProject(row: {
     clientName: client?.name ?? "Client",
     currency: asIsoCurrency(client?.currency),
     name: row.name,
+    logoUrl: row.logo_url ?? null,
     status: asStatus(row.status, PROJECT_STATUSES, "active"),
     billingMode: asStatus(row.billing_mode, BILLING_MODES, "hourly"),
     defaultFeeBps: row.default_fee_bps,
@@ -88,7 +90,7 @@ function mapProject(row: {
 }
 
 const PROJECT_SELECT =
-  "id, organization_id, client_id, name, status, billing_mode, default_fee_bps, earn_on, contracted_amount_minor, hourly_rate_minor, retainer_basis, scope, scope_doc, starts_on, due_on, created_at, clients(name, currency)";
+  "id, organization_id, client_id, name, logo_url, status, billing_mode, default_fee_bps, earn_on, contracted_amount_minor, hourly_rate_minor, retainer_basis, scope, scope_doc, starts_on, due_on, created_at, clients(name, currency)";
 
 export const listProjects = cache(async (orgSlug: string) => {
   const { org, supabase } = await requireOrg(orgSlug);

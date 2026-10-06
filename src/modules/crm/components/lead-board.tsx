@@ -354,6 +354,7 @@ function LeadColumn({
     <BoardColumn
       id={stage.slug}
       isOver={dropActive}
+      bodyClassName="gap-2"
       header={
         <header className="shrink-0 px-3 pt-3.5 pb-3">
           <div className="flex items-center gap-1.5">

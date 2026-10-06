@@ -19,6 +19,7 @@ import {
   boardCollisionDetection,
   useBoardDndSensors,
 } from "@/components/studio/board";
+import { AvatarMark } from "@/components/studio/avatar-mark";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { setProjectStatusAction } from "@/modules/delivery/actions";
@@ -181,7 +182,7 @@ export function ProjectStatusBoard({
             <DragOverlay dropAnimation={null}>
               {overlay ? (
                 <BoardCardShell className="w-72 cursor-grabbing shadow-soft">
-                  <p className="truncate text-sm font-medium">{overlay.project.name}</p>
+                  <ProjectName name={overlay.project.name} logoUrl={overlay.project.logoUrl} />
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {overlay.project.clientName}
                   </p>
@@ -192,6 +193,15 @@ export function ProjectStatusBoard({
           )
         : null}
     </DndContext>
+  );
+}
+
+function ProjectName({ name, logoUrl }: { name: string; logoUrl: string | null }) {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      {logoUrl ? <AvatarMark name={name} src={logoUrl} size="sm" /> : null}
+      <p className="truncate text-sm font-medium">{name}</p>
+    </div>
   );
 }
 
@@ -224,7 +234,7 @@ function SortableProjectCard({
       {...listeners}
     >
       <BoardCardShell onClick={onOpen}>
-        <p className="truncate text-sm font-medium">{row.project.name}</p>
+        <ProjectName name={row.project.name} logoUrl={row.project.logoUrl} />
         <p className="mt-0.5 truncate text-xs text-muted-foreground">
           {row.project.clientName}
         </p>

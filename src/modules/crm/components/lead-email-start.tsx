@@ -27,7 +27,7 @@ import {
   ComposerSettings,
   SenderNote,
 } from "@/modules/crm/components/lead-email-composer";
-import { startLeadWithEmailAction } from "@/modules/crm/email-actions";
+import type { StartLeadEmailInput } from "@/modules/crm/email-actions";
 import { findLeadDuplicatesAction } from "@/modules/crm/follow-actions";
 import {
   addDays,
@@ -211,7 +211,7 @@ function StartLeadEmailDialog({
     const movedTo = advance && nextStage ? nextStage : null;
     const finalSubject = fillTemplate(subject, values);
     try {
-      const result = await startLeadWithEmailAction(orgSlug, {
+      const payload: StartLeadEmailInput = {
         to: recipient,
         cc: showCc ? cc : "",
         contactName: contact,
@@ -224,9 +224,15 @@ function StartLeadEmailDialog({
         followUp: followUpOn ? { text: `Follow up on “${finalSubject}”`, on: followUpOn } : null,
         moveToStage: movedTo?.slug ?? null,
         attachments,
+      };
+      const response = await fetch(`/${orgSlug}/crm/leads/start`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      if ("error" in result) {
-        toast.error(result.error, { id: toastId });
+      const result = (await response.json()) as { error?: string; leadId?: string };
+      if (result.error || !result.leadId) {
+        toast.error(result.error ?? "Couldn’t send the email", { id: toastId });
         onFailed();
         return;
       }
@@ -272,7 +278,7 @@ function StartLeadEmailDialog({
             an owner or admin to connect the studio’s in Settings.
           </p>
         ) : (
-          <div className="grid gap-6">
+          <div className="grid min-w-0 gap-6">
             {templates.length > 0 ? (
               <div className="grid gap-2">
                 <p className="text-xs font-medium text-muted-foreground">Template</p>

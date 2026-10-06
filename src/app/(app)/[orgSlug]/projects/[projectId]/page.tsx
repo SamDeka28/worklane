@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
 import { ArrowRight, CalendarClock, Coins, Flag, Handshake } from "lucide-react";
 import {
+  AvatarMark,
   EntityChrome,
   FilterChip,
   FilterChips,
@@ -543,8 +544,11 @@ export default async function ProjectDetailPage({
     <WorkSurface variant="panel">
       <EntityChrome
         title={
-          <span className="flex flex-wrap items-center gap-2">
-            <span>{project.name}</span>
+          <span className="flex items-center gap-3">
+            {project.logoUrl ? (
+              <AvatarMark name={project.name} src={project.logoUrl} className="size-12 text-base" />
+            ) : null}
+            <span className="min-w-0 leading-none">{project.name}</span>
             <StatusChip tone={project.status === "active" ? "active" : "planning"}>
               {STATUS_LABEL[project.status]}
             </StatusChip>

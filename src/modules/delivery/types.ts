@@ -46,6 +46,8 @@ export type ProjectRecord = {
   clientName: string;
   currency: IsoCurrency;
   name: string;
+  /** Public logo URL. Lists show this instead of the initials when set. */
+  logoUrl: string | null;
   status: ProjectStatus;
   billingMode: BillingMode;
   defaultFeeBps: number;

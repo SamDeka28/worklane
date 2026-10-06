@@ -76,6 +76,7 @@ export function BoardColumn({
   children,
   footer,
   className,
+  bodyClassName,
   style,
   setNodeRef: externalRef,
   isOver: externalIsOver,
@@ -87,6 +88,8 @@ export function BoardColumn({
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  /** Overrides the card stack spacing. */
+  bodyClassName?: string;
   style?: CSSProperties;
   setNodeRef?: (node: HTMLElement | null) => void;
   isOver?: boolean;
@@ -122,7 +125,12 @@ export function BoardColumn({
           ) : null}
         </header>
       )}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain px-3 pt-1 pb-3">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-y-contain px-3 pt-1 pb-3",
+          bodyClassName,
+        )}
+      >
         {children}
       </div>
       {footer ? <div className="shrink-0 p-2.5">{footer}</div> : null}

@@ -1,6 +1,4 @@
-import { cache } from "react";
 import type { OrgContext } from "@/modules/identity/org";
-import { parseOrgInvoiceSettings } from "@/modules/invoices/settings";
 import {
   pickSignature,
   renderSignature,
@@ -52,19 +50,9 @@ export async function getSignatures(
   };
 }
 
-/** The studio's business details from settings, once per request. */
-const orgBusiness = cache(async (ctx: OrgContext) => {
-  const { data } = await ctx.supabase
-    .from("organizations")
-    .select("settings")
-    .eq("id", ctx.org.id)
-    .maybeSingle();
-  return parseOrgInvoiceSettings(data?.settings).business;
-});
-
 /** The details a signature's fields are filled from. */
 export async function signatureSender(ctx: OrgContext): Promise<SignatureSender> {
-  const business = await orgBusiness(ctx);
+  const business = ctx.business;
   return {
     name: ctx.user.displayName?.trim() || ctx.user.email?.split("@")[0] || "",
     title: ctx.user.jobTitle,

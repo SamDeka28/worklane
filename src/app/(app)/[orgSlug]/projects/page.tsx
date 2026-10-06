@@ -1,23 +1,17 @@
-import Link from "next/link";
 import {
-  ArrowRight,
-  Columns3,
   FolderKanban,
   SearchX,
   Users,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/studio/empty-state";
-import { AvatarMark, SoftCard, StudioToolbar, WorkSurface } from "@/components/studio/chrome";
-import { MoneyDonutCard, MoneyMetaCards } from "@/components/studio/money-donut";
-import { StatusChip } from "@/components/studio/status-chip";
+import { StudioToolbar, WorkSurface } from "@/components/studio/chrome";
 import {
   IndexBody,
   SummaryStat,
   SummaryStrip,
 } from "@/components/studio/index-layout";
 import { listClients } from "@/modules/clients/queries";
-import { BILLING_MODE_LABEL, projectMoneyStats } from "@/modules/delivery/board";
+import { projectMoneyStats } from "@/modules/delivery/board";
 import { CreateProjectDialog } from "@/modules/delivery/components/delivery-forms";
 import { ProjectListPanel } from "@/modules/delivery/components/project-list";
 import { ProjectStatusBoard } from "@/modules/delivery/components/project-status-board";
@@ -25,31 +19,14 @@ import { ProjectToolbar } from "@/modules/delivery/components/project-toolbar";
 import { projectNextStep } from "@/modules/delivery/next-step";
 import { projectTracksTime } from "@/modules/delivery/ledger";
 import { listProjectBoard } from "@/modules/delivery/queries";
-import type { ProjectStatus } from "@/modules/delivery/types";
 import { requireModuleAccess, requireOrg } from "@/modules/identity/org";
 import { canSeeMoney } from "@/modules/identity/permissions";
 import { moneyLabel } from "@/modules/finance/ledger";
-import { dueThisMonthMinor, formatDay } from "@/modules/finance/presentation";
+import { dueThisMonthMinor } from "@/modules/finance/presentation";
 import { loadOrgFinance } from "@/modules/finance/queries";
 import { JOURNEY } from "@/shared/journey-copy";
 
 const PAGE_SIZE = 40;
-
-const STATUS_TONE = {
-  planning: "planning",
-  active: "active",
-  on_hold: "on_hold",
-  completed: "completed",
-  cancelled: "cancelled",
-} as const;
-
-const STATUS_LABEL: Record<string, string> = {
-  planning: "Planning",
-  active: "Active",
-  on_hold: "On hold",
-  completed: "Completed",
-  cancelled: "Cancelled",
-};
 
 export default async function ProjectsPage({
   params,
@@ -74,8 +51,7 @@ export default async function ProjectsPage({
   const q = typeof query.q === "string" ? query.q.trim().toLowerCase() : "";
   const status = typeof query.status === "string" ? query.status : "";
   const clientId = typeof query.client === "string" ? query.client : "";
-  const view =
-    query.view === "cards" || query.view === "board" ? query.view : "list";
+  const view = query.view === "board" ? "board" : "list";
   const page = Math.max(1, Number(query.page) || 1);
 
   const filtered = board.filter((row) => {
@@ -250,144 +226,12 @@ export default async function ProjectsPage({
               </SummaryStrip>
               {cards.length === 0 ? (
                 <EmptyState icon={SearchX} fill title="No projects match these filters" />
-              ) : view === "list" ? (
+              ) : (
                 <ProjectListPanel
                   orgSlug={orgSlug}
                   cards={cards}
                   showMoney={seeMoney}
                 />
-              ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto lane-inset p-4 sm:p-5">
-                  <div className="grid gap-4 sm:grid-cols-2 sm:gap-5 xl:grid-cols-3">
-                    {cards.map((card) => {
-                      const activityParts = [
-                        card.openTasks > 0
-                          ? `${card.openTasks} open task${card.openTasks === 1 ? "" : "s"}`
-                          : null,
-                        card.unbilledMilestones > 0
-                          ? `${card.unbilledMilestones} unbilled`
-                          : null,
-                        card.lastWorkedOn ? `worked ${formatDay(card.lastWorkedOn)}` : null,
-                      ].filter(Boolean);
-
-                      return (
-                        <SoftCard key={card.project.id} className="flex gap-5 p-5">
-                          <div className="flex min-w-0 flex-1 flex-col gap-3.5">
-                            <Link
-                              href={`/${orgSlug}/projects/${card.project.id}`}
-                              className="flex items-start gap-3"
-                            >
-                              <AvatarMark name={card.project.name} />
-                              <div className="min-w-0 flex-1">
-                                <span className="flex flex-wrap items-center gap-2">
-                                  <span className="truncate text-sm font-semibold tracking-tight hover:text-primary">
-                                    {card.project.name}
-                                  </span>
-                                  <StatusChip
-                                    tone={STATUS_TONE[card.project.status as ProjectStatus]}
-                                  >
-                                    {STATUS_LABEL[card.project.status]}
-                                  </StatusChip>
-                                </span>
-                                <p className="mt-1 truncate text-xs text-muted-foreground">
-                                  {card.project.clientName}
-                                  {" · "}
-                                  {BILLING_MODE_LABEL[card.project.billingMode]}
-                                </p>
-                                <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                                  {activityParts.length > 0
-                                    ? activityParts.join(" · ")
-                                    : card.next.detail}
-                                </p>
-                              </div>
-                            </Link>
-                            {seeMoney ? (
-                              <MoneyMetaCards
-                                className="grid-cols-2"
-                                items={[
-                                  {
-                                    label: "Due",
-                                    value: moneyLabel(
-                                      card.money.outstandingMinor,
-                                      card.project.currency,
-                                    ),
-                                    tone: "sky",
-                                  },
-                                  {
-                                    label: "Left",
-                                    value: moneyLabel(
-                                      card.money.remainingMinor,
-                                      card.project.currency,
-                                    ),
-                                    tone: "violet",
-                                  },
-                                ]}
-                              />
-                            ) : null}
-                            {ctx.canWrite ? (
-                              <div className="mt-auto flex flex-wrap items-center gap-2 self-start">
-                                <Button
-                                  size="sm"
-                                  variant="tonal"
-                                  nativeButton={false}
-                                  render={
-                                    <Link href={`/${orgSlug}/projects/${card.project.id}?tab=work&panel=board`} />
-                                  }
-                                >
-                                  <Columns3 className="opacity-90" aria-hidden />
-                                  Board
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  nativeButton={false}
-                                  render={<Link href={card.nextHref} />}
-                                >
-                                  {card.next.cta}
-                                  <ArrowRight data-icon="inline-end" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="tonal"
-                                className="mt-auto self-start"
-                                nativeButton={false}
-                                render={
-                                  <Link href={`/${orgSlug}/projects/${card.project.id}?tab=work&panel=board`} />
-                                }
-                              >
-                                <Columns3 className="opacity-90" aria-hidden />
-                                Board
-                              </Button>
-                            )}
-                          </div>
-                          {seeMoney ? (
-                            <MoneyDonutCard
-                              className="hidden shrink-0 self-center sm:block"
-                              size="lg"
-                              collected={Number(card.money.collectedMinor)}
-                              due={Number(card.money.outstandingMinor)}
-                              remaining={Number(
-                                card.money.remainingMinor > card.money.outstandingMinor
-                                  ? card.money.remainingMinor - card.money.outstandingMinor
-                                  : BigInt(0),
-                              )}
-                              collectedLabel={`Collected · ${moneyLabel(card.money.collectedMinor, card.project.currency)}`}
-                              dueLabel={`Due · ${moneyLabel(card.money.outstandingMinor, card.project.currency)}`}
-                              remainingLabel={`Remaining · ${moneyLabel(card.money.remainingMinor, card.project.currency)}`}
-                              centerValue={moneyLabel(
-                                card.money.totalPriceMinor,
-                                card.project.currency,
-                              )}
-                              centerLabel="Total"
-                            />
-                          ) : null}
-                        </SoftCard>
-                      );
-                    })}
-                  </div>
-                </div>
               )}
             </IndexBody>
           )}

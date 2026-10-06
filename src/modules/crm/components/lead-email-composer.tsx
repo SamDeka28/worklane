@@ -96,12 +96,12 @@ function Toggle({
   children: ReactNode;
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm">
+    <label className="flex min-w-0 items-center gap-2 text-sm">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="size-4 accent-[var(--primary)]"
+        className="size-4 shrink-0 accent-[var(--primary)]"
       />
       {children}
     </label>
@@ -120,7 +120,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 /** Follow-up, stage, and tracking, kept apart from the message itself. */
 export function ComposerSettings({ children }: { children: ReactNode }) {
   return (
-    <section className="grid gap-3 border-t border-border/60 pt-5">
+    <section className="grid min-w-0 gap-3 border-t border-border/60 pt-5">
       <h3 className="text-xs font-medium text-muted-foreground">After sending</h3>
       {children}
     </section>
@@ -476,7 +476,7 @@ function LeadEmailComposer({
             an owner or admin to connect the studio’s in Settings.
           </p>
         ) : (
-          <div className="grid gap-6">
+          <div className="grid min-w-0 gap-6">
             {templates.length > 0 ? (
               <div className="grid gap-2">
                 <p className="text-xs font-medium text-muted-foreground">Template</p>
@@ -514,8 +514,8 @@ function LeadEmailComposer({
               </div>
             ) : null}
 
-            <div className="grid gap-4">
-              <div className="rounded-xl ring-1 ring-foreground/10 [&>*+*]:border-t [&>*+*]:border-border/60">
+            <div className="grid min-w-0 gap-4">
+              <div className="min-w-0 rounded-xl ring-1 ring-foreground/10 [&>*+*]:border-t [&>*+*]:border-border/60">
                 <Row label="To">
                   <Input
                     type="email"
@@ -616,7 +616,7 @@ function LeadEmailComposer({
                   }}
                 >
                   <CornerUpLeft className="size-3.5 text-muted-foreground" />
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 flex-1 truncate">
                     Reply in the thread “{lastEmail.subject}”
                     <span className="text-muted-foreground">
                       {lastEmail.opened ? " · opened" : " · not opened yet"}

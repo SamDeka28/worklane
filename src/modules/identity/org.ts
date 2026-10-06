@@ -18,6 +18,7 @@ import {
 } from "@/modules/identity/types";
 import { requireUser } from "@/shared/db/require-user";
 import { parseCustomDeductions, type DeductionOption } from "@/modules/delivery/deductions";
+import { parseOrgInvoiceSettings, type InvoiceBusiness } from "@/modules/invoices/settings";
 import { asIsoCurrency } from "@/shared/money";
 import {
   resolveComponent,
@@ -55,6 +56,8 @@ export type OrgContext = {
   };
   /** Named tax / deduction presets saved on the studio, besides the built-ins. */
   deductions: DeductionOption[];
+  /** Studio business details already loaded with the org, so signatures don't fetch them again. */
+  business: InvoiceBusiness;
 };
 
 type OrgRow = {
@@ -184,6 +187,7 @@ export const requireOrg = cache(async (slug: string): Promise<OrgContext> => {
       address: (profile?.address as string | null) ?? null,
     },
     deductions: parseCustomDeductions(orgRow.settings),
+    business: parseOrgInvoiceSettings(orgRow.settings).business,
   };
 });
 
@@ -258,6 +262,7 @@ export async function requireOrgForClient(
       address: (profile?.address as string | null) ?? null,
     },
     deductions: parseCustomDeductions(orgRow.settings),
+    business: parseOrgInvoiceSettings(orgRow.settings).business,
   };
 }
 

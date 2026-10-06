@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { cache } from "react";
 import type { FollowCandidate } from "@/modules/ops/queue";
 import { listOrgMembers, requireOrg, type OrgContext } from "@/modules/identity/org";
@@ -21,6 +22,7 @@ import { resolveSender } from "@/modules/email-senders/server";
 import { senderSignatureState } from "@/modules/email-signatures/server";
 import type { RenderedSignature } from "@/modules/email-signatures/types";
 import type { SenderVia } from "@/modules/email-senders/types";
+import { warmSmtpTransport } from "@/shared/email";
 import { asIsoCurrency, type IsoCurrency } from "@/shared/money";
 
 type LeadRow = {
@@ -355,6 +357,10 @@ export async function leadEmailSender(ctx: OrgContext): Promise<LeadEmailSender>
     resolveSender(ctx.org.id, ctx.userId, { module: "crm", ownMailbox: canUseOwnMailbox(ctx) }),
     senderSignatureState(ctx, "leads"),
   ]);
+  if (resolved.via) {
+    const smtp = resolved.smtp;
+    after(() => warmSmtpTransport(smtp));
+  }
   return {
     configured: resolved.via !== null,
     name: ctx.user.displayName?.trim() || ctx.user.email?.split("@")[0] || "",

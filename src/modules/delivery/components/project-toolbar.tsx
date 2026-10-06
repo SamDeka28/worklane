@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
-import { Columns3, LayoutGrid, List } from "lucide-react";
+import { Columns3, List } from "lucide-react";
 import {
   DesktopFilters,
   MobileFilters,
@@ -38,7 +38,7 @@ export function ProjectToolbar({
   q: string;
   status: string;
   clientId: string;
-  view: "cards" | "list" | "board";
+  view: "list" | "board";
   page: number;
   pageCount: number;
   total: number;
@@ -154,9 +154,6 @@ export function ProjectToolbar({
           </ViewLink>
           <ViewLink href={href({ view: "board", page: 1 })} active={view === "board"} label="Board">
             <Columns3 className="size-3.5" />
-          </ViewLink>
-          <ViewLink href={href({ view: "cards", page: 1 })} active={view === "cards"} label="Cards">
-            <LayoutGrid className="size-3.5" />
           </ViewLink>
         </div>
         {view !== "board" && pageCount > 1 ? (

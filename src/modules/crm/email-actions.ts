@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { requireWritableOrg } from "@/modules/identity/org";
 import { canUseOwnMailbox } from "@/modules/identity/permissions";
 import { notifyOwners } from "@/modules/notifications/service";
@@ -9,7 +10,7 @@ import { companyFromEmail, unfilledFields } from "@/modules/crm/presentation";
 import { resolveSender, type ResolvedSender } from "@/modules/email-senders/server";
 import { senderSignature } from "@/modules/email-signatures/server";
 import type { RenderedSignature } from "@/modules/email-signatures/types";
-import { personalEmailHtml, personalEmailText, sendEmail } from "@/shared/email";
+import { personalEmailHtml, personalEmailText, sendEmail, warmSmtpTransport } from "@/shared/email";
 import { mailPixelUrl } from "@/shared/email/pixel";
 import { parseEmailAttachments } from "@/shared/email/attachments";
 import type { EmailAttachmentPayload } from "@/modules/emails/types";
@@ -74,10 +75,20 @@ function parseEmail(input: Pick<SendLeadEmailInput, "to" | "cc" | "subject" | "b
 
 async function sendAllowed(
   ctx: Ctx,
-): Promise<{ error: string } | { sender: ResolvedSender; signature: RenderedSignature | null }> {
+): Promise<
+  | { error: string }
+  | { sender: ResolvedSender; signature: RenderedSignature | null; connected: Promise<void> }
+> {
   if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
+  const senderTask = resolveSender(ctx.org.id, ctx.userId, {
+    module: "crm",
+    ownMailbox: canUseOwnMailbox(ctx),
+  });
+  const connected = senderTask.then((sender) =>
+    sender.via ? warmSmtpTransport(sender.smtp) : Promise.resolve(),
+  );
   const [sender, recent, signature] = await Promise.all([
-    resolveSender(ctx.org.id, ctx.userId, { module: "crm", ownMailbox: canUseOwnMailbox(ctx) }),
+    senderTask,
     ctx.supabase
       .from("lead_emails")
       .select("id")
@@ -93,7 +104,7 @@ async function sendAllowed(
   if ((recent.data?.length ?? 0) >= SEND_LIMIT) {
     return { error: "You've sent a lot of emails in the last few minutes. Try again shortly." };
   }
-  return { sender, signature };
+  return { sender, signature, connected };
 }
 
 async function openStageSlug(ctx: Ctx, slug: string | null) {
@@ -132,6 +143,8 @@ async function deliverLeadEmail(
     followUp: { text: string; on: string } | null;
     stageTo: string | null;
     attachments: { filename: string; content: Buffer; contentType: string }[];
+    /** SMTP login started while the row was still being saved. */
+    connected?: Promise<void>;
   },
 ) {
   const token = generateShareToken();
@@ -144,22 +157,25 @@ async function deliverLeadEmail(
     options.attachments,
   );
   if ("error" in savedAttachments) return { error: savedAttachments.error };
-  const { error: insertError } = await ctx.supabase.from("lead_emails").insert({
-    id: emailId,
-    organization_id: ctx.org.id,
-    lead_id: lead.id,
-    sent_by: ctx.userId,
-    to_email: email.to,
-    to_name: lead.contactName,
-    cc: email.cc,
-    subject: email.subject,
-    body: email.body,
-    attachments: savedAttachments.attachments,
-    template_id: options.templateId?.slice(0, 40) || null,
-    in_reply_to: options.parent?.id ?? null,
-    token_hash: hashShareToken(token),
-    track_opens: options.trackOpens,
-  });
+  const [{ error: insertError }] = await Promise.all([
+    ctx.supabase.from("lead_emails").insert({
+      id: emailId,
+      organization_id: ctx.org.id,
+      lead_id: lead.id,
+      sent_by: ctx.userId,
+      to_email: email.to,
+      to_name: lead.contactName,
+      cc: email.cc,
+      subject: email.subject,
+      body: email.body,
+      attachments: savedAttachments.attachments,
+      template_id: options.templateId?.slice(0, 40) || null,
+      in_reply_to: options.parent?.id ?? null,
+      token_hash: hashShareToken(token),
+      track_opens: options.trackOpens,
+    }),
+    options.connected ?? Promise.resolve(),
+  ]);
   if (insertError) {
     await removeEmailAttachments(ctx.supabase, savedAttachments.attachments);
     return { error: insertError.message };
@@ -288,6 +304,7 @@ export async function sendLeadEmailForContext(
       followUp: parseFollowUp(input.followUp, parsed.email.subject),
       stageTo,
       attachments: attachments.attachments,
+      connected: allowed.connected,
     },
   );
   if ("error" in sent) return { error: sent.error };
@@ -308,8 +325,8 @@ export async function sendLeadEmailAction(
 }
 
 /** Starts a lead by emailing them: creates the lead, then sends and logs the first email. */
-export async function startLeadWithEmailAction(orgSlug: string, input: StartLeadEmailInput) {
-  const ctx = await requireWritableOrg(orgSlug);
+export async function startLeadWithEmailForContext(ctx: Ctx, input: StartLeadEmailInput) {
+  const orgSlug = ctx.org.slug;
   const allowed = await sendAllowed(ctx);
   if ("error" in allowed) return { error: allowed.error };
   const parsed = parseEmail(input);
@@ -370,6 +387,7 @@ export async function startLeadWithEmailAction(orgSlug: string, input: StartLead
       followUp: parseFollowUp(input.followUp, parsed.email.subject),
       stageTo: null,
       attachments: attachments.attachments,
+      connected: allowed.connected,
     },
   );
   if ("error" in sent) {
@@ -377,26 +395,34 @@ export async function startLeadWithEmailAction(orgSlug: string, input: StartLead
     return { error: sent.error };
   }
 
-  await ctx.supabase.from("activities").insert({
-    organization_id: ctx.org.id,
-    actor_id: ctx.userId,
-    verb: "created",
-    entity_type: "lead",
-    entity_id: leadId,
-    metadata: { name, stage, via: "email" },
-  });
-  await notifyOwners({
-    organizationId: ctx.org.id,
-    orgName: ctx.org.name,
-    actorId: ctx.userId,
-    category: "leads",
-    title: (actor) => `${actor} emailed a new lead, ${name}`,
-    body: parsed.email.subject,
-    href: `/${orgSlug}/crm?lead=${leadId}`,
-    entity: { type: "lead", id: leadId },
-    actionLabel: "Open lead",
+  after(async () => {
+    await ctx.supabase.from("activities").insert({
+      organization_id: ctx.org.id,
+      actor_id: ctx.userId,
+      verb: "created",
+      entity_type: "lead",
+      entity_id: leadId,
+      metadata: { name, stage, via: "email" },
+    });
+    await notifyOwners({
+      organizationId: ctx.org.id,
+      orgName: ctx.org.name,
+      actorId: ctx.userId,
+      category: "leads",
+      title: (actor) => `${actor} emailed a new lead, ${name}`,
+      body: parsed.email.subject,
+      href: `/${orgSlug}/crm?lead=${leadId}`,
+      entity: { type: "lead", id: leadId },
+      actionLabel: "Open lead",
+    });
   });
 
-  revalidatePath(`/${orgSlug}/crm`);
   return { ok: true as const, leadId, signatureIncluded: Boolean(signature) };
+}
+
+export async function startLeadWithEmailAction(orgSlug: string, input: StartLeadEmailInput) {
+  const ctx = await requireWritableOrg(orgSlug);
+  const started = await startLeadWithEmailForContext(ctx, input);
+  if (!("error" in started)) revalidatePath(`/${orgSlug}/crm`);
+  return started;
 }

@@ -110,13 +110,28 @@ function accountTransport(account: SmtpAccount) {
       secure: account.secure,
       auth: { user: account.user, pass: account.pass },
       pool: true,
-      maxConnections: 2,
+      maxConnections: 1,
       connectionTimeout: 15_000,
+      greetingTimeout: 10_000,
       socketTimeout: 60_000,
     });
     accountPool.set(key, transport);
   }
   return transport;
+}
+
+/**
+ * Opens the pooled SMTP connection ahead of a send. A cold TLS login is the slow
+ * part; once this resolves, the next message reuses the socket.
+ * Failures are ignored — the send reports them.
+ */
+export function warmSmtpTransport(account: SmtpAccount | null): Promise<void> {
+  const transport = account ? accountTransport(account) : transporter();
+  if (!transport) return Promise.resolve();
+  return transport
+    .verify()
+    .then(() => undefined)
+    .catch(() => undefined);
 }
 
 /** Logs in to the account without sending anything; returns the server's error if it fails. */
