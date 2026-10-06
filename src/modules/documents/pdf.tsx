@@ -197,8 +197,13 @@ function PdfImage({ node }: { node: JSONContent }) {
   const src = typeof node.attrs?.src === "string" ? node.attrs.src : "";
   const alt = typeof node.attrs?.alt === "string" && node.attrs.alt ? node.attrs.alt : "Image unavailable";
   const caption = typeof node.attrs?.caption === "string" ? node.attrs.caption.trim() : "";
-  const width = typeof node.attrs?.width === "number" && node.attrs.width > 0 ? Math.min(node.attrs.width, 460) : 460;
-  const align = node.attrs?.align === "center" || node.attrs?.align === "right" ? node.attrs.align : "left";
+  const rawWidth = typeof node.attrs?.width === "number" && node.attrs.width > 0 ? node.attrs.width : null;
+  const width = rawWidth ? Math.min(rawWidth, 460) : 460;
+  const height = rawWidth && typeof node.attrs?.height === "number" && node.attrs.height > 0
+    ? Math.round(node.attrs.height * (width / rawWidth))
+    : undefined;
+  const wrap = node.attrs?.wrap === "left" || node.attrs?.wrap === "right" ? node.attrs.wrap : null;
+  const align = wrap ?? (node.attrs?.align === "center" || node.attrs?.align === "right" ? node.attrs.align : "left");
   const embeddable =
     !node.attrs?.unresolved &&
     (src.startsWith("data:image/png") ||
@@ -215,7 +220,7 @@ function PdfImage({ node }: { node: JSONContent }) {
   return (
     <View style={[s.imageWrap, { alignSelf: align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start" }]}>
       {/* eslint-disable-next-line jsx-a11y/alt-text -- react-pdf images have no alt attribute */}
-      <Image src={src} style={[s.image, { width }]} />
+      <Image src={src} style={[s.image, height ? { width, height } : { width }]} />
       {caption ? <Text style={s.caption}>{clean(caption)}</Text> : null}
     </View>
   );

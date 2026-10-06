@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, Minus, Plus } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import type { JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -15,7 +15,8 @@ import { Table } from "@tiptap/extension-table";
 import { TableRow } from "@tiptap/extension-table-row";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { CharacterCount } from "@tiptap/extensions";
-import { PAGE_SIZES, PaginationPlus } from "tiptap-pagination-plus";
+import { PAGE_SIZES } from "tiptap-pagination-plus";
+import { StudioPagination } from "@/components/editor/studio-pagination";
 import { cn } from "@/lib/utils";
 import { docToPlainText } from "@/components/editor/doc-text";
 import { DocumentBubbleMenu } from "@/components/editor/document-bubble-menu";
@@ -51,6 +52,13 @@ const PAGE_SIZE_OPTIONS = {
 } as const;
 
 type PageSizeKey = keyof typeof PAGE_SIZE_OPTIONS;
+
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2;
+
+function clampZoom(value: number) {
+  return Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(value * 100) / 100));
+}
 
 export function DocumentStudioEditor({
   value,
@@ -91,11 +99,19 @@ export function DocumentStudioEditor({
   className?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const rulerRef = useRef<HTMLDivElement>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
   const [uploading, setUploading] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [pageSize, setPageSize] = useState<PageSizeKey>("A4");
   const [pageCount, setPageCount] = useState(1);
   const [wordCount, setWordCount] = useState(0);
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef(1);
+  zoomRef.current = zoom;
+  const [stackHeight, setStackHeight] = useState(0);
+  const [rulerHeight, setRulerHeight] = useState(0);
   const pageWidth = PAGE_SIZE_OPTIONS[pageSize].size.pageWidth + 2;
   const createRef = useRef(onCreateMention);
   createRef.current = onCreateMention;
@@ -137,7 +153,7 @@ export function DocumentStudioEditor({
       TaskList,
       TaskItem.configure({ nested: true }),
       CharacterCount,
-      PaginationPlus.configure({
+      StudioPagination.configure({
         ...PAGE_SIZE_OPTIONS.A4.size,
         pageGap: 28,
         pageBreakBackground: "var(--doc-canvas)",
@@ -296,6 +312,114 @@ export function DocumentStudioEditor({
     [editor, entityId, entityType, orgSlug],
   );
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const overCanvas = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && canvas.contains(target)) return true;
+      if (!("clientX" in event) || !("clientY" in event)) return false;
+      const point = event as MouseEvent;
+      const under = document.elementFromPoint(point.clientX, point.clientY);
+      return under instanceof Node && canvas.contains(under);
+    };
+
+    const zoomAt = (next: number, clientX: number, clientY: number) => {
+      const current = zoomRef.current;
+      const value = clampZoom(next);
+      if (value === current) return;
+      const rect = canvas.getBoundingClientRect();
+      const anchorX = clientX - rect.left;
+      const anchorY = clientY - rect.top;
+      const ratio = value / current;
+      zoomRef.current = value;
+      setZoom(value);
+      canvas.scrollLeft = (canvas.scrollLeft + anchorX) * ratio - anchorX;
+      canvas.scrollTop = (canvas.scrollTop + anchorY) * ratio - anchorY;
+    };
+
+    // Trackpad pinch arrives as a wheel event with the control key held.
+    // Listening on the window, before the browser handles it, keeps the zoom on the pages.
+    let pinch: { origin: number } | null = null;
+    const onWheel = (event: WheelEvent) => {
+      if (pinch || (!event.ctrlKey && !event.metaKey) || !overCanvas(event)) return;
+      event.preventDefault();
+      let delta = event.deltaY;
+      if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) delta *= 16;
+      else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) delta *= canvas.clientHeight;
+      zoomAt(zoomRef.current * Math.exp(-delta * 0.0013), event.clientX, event.clientY);
+    };
+
+    const onGestureStart = (event: Event) => {
+      if (!overCanvas(event)) return;
+      event.preventDefault();
+      pinch = { origin: zoomRef.current };
+    };
+    const onGestureChange = (event: Event) => {
+      if (!pinch || !overCanvas(event)) return;
+      event.preventDefault();
+      const gesture = event as Event & { scale: number; clientX: number; clientY: number };
+      const scale = 1 + (gesture.scale - 1) * 0.6;
+      zoomAt(pinch.origin * scale, gesture.clientX, gesture.clientY);
+    };
+    const onGestureEnd = (event: Event) => {
+      if (!pinch) return;
+      event.preventDefault();
+      pinch = null;
+    };
+
+    const listen = { passive: false, capture: true } as const;
+    window.addEventListener("wheel", onWheel, listen);
+    window.addEventListener("gesturestart", onGestureStart, listen);
+    window.addEventListener("gesturechange", onGestureChange, listen);
+    window.addEventListener("gestureend", onGestureEnd, listen);
+    return () => {
+      window.removeEventListener("wheel", onWheel, listen);
+      window.removeEventListener("gesturestart", onGestureStart, listen);
+      window.removeEventListener("gesturechange", onGestureChange, listen);
+      window.removeEventListener("gestureend", onGestureEnd, listen);
+    };
+  }, [editor]);
+
+  useEffect(() => {
+    const stack = stackRef.current;
+    const ruler = rulerRef.current;
+    if (!stack && !ruler) return;
+    const publish = () => {
+      if (stack) {
+        const next = stack.offsetHeight;
+        setStackHeight((current) => (current === next ? current : next));
+      }
+      if (ruler) {
+        const next = ruler.offsetHeight;
+        setRulerHeight((current) => (current === next ? current : next));
+      }
+    };
+    publish();
+    const observer = new ResizeObserver(publish);
+    if (stack) observer.observe(stack);
+    if (ruler) observer.observe(ruler);
+    return () => observer.disconnect();
+  }, [editor, pageWidth, zoom]);
+
+  const changeZoom = useCallback((delta: number) => {
+    const canvas = canvasRef.current;
+    setZoom((current) => {
+      const next = clampZoom(current + delta);
+      if (canvas && current > 0) {
+        const ratio = next / current;
+        const anchorX = canvas.clientWidth / 2;
+        const anchorY = canvas.clientHeight / 2;
+        requestAnimationFrame(() => {
+          canvas.scrollLeft = (canvas.scrollLeft + anchorX) * ratio - anchorX;
+          canvas.scrollTop = (canvas.scrollTop + anchorY) * ratio - anchorY;
+        });
+      }
+      return next;
+    });
+  }, []);
+
   if (!editor) return null;
 
   const canAttach = Boolean(orgSlug && entityType && entityId);
@@ -356,34 +480,74 @@ export function DocumentStudioEditor({
       {editable ? <DocumentBubbleMenu editor={editor} /> : null}
       {editable ? <DocumentContextMenu editor={editor} /> : null}
 
-      <div className="doc-canvas min-h-0 flex-1 overflow-auto bg-[var(--doc-canvas)]">
-        <div className="sticky top-0 z-10 flex min-w-fit justify-center bg-[var(--doc-canvas)] px-6 pt-3">
-          <div data-theme="light" className="lane-paper shrink-0" style={{ width: pageWidth }}>
-            <EditorPageRuler
-              editor={editor}
-              margins={margins}
-              onMarginsChange={(next) => onPagePaddingChange?.(next)}
-              editable={editable && Boolean(onPagePaddingChange)}
-            />
+      <div
+        ref={canvasRef}
+        data-doc-zoom={zoom}
+        className="doc-canvas min-h-0 flex-1 overflow-auto bg-[var(--doc-canvas)] px-6"
+      >
+        <div className="sticky top-0 z-10 bg-[var(--doc-canvas)]">
+          <div
+            className="mx-auto"
+            style={{
+              width: pageWidth * zoom,
+              height: zoom === 1 ? undefined : Math.max(rulerHeight, 1) * zoom,
+            }}
+          >
+            <div
+              ref={rulerRef}
+              style={
+                zoom === 1
+                  ? undefined
+                  : { width: pageWidth, transform: `scale(${zoom})`, transformOrigin: "top left" }
+              }
+            >
+              <div className="pt-3">
+                <div data-theme="light" className="lane-paper shrink-0" style={{ width: pageWidth }}>
+                  <EditorPageRuler
+                    editor={editor}
+                    margins={margins}
+                    onMarginsChange={(next) => onPagePaddingChange?.(next)}
+                    editable={editable && Boolean(onPagePaddingChange)}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex min-w-fit flex-col items-center gap-6 px-6 pt-3 pb-16">
+        <div
+          className="mx-auto"
+          style={{
+            width: pageWidth * zoom,
+            height: zoom === 1 ? undefined : Math.max(stackHeight, 1) * zoom,
+          }}
+        >
           <div
-            data-theme="light"
-            className="lane-paper shrink-0 text-slate-900"
-            style={{ width: pageWidth }}
+            ref={stackRef}
+            style={
+              zoom === 1
+                ? undefined
+                : { width: pageWidth, transform: `scale(${zoom})`, transformOrigin: "top left" }
+            }
           >
-            <EditorContent editor={editor} />
-          </div>
-          {afterPages ? (
-            <div
-              data-theme="light"
-              className="lane-paper shrink-0 bg-white text-slate-900 shadow-sm"
-              style={{ width: pageWidth }}
-            >
-              {afterPages}
+            <div className="flex flex-col items-center gap-6 pt-3 pb-16">
+              <div
+                data-theme="light"
+                className="lane-paper shrink-0 text-slate-900"
+                style={{ width: pageWidth }}
+              >
+                <EditorContent editor={editor} />
+              </div>
+              {afterPages ? (
+                <div
+                  data-theme="light"
+                  className="lane-paper shrink-0 bg-white text-slate-900 shadow-sm"
+                  style={{ width: pageWidth }}
+                >
+                  {afterPages}
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          </div>
         </div>
       </div>
 
@@ -397,7 +561,35 @@ export function DocumentStudioEditor({
         <span className="hidden text-muted-foreground/70 sm:inline">
           Right-click for more options
         </span>
-        <label className="ml-auto inline-flex items-center gap-1.5">
+        <div className="ml-auto inline-flex items-center gap-0.5">
+          <button
+            type="button"
+            aria-label="Zoom out"
+            title="Zoom out"
+            onClick={() => changeZoom(-0.1)}
+            className="inline-flex size-6 items-center justify-center rounded-md text-foreground ring-1 ring-border/50 hover:bg-muted"
+          >
+            <Minus className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            title="Reset zoom. Pinch with two fingers, or hold Ctrl and scroll."
+            onClick={() => changeZoom(1 - zoom)}
+            className="inline-flex h-6 min-w-12 items-center justify-center rounded-md px-1.5 font-medium text-foreground tabular-nums ring-1 ring-border/50 hover:bg-muted"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            aria-label="Zoom in"
+            title="Zoom in"
+            onClick={() => changeZoom(0.1)}
+            className="inline-flex size-6 items-center justify-center rounded-md text-foreground ring-1 ring-border/50 hover:bg-muted"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        </div>
+        <label className="inline-flex items-center gap-1.5">
           Page size
           <select
             value={pageSize}

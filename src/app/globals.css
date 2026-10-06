@@ -1140,13 +1140,169 @@
 }
 
 .ProseMirror figure.document-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   margin: 0.75rem 0;
+  overflow: visible;
+}
+
+.ProseMirror figure.document-image [data-resize-container] {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.ProseMirror figure.document-image[data-align="center"][data-wrap="break"] [data-resize-container] {
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.ProseMirror figure.document-image[data-align="right"][data-wrap="break"] [data-resize-container] {
+  margin-right: 0;
+  margin-left: auto;
+}
+
+.ProseMirror figure.document-image[data-wrap="left"] {
+  float: left;
+  clear: none;
+  width: fit-content;
+  margin: 0.2rem 1rem 0.55rem 0;
+}
+
+.ProseMirror figure.document-image[data-wrap="right"] {
+  float: right;
+  clear: none;
+  width: fit-content;
+  margin: 0.2rem 0 0.55rem 1rem;
+}
+
+.ProseMirror figure.document-image[data-wrap="behind"],
+.ProseMirror figure.document-image[data-wrap="front"] {
+  position: absolute;
+  width: fit-content;
+  margin: 0;
+}
+
+.ProseMirror figure.document-image[data-wrap="behind"] {
+  z-index: -1;
+}
+
+.ProseMirror figure.document-image[data-wrap="front"] {
+  z-index: 3;
+}
+
+.ProseMirror figure.document-image[data-wrap="behind"].ProseMirror-selectednode,
+.ProseMirror figure.document-image[data-wrap="front"].ProseMirror-selectednode {
+  z-index: 4;
+}
+
+.ProseMirror figure.document-image[data-align="left"][data-wrap="behind"],
+.ProseMirror figure.document-image[data-align="left"][data-wrap="front"] {
+  left: 0;
+}
+
+.ProseMirror figure.document-image[data-align="center"][data-wrap="behind"],
+.ProseMirror figure.document-image[data-align="center"][data-wrap="front"] {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.ProseMirror figure.document-image[data-align="right"][data-wrap="behind"],
+.ProseMirror figure.document-image[data-align="right"][data-wrap="front"] {
+  right: 0;
+  left: auto;
+}
+
+/* A dragged image keeps the coordinates of the page, including when it started inside a cell. */
+.ProseMirror:has(figure.document-image[data-placed="true"]) {
+  position: relative;
+}
+
+.ProseMirror td:has(figure.document-image[data-placed="true"]),
+.ProseMirror th:has(figure.document-image[data-placed="true"]) {
+  position: static;
+}
+
+.ProseMirror figure.document-image[data-placed="true"][data-wrap] {
+  position: absolute;
+  width: fit-content;
+  max-width: none;
+  margin: 0;
+  right: auto;
+  transform: none;
+  z-index: 3;
+}
+
+.ProseMirror figure.document-image[data-placed="true"][data-wrap="behind"] {
+  z-index: -1;
+}
+
+.ProseMirror figure.document-image[data-placed="true"].ProseMirror-selectednode {
+  z-index: 4;
+}
+
+.ProseMirror[contenteditable="true"] figure.document-image img {
+  cursor: grab;
+  touch-action: none;
+}
+
+.ProseMirror figure.document-image.is-dragging img {
+  cursor: grabbing;
 }
 
 .ProseMirror figure.document-image img {
-  display: inline-block;
+  display: inline;
+  max-width: 100%;
+  height: auto;
   margin: 0;
+  vertical-align: top;
 }
+
+.ProseMirror figure.document-image [data-resize-handle] {
+  z-index: 2;
+  background: #fff;
+  border: 1.5px solid #2563eb;
+  border-radius: 2px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ProseMirror figure.document-image.ProseMirror-selectednode [data-resize-handle] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.ProseMirror figure.document-image [data-resize-handle="top-left"],
+.ProseMirror figure.document-image [data-resize-handle="top-right"],
+.ProseMirror figure.document-image [data-resize-handle="bottom-left"],
+.ProseMirror figure.document-image [data-resize-handle="bottom-right"] {
+  width: 9px;
+  height: 9px;
+}
+
+.ProseMirror figure.document-image [data-resize-handle="top-left"] { margin: -5px 0 0 -5px; cursor: nwse-resize; }
+.ProseMirror figure.document-image [data-resize-handle="top-right"] { margin: -5px -5px 0 0; cursor: nesw-resize; }
+.ProseMirror figure.document-image [data-resize-handle="bottom-left"] { margin: 0 0 -5px -5px; cursor: nesw-resize; }
+.ProseMirror figure.document-image [data-resize-handle="bottom-right"] { margin: 0 -5px -5px 0; cursor: nwse-resize; }
+
+.ProseMirror figure.document-image [data-resize-handle="left"],
+.ProseMirror figure.document-image [data-resize-handle="right"] {
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.ProseMirror figure.document-image [data-resize-handle="left"] { margin-left: -4px; }
+.ProseMirror figure.document-image [data-resize-handle="right"] { margin-right: -4px; }
+
+.ProseMirror figure.document-image [data-resize-handle="top"],
+.ProseMirror figure.document-image [data-resize-handle="bottom"] {
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.ProseMirror figure.document-image [data-resize-handle="top"] { margin-top: -4px; }
+.ProseMirror figure.document-image [data-resize-handle="bottom"] { margin-bottom: -4px; }
 
 .ProseMirror figure.document-image figcaption {
   margin-top: 0.25rem;
@@ -1416,6 +1572,10 @@
 /* Document studio: paginated pages on a neutral canvas. */
 .doc-canvas {
   --doc-canvas: #ebe9e4;
+  overflow-anchor: none;
+  scroll-behavior: auto;
+  /* Two-finger scrolling still pans the pages. Pinch zoom is handled on the canvas. */
+  touch-action: pan-x pan-y;
 }
 
 :is(
@@ -1434,7 +1594,19 @@
 }
 
 .ProseMirror.rm-with-pagination {
+  position: relative;
+  isolation: isolate;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  overflow-anchor: none;
+}
+
+.ProseMirror.rm-with-pagination .rm-pages-wrapper {
+  pointer-events: none;
+}
+
+.ProseMirror.rm-with-pagination .rm-page-header,
+.ProseMirror.rm-with-pagination .rm-page-footer {
+  pointer-events: auto;
 }
 
 .ProseMirror.rm-with-pagination p.is-editor-empty::before {
@@ -1453,27 +1625,29 @@
   user-select: none;
 }
 
-/* Page breaks are floats. A table wrapper is a block, so those floats push
-   the table to the bottom and the wrapper stretches across every page. The
-   editor then keeps inserting blank pages. display: contents lets the table
-   sit in the page flow. overflow: visible keeps the text at full width. */
-.ProseMirror.rm-with-pagination .tableWrapper {
+/* Page breaks are floats. A table box is not allowed to overlap those floats,
+   so any table taller than one page slot drops below every page. The editor
+   then inserts blank sheets and the rest of the document follows the table.
+   Dropping the table, head, and body boxes lets each row sit in the page flow. */
+.ProseMirror.rm-with-pagination .tableWrapper,
+.ProseMirror.rm-with-pagination table,
+.ProseMirror.rm-with-pagination table thead,
+.ProseMirror.rm-with-pagination table tbody,
+.ProseMirror.rm-with-pagination table tfoot,
+.ProseMirror.rm-with-pagination table colgroup {
   display: contents;
 }
 
-.ProseMirror.rm-with-pagination table {
+.ProseMirror.rm-with-pagination table tr {
   display: table;
   width: 100%;
   max-width: 100%;
-  margin: 1rem 0;
+  table-layout: fixed;
+  border-collapse: collapse;
 }
 
-.ProseMirror.rm-with-pagination table tbody {
-  display: table-row-group;
-  width: 100%;
-  table-layout: fixed;
-  max-height: none;
-  overflow: visible;
+.ProseMirror.rm-with-pagination table tr + tr {
+  margin-top: -1px;
 }
 
 .ProseMirror.rm-with-pagination table tr td,

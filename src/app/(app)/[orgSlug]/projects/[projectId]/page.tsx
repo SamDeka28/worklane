@@ -233,7 +233,7 @@ export default async function ProjectDetailPage({
       : Promise.resolve([] as Awaited<ReturnType<typeof listProjectColumns>>),
     needDocs ? listDocuments(orgSlug).catch(() => []) : Promise.resolve([]),
     needDocCount
-      ? listDocumentsForProjectSurface(orgSlug, projectId).catch(() => [])
+      ? listDocumentsForProjectSurface(orgSlug, projectId, { excerpt: needDocs }).catch(() => [])
       : Promise.resolve([]),
     needPartnerHints || needSplitFull
       ? listPartners(orgSlug).catch(() => [])
@@ -1293,6 +1293,7 @@ export default async function ProjectDetailPage({
                 projectId: doc.projectId,
                 mentionCount: doc.mentionCount,
                 mentionedVia: doc.mentionedVia,
+                excerpt: doc.excerpt,
               }))}
               attachable={attachableDocs.map((doc) => ({
                 id: doc.id,

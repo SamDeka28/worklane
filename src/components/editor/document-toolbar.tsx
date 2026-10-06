@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
+import { NodeSelection } from "@tiptap/pm/state";
 import {
   AlignCenter,
   AlignJustify,
@@ -359,6 +360,27 @@ function TableEditControls({ editor }: { editor: Editor }) {
   );
 }
 
+function selectedImage(editor: Editor) {
+  const selection = editor.state.selection;
+  if (!(selection instanceof NodeSelection) || selection.node.type.name !== "image") return null;
+  return selection;
+}
+
+function alignDocument(editor: Editor, align: "left" | "center" | "right" | "justify") {
+  const image = selectedImage(editor);
+  if (image) {
+    if (align === "justify") return;
+    editor.view.dispatch(
+      editor.state.tr
+        .setNodeAttribute(image.from, "align", align)
+        .setNodeAttribute(image.from, "x", null)
+        .setNodeAttribute(image.from, "y", null),
+    );
+    return;
+  }
+  editor.chain().focus().setTextAlign(align).run();
+}
+
 export function DocumentToolbar({
   editor,
   orgSlug,
@@ -382,9 +404,11 @@ export function DocumentToolbar({
       frame = requestAnimationFrame(() => setTick((value) => value + 1));
     };
     editor.on("selectionUpdate", onSelection);
+    editor.on("update", onSelection);
     return () => {
       cancelAnimationFrame(frame);
       editor.off("selectionUpdate", onSelection);
+      editor.off("update", onSelection);
     };
   }, [editor]);
 
@@ -408,6 +432,12 @@ export function DocumentToolbar({
     : "p";
   const blockStyle = ["1", "2", "3"].includes(headingLevel) ? headingLevel : "p";
   const lineHeight = getBlockLineHeight(editor);
+  const image = selectedImage(editor);
+  const imageAlignValue = image
+    ? image.node.attrs.align === "center" || image.node.attrs.align === "right"
+      ? image.node.attrs.align
+      : "left"
+    : null;
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-0.5 px-2.5 py-1.5 sm:justify-start">
@@ -546,29 +576,29 @@ export function DocumentToolbar({
 
       <ToolbarButton
         label="Align left"
-        active={editor.isActive({ textAlign: "left" })}
-        onClick={() => editor.chain().focus().setTextAlign("left").run()}
+        active={imageAlignValue ? imageAlignValue === "left" : editor.isActive({ textAlign: "left" })}
+        onClick={() => alignDocument(editor, "left")}
       >
         <AlignLeft className="size-3.5" />
       </ToolbarButton>
       <ToolbarButton
         label="Align center"
-        active={editor.isActive({ textAlign: "center" })}
-        onClick={() => editor.chain().focus().setTextAlign("center").run()}
+        active={imageAlignValue ? imageAlignValue === "center" : editor.isActive({ textAlign: "center" })}
+        onClick={() => alignDocument(editor, "center")}
       >
         <AlignCenter className="size-3.5" />
       </ToolbarButton>
       <ToolbarButton
         label="Align right"
-        active={editor.isActive({ textAlign: "right" })}
-        onClick={() => editor.chain().focus().setTextAlign("right").run()}
+        active={imageAlignValue ? imageAlignValue === "right" : editor.isActive({ textAlign: "right" })}
+        onClick={() => alignDocument(editor, "right")}
       >
         <AlignRight className="size-3.5" />
       </ToolbarButton>
       <ToolbarButton
         label="Justify"
-        active={editor.isActive({ textAlign: "justify" })}
-        onClick={() => editor.chain().focus().setTextAlign("justify").run()}
+        active={!imageAlignValue && editor.isActive({ textAlign: "justify" })}
+        onClick={() => alignDocument(editor, "justify")}
       >
         <AlignJustify className="size-3.5" />
       </ToolbarButton>

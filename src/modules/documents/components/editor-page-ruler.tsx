@@ -84,7 +84,8 @@ export function EditorPageRuler({
     (event: React.PointerEvent) => {
       if (!dragging || !trackRef.current || !editable) return;
       const rect = trackRef.current.getBoundingClientRect();
-      const x = Math.min(rect.width, Math.max(0, event.clientX - rect.left));
+      const scale = width > 0 ? rect.width / width : 1;
+      const x = Math.min(width || rect.width, Math.max(0, (event.clientX - rect.left) / (scale || 1)));
 
       if (dragging === "pageLeft") {
         const maxLeft = Math.min(PAGE_MAX, width - margins.right - 120);
@@ -92,7 +93,7 @@ export function EditorPageRuler({
         return;
       }
       if (dragging === "pageRight") {
-        const fromRight = rect.width - x;
+        const fromRight = (width || rect.width) - x;
         const maxRight = Math.min(PAGE_MAX, width - margins.left - 120);
         onMarginsChange({ ...margins, right: clampPage(Math.min(fromRight, maxRight)) });
         return;

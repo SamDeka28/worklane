@@ -347,6 +347,8 @@ export type ProjectDocument = DocumentRecord & {
   mentionCount: number;
   /** link is tied to the project. client is tied to the project's client and no other project. */
   mentionedVia: "link" | "tag" | "both" | "client";
+  /** Opening text from the latest saved version, for tile previews. */
+  excerpt?: string;
 };
 
 /**
@@ -466,15 +468,70 @@ export async function documentsOnProject(
     .sort((a, b) => b!.updatedAt.localeCompare(a!.updatedAt)) as ProjectDocument[];
 }
 
+const EXCERPT_BLOCKS = new Set([
+  "doc",
+  "paragraph",
+  "heading",
+  "bulletList",
+  "orderedList",
+  "listItem",
+  "blockquote",
+  "table",
+  "tableRow",
+  "tableCell",
+  "tableHeader",
+]);
+
+/** Reads saved content as spaced text. Block and table cells stay separated. */
+function excerptText(node: JSONContent | null | undefined): string {
+  if (!node) return "";
+  if (node.type === "text") return node.text ?? "";
+  if (node.type === "mention") return typeof node.attrs?.label === "string" ? node.attrs.label : "";
+  if (node.type === "hardBreak") return " ";
+  const parts = (node.content ?? []).map((child) => excerptText(child).trim()).filter(Boolean);
+  if (parts.length === 0) return "";
+  return parts.join(EXCERPT_BLOCKS.has(node.type ?? "") ? " " : "");
+}
+
+function openingExcerpt(content: JSONContent | null, title: string) {
+  const flat = excerptText(content).replace(/\s+/g, " ").trim();
+  const heading = title.trim();
+  const body = heading && flat.toLowerCase().startsWith(heading.toLowerCase())
+    ? flat.slice(heading.length).trim()
+    : flat;
+  return body.slice(0, 280);
+}
+
+async function excerptsFor(ctx: OrgContext, documents: { id: string; title: string }[]) {
+  const excerpts = new Map<string, string>();
+  if (documents.length === 0) return excerpts;
+  const titles = new Map(documents.map((doc) => [doc.id, doc.title]));
+  const { data } = await ctx.supabase
+    .from("document_versions")
+    .select("document_id, version_number, content_doc")
+    .eq("organization_id", ctx.org.id)
+    .in("document_id", documents.map((doc) => doc.id))
+    .order("version_number", { ascending: false });
+  for (const row of data ?? []) {
+    const id = row.document_id as string;
+    if (excerpts.has(id)) continue;
+    excerpts.set(id, openingExcerpt((row.content_doc as JSONContent | null) ?? null, titles.get(id) ?? ""));
+  }
+  return excerpts;
+}
+
 /** Documents linked to a project, its client, or that mention the project / its milestones / tasks. */
 export async function listDocumentsForProjectSurface(
   orgSlug: string,
   projectId: string,
+  options?: { excerpt?: boolean },
 ): Promise<ProjectDocument[]> {
   const ctx = await requireOrg(orgSlug);
   const rows = await documentsOnProject(ctx, projectId);
   if ("error" in rows) return [];
-  return rows;
+  if (!options?.excerpt) return rows;
+  const excerpts = await excerptsFor(ctx, rows);
+  return rows.map((doc) => ({ ...doc, excerpt: excerpts.get(doc.id) ?? "" }));
 }
 
 export async function listDocumentSends(

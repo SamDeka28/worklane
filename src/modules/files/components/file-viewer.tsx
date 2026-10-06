@@ -1,7 +1,8 @@
 "use client";
 
-import { ExternalLink, FileImage, FileText } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { ExternalLink, FileImage, FileText, Loader2, Minus, Plus } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -18,6 +19,8 @@ export type ViewableFile = {
   mime: string | null;
   url?: string | null;
   sizeBytes?: number | null;
+  /** In-app editor for a Worklane document. The preview URL stays the rendered file. */
+  editorHref?: string | null;
 };
 
 function isPdf(mime: string | null, name: string) {
@@ -51,6 +54,250 @@ export function canPreviewInApp(file: Pick<ViewableFile, "mime" | "name">) {
     isPdf(file.mime, file.name) ||
     isImage(file.mime, file.name) ||
     isText(file.mime, file.name)
+  );
+}
+
+export type UploadFileCategory = "image" | "pdf" | "word" | "text" | "other";
+
+export const FILE_CATEGORY_GROUPS: { id: UploadFileCategory; label: string }[] = [
+  { id: "image", label: "Images" },
+  { id: "pdf", label: "PDFs" },
+  { id: "word", label: "Word" },
+  { id: "text", label: "Text" },
+  { id: "other", label: "Other files" },
+];
+
+export function fileCategory(file: Pick<ViewableFile, "mime" | "name">): UploadFileCategory {
+  if (isImage(file.mime, file.name)) return "image";
+  if (isPdf(file.mime, file.name)) return "pdf";
+  if (isWord(file.mime, file.name)) return "word";
+  if (isText(file.mime, file.name)) return "text";
+  return "other";
+}
+
+const MIN_IMAGE_ZOOM = 0.25;
+const MAX_IMAGE_ZOOM = 4;
+
+function clampImageZoom(value: number) {
+  return Math.min(MAX_IMAGE_ZOOM, Math.max(MIN_IMAGE_ZOOM, value));
+}
+
+/** Size of the image when it fits inside the stage at 100%. */
+function fittedImageSize(img: HTMLImageElement, stage: HTMLElement | null) {
+  const naturalW = img.naturalWidth;
+  const naturalH = img.naturalHeight;
+  if (!stage || !naturalW || !naturalH) return null;
+  const maxW = Math.max(1, stage.clientWidth - 32);
+  const maxH = Math.max(1, stage.clientHeight - 80);
+  const scale = Math.min(maxW / naturalW, maxH / naturalH, 1);
+  return { w: naturalW * scale, h: naturalH * scale };
+}
+
+function ImageZoomStage({ url, name }: { url: string; name: string }) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+  const fitRef = useRef<{ w: number; h: number } | null>(null);
+  const zoomRef = useRef(1);
+  const [zoom, setZoom] = useState(1);
+
+  const applyZoomRef = useRef<(next: number) => void>(() => {});
+  applyZoomRef.current = (next: number) => {
+    const img = imgRef.current;
+    if (zoomRef.current === 1 && img) {
+      const measured = fittedImageSize(img, stageRef.current);
+      if (measured) fitRef.current = measured;
+    }
+    const prev = zoomRef.current;
+    const clamped = clampImageZoom(next);
+    if (Math.abs(clamped - prev) < 0.001) return;
+    const scroller = scrollerRef.current;
+    const anchor = scroller
+      ? {
+          x: scroller.scrollLeft + scroller.clientWidth / 2,
+          y: scroller.scrollTop + scroller.clientHeight / 2,
+          ratio: clamped / prev,
+        }
+      : null;
+    zoomRef.current = clamped;
+    setZoom(clamped);
+    if (!anchor || !scroller) return;
+    requestAnimationFrame(() => {
+      scroller.scrollLeft = anchor.x * anchor.ratio - scroller.clientWidth / 2;
+      scroller.scrollTop = anchor.y * anchor.ratio - scroller.clientHeight / 2;
+    });
+  };
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      applyZoomRef.current(zoomRef.current * Math.exp(-event.deltaY * 0.0013));
+    };
+    let gestureBase = 1;
+    const onGestureStart = (event: Event) => {
+      event.preventDefault();
+      gestureBase = zoomRef.current;
+    };
+    const onGestureChange = (event: Event) => {
+      event.preventDefault();
+      const scale = (event as Event & { scale?: number }).scale ?? 1;
+      applyZoomRef.current(gestureBase * (1 + (scale - 1) * 0.6));
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    stage.addEventListener("gesturestart", onGestureStart);
+    stage.addEventListener("gesturechange", onGestureChange);
+    return () => {
+      stage.removeEventListener("wheel", onWheel);
+      stage.removeEventListener("gesturestart", onGestureStart);
+      stage.removeEventListener("gesturechange", onGestureChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (zoom !== 1) return;
+    const img = imgRef.current;
+    const stage = stageRef.current;
+    if (!img || !stage) return;
+    const frame = requestAnimationFrame(() => {
+      const measured = fittedImageSize(img, stage);
+      if (measured) fitRef.current = measured;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [zoom, url]);
+
+  const fitted = zoom !== 1 ? fitRef.current : null;
+
+  return (
+    <div
+      ref={stageRef}
+      className="relative h-full overflow-hidden rounded-[1.5rem] bg-card/80 ring-1 ring-border/30"
+    >
+      <div ref={scrollerRef} className="relative h-full overflow-auto">
+        <div
+          className={cn(
+            "flex items-center justify-center",
+            fitted ? "min-h-full min-w-full" : "absolute inset-0 px-4 pt-4 pb-16",
+          )}
+          style={
+            fitted
+              ? {
+                  width: Math.max(fitted.w * zoom, 0),
+                  height: Math.max(fitted.h * zoom, 0),
+                }
+              : undefined
+          }
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            ref={imgRef}
+            src={url}
+            alt={name}
+            draggable={false}
+            onLoad={(event) => {
+              if (zoomRef.current !== 1) return;
+              const measured = fittedImageSize(event.currentTarget, stageRef.current);
+              if (measured) fitRef.current = measured;
+            }}
+            className="rounded-xl object-contain shadow-soft select-none"
+            style={
+              fitted
+                ? { width: fitted.w * zoom, height: fitted.h * zoom }
+                : { maxWidth: "100%", maxHeight: "100%" }
+            }
+          />
+        </div>
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+        <div className="pointer-events-auto flex items-center gap-1 rounded-full bg-background/95 p-1 shadow-soft ring-1 ring-border/50 backdrop-blur-sm">
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Zoom out"
+            disabled={zoom <= MIN_IMAGE_ZOOM + 0.001}
+            onClick={() => applyZoomRef.current(zoomRef.current / 1.25)}
+          >
+            <Minus />
+          </Button>
+          <button
+            type="button"
+            className="min-w-14 rounded-full px-2 text-center text-[13px] font-medium tabular-nums hover:bg-muted"
+            onClick={() => applyZoomRef.current(1)}
+            aria-label="Reset zoom"
+          >
+            {Math.round(zoom * 100)}%
+          </button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            aria-label="Zoom in"
+            disabled={zoom >= MAX_IMAGE_ZOOM - 0.001}
+            onClick={() => applyZoomRef.current(zoomRef.current * 1.25)}
+          >
+            <Plus />
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PdfPreview({
+  url,
+  title,
+  worklane,
+}: {
+  url: string;
+  title: string;
+  worklane: boolean;
+}) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setReady(false);
+  }, [url]);
+
+  return (
+    <div className="relative h-full">
+      <iframe
+        title={title}
+        src={url}
+        onLoad={() => setReady(true)}
+        className={cn(
+          "h-full w-full rounded-[1.5rem] bg-white ring-1 ring-border/30",
+          ready ? "opacity-100" : "opacity-0",
+        )}
+      />
+      {ready ? null : (
+        <div
+          className="absolute inset-0 flex items-center justify-center rounded-[1.5rem] bg-card/80 ring-1 ring-border/30"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex w-full max-w-xs flex-col items-center gap-4 px-6 text-center">
+            <div className="w-full rounded-2xl bg-muted/70 p-5 ring-1 ring-border/30" aria-hidden>
+              <div className="mb-4 h-3 w-2/3 animate-pulse rounded-full bg-foreground/10" />
+              <div className="space-y-2">
+                <div className="h-2 w-full animate-pulse rounded-full bg-foreground/8" />
+                <div className="h-2 w-full animate-pulse rounded-full bg-foreground/8" />
+                <div className="h-2 w-4/5 animate-pulse rounded-full bg-foreground/8" />
+              </div>
+            </div>
+            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Preparing preview</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {worklane ? "Rendering this Worklane document" : "Loading this PDF"}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -121,11 +368,15 @@ export function FileViewerSheet({
             {file?.name ?? "Document"}
           </SheetTitle>
           <SheetDescription className="text-sm text-muted-foreground">
-            {previewable
-              ? "Preview inside Worklane"
-              : word
-                ? "Word files open outside Worklane"
-                : "This file type can’t be previewed here"}
+            {image
+              ? "Pinch or use the controls to zoom"
+              : file?.editorHref
+                ? "Preview of this Worklane document"
+                : previewable
+                  ? "Preview inside Worklane"
+                  : word
+                    ? "Word files open outside Worklane"
+                    : "This file type can’t be previewed here"}
           </SheetDescription>
         </SheetHeader>
 
@@ -135,20 +386,14 @@ export function FileViewerSheet({
               No preview URL available
             </div>
           ) : pdf ? (
-            <iframe
+            <PdfPreview
+              key={file.id}
+              url={file.url}
               title={file.name}
-              src={file.url}
-              className="h-full w-full rounded-[1.5rem] bg-white ring-1 ring-border/30"
+              worklane={Boolean(file.editorHref)}
             />
           ) : image ? (
-            <div className="flex h-full items-center justify-center overflow-auto rounded-[1.5rem] bg-card/80 p-4 ring-1 ring-border/30">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={file.url}
-                alt={file.name}
-                className="max-h-full max-w-full rounded-xl object-contain shadow-soft"
-              />
-            </div>
+            <ImageZoomStage key={file.id} url={file.url} name={file.name} />
           ) : text ? (
             <div className="h-full overflow-auto rounded-[1.5rem] bg-card/90 p-4 ring-1 ring-border/30">
               {loadingText ? (
@@ -183,24 +428,46 @@ export function FileViewerSheet({
         </div>
 
         {file?.url ? (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-border/50 bg-background/95 px-6 py-4 backdrop-blur-sm">
-            <Button
-              variant="outline"
-              nativeButton={false}
-              render={
-                <a href={file.url} target="_blank" rel="noreferrer" download={file.name} />
-              }
-            >
-              Download
-            </Button>
-            <Button
-              variant="outline"
-              nativeButton={false}
-              render={<a href={file.url} target="_blank" rel="noreferrer" />}
-            >
-              Open in new tab
-              <ExternalLink className="size-4" />
-            </Button>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/50 bg-background/95 px-6 py-4 backdrop-blur-sm">
+            {file.editorHref ? (
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<Link href={file.editorHref} />}
+              >
+                Open in Docs
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={
+                  <a
+                    href={file.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    download={
+                      file.editorHref && !file.name.toLowerCase().endsWith(".pdf")
+                        ? `${file.name}.pdf`
+                        : file.name
+                    }
+                  />
+                }
+              >
+                Download
+              </Button>
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<a href={file.url} target="_blank" rel="noreferrer" />}
+              >
+                Open in new tab
+                <ExternalLink className="size-4" />
+              </Button>
+            </div>
           </div>
         ) : null}
       </SheetContent>
@@ -225,14 +492,27 @@ export function ProjectFileListItem({
   const [open, setOpen] = useState(false);
   const previewable = canPreviewInApp(file);
   const hasUrl = Boolean(file.url);
+  const image = isImageFile(file.mime, file.name);
   const sizeLabel = formatFileSize(file.sizeBytes);
 
   return (
     <li className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
       <div className="flex min-w-0 items-center gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-status-due text-status-due-fg">
-          <FileKindIcon mime={file.mime} name={file.name} />
-        </span>
+        {image && hasUrl ? (
+          <button
+            type="button"
+            className="size-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-border/40"
+            onClick={() => setOpen(true)}
+            aria-label={`Preview ${file.name}`}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={file.url!} alt="" className="size-full object-cover" />
+          </button>
+        ) : (
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-status-due text-status-due-fg">
+            <FileKindIcon mime={file.mime} name={file.name} />
+          </span>
+        )}
         <div className="min-w-0">
           {hasUrl ? (
             <button
