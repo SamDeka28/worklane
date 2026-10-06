@@ -29,7 +29,7 @@ import { ProjectMultiSelect } from "@/modules/team/components/project-multi-sele
 function grantableSeed(limit: MemberPermissions): MemberPermissions {
   const seed: MemberPermissions = {};
   for (const [key, value] of Object.entries(limit) as [keyof MemberPermissions, MemberPermissions[keyof MemberPermissions]][]) {
-    if (!value || key === "team" || key === "mailbox") continue;
+    if (!value || key === "team" || key === "mailbox" || key === "smtp") continue;
     seed[key] = { ...value, delete: undefined };
   }
   return seed;
@@ -76,6 +76,7 @@ export function InviteMemberForm({
         formData.set("permissions_preset", access.preset);
         formData.set("permissions", JSON.stringify(access.shownPermissions));
         if (role === "member" && access.manageTeam) formData.set("manage_team", "1");
+        if (role === "member" && access.manageSmtp) formData.set("manage_smtp", "1");
         if (role === "member" && access.ownMailbox) formData.set("own_mailbox", "1");
         for (const pid of selectedProjectIds) {
           formData.append("project_ids", pid);
@@ -192,6 +193,9 @@ export function InviteMemberForm({
         grantLimit={grantLimit}
         manageTeam={access.manageTeam}
         onManageTeamChange={role === "member" ? access.setManageTeam : undefined}
+        manageSmtp={access.manageSmtp}
+        onManageSmtpChange={role === "member" ? access.setManageSmtp : undefined}
+        manageSmtpLocked={Boolean(grantLimit) && grantLimit?.smtp?.access !== "write"}
         ownMailbox={access.ownMailbox}
         onOwnMailboxChange={role === "member" ? access.setOwnMailbox : undefined}
         ownMailboxLocked={Boolean(grantLimit) && grantLimit?.mailbox?.access !== "write"}

@@ -69,8 +69,12 @@ function withTeamFlag(permissions: MemberPermissions, formData: FormData, role: 
   const next: MemberPermissions = { ...permissions };
   delete next.team;
   delete next.mailbox;
+  delete next.smtp;
   if (role === "member" && String(formData.get("manage_team") ?? "") === "1") {
     next.team = { access: "write" };
+  }
+  if (role === "member" && String(formData.get("manage_smtp") ?? "") === "1") {
+    next.smtp = { access: "write" };
   }
   if (
     role === "member" &&

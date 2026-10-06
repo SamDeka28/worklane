@@ -10,6 +10,7 @@ import {
   SummaryStat,
   SummaryStrip,
 } from "@/components/studio/index-layout";
+import { AvatarMark } from "@/components/studio/avatar-mark";
 import { StatusChip } from "@/components/studio/status-chip";
 import { cn } from "@/lib/utils";
 import { LeadBoard } from "@/modules/crm/components/lead-board";
@@ -21,6 +22,7 @@ import { CrmToolbar, type CrmFilters, type CrmView } from "@/modules/crm/compone
 import { LeadImportSheet } from "@/modules/crm/components/lead-import-sheet";
 import { StartLeadEmailButton } from "@/modules/crm/components/lead-email-start";
 import { LeadJourneyConfig } from "@/modules/crm/components/lead-journey-config";
+import { leadMatchesOwner, parseOwnerFilter } from "@/modules/crm/owner-filter";
 import { dueLabel } from "@/modules/crm/presentation";
 import {
   getCrmSettings,
@@ -109,17 +111,9 @@ export default async function CrmPage({
   const stages = stagesOrDefault(stageRows);
 
   const isOpen = (lead: LeadRecord) => !isClosedStage(lead.stage, stages);
+  const ownerFilter = parseOwnerFilter(filters.owner, ctx.userId);
   const leads = allLeads.filter((lead) => {
-    if (filters.owner === "me" && lead.ownerUserId !== ctx.userId) return false;
-    if (filters.owner === "none" && lead.ownerUserId) return false;
-    if (
-      filters.owner &&
-      filters.owner !== "me" &&
-      filters.owner !== "none" &&
-      lead.ownerUserId !== filters.owner
-    ) {
-      return false;
-    }
+    if (!leadMatchesOwner(lead.ownerUserId, ownerFilter)) return false;
     if (filters.due) {
       if (!isOpen(lead)) return false;
       const follow = followState(lead);
@@ -204,6 +198,7 @@ export default async function CrmPage({
         view={view}
         filters={filters}
         members={members}
+        currentUser={{ id: ctx.userId, avatarUrl: ctx.user.avatarUrl }}
         sources={sourceOptions}
         tags={tagOptions}
         count={leads.length}
@@ -278,9 +273,8 @@ export default async function CrmPage({
               columns={
                 <>
                   <span className="min-w-0 flex-1">Lead</span>
-                  <span className="hidden w-44 lg:block">Next step</span>
-                  <span className="hidden w-28 md:block">Owner</span>
-                  <span className="hidden w-28 text-right sm:block">Stage</span>
+                  <span className="hidden w-36 md:block">Owner</span>
+                  <span className="hidden w-28 text-right md:block">Stage</span>
                   {seeMoney ? (
                     <span className="hidden w-28 text-right md:block">Value</span>
                   ) : null}
@@ -290,8 +284,12 @@ export default async function CrmPage({
             >
               {leads.map((lead) => {
                 const follow = isOpen(lead) ? followState(lead) : "none";
+                const owner = lead.ownerUserId ? members.find((member) => member.userId === lead.ownerUserId) : null;
+                const facts = [lead.company, lead.contactName, lead.email, lead.phone].filter(
+                  (value): value is string => Boolean(value),
+                );
                 return (
-                  <DenseRow key={lead.id}>
+                  <DenseRow key={lead.id} className="items-start sm:items-start">
                     <DenseCell className="min-w-0 flex-1">
                       <LeadOpenLink
                         leadId={lead.id}
@@ -299,11 +297,63 @@ export default async function CrmPage({
                         className="block min-w-0"
                       >
                         <p className="truncate text-sm font-medium">{lead.name}</p>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {[lead.company, lead.email, lead.source].filter(Boolean).join(" · ") ||
-                            "-"}
-                        </p>
-                        <p className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground sm:hidden">
+                        {facts.map((fact) => (
+                          <p key={fact} className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {fact}
+                          </p>
+                        ))}
+                        {lead.source || lead.tags.length > 0 ? (
+                          <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            {lead.source ? (
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                {lead.source}
+                              </span>
+                            ) : null}
+                            {lead.tags.map((tag) => (
+                              <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                {tag}
+                              </span>
+                            ))}
+                          </p>
+                        ) : null}
+                        {isOpen(lead) ? (
+                          <p className="mt-1.5 text-xs text-muted-foreground">
+                            {lead.nextAction ? (
+                              <>
+                                {lead.nextActionOn ? (
+                                  <span
+                                    className={cn(
+                                      "mr-1 font-semibold",
+                                      follow === "overdue"
+                                        ? "text-destructive"
+                                        : follow === "today"
+                                          ? "text-amber-700 dark:text-amber-300"
+                                          : "text-muted-foreground",
+                                    )}
+                                  >
+                                    {dueLabel(lead.nextActionOn)}
+                                  </span>
+                                ) : null}
+                                {lead.nextAction}
+                              </>
+                            ) : (
+                              "No next step"
+                            )}
+                          </p>
+                        ) : null}
+                        <p className="mt-2 flex flex-wrap items-center gap-2 md:hidden">
+                          {owner ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs">
+                              <AvatarMark name={owner.name} src={owner.avatarUrl} size="sm" />
+                              {owner.name}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              {lead.ownerUserId
+                                ? (memberName.get(lead.ownerUserId) ?? "Former teammate")
+                                : "Unassigned"}
+                            </span>
+                          )}
                           <StatusChip tone={stageTone(lead.stage, stages)}>
                             {stageLabel(lead.stage, stages)}
                           </StatusChip>
@@ -316,39 +366,19 @@ export default async function CrmPage({
                         </p>
                       </LeadOpenLink>
                     </DenseCell>
-                    <DenseCell width="hidden w-44 lg:block" className="min-w-0">
-                      {isOpen(lead) && lead.nextAction ? (
-                        <p className="truncate text-xs" title={lead.nextAction}>
-                          {lead.nextActionOn ? (
-                            <span
-                              className={cn(
-                                "mr-1 font-semibold",
-                                follow === "overdue"
-                                  ? "text-destructive"
-                                  : follow === "today"
-                                    ? "text-amber-700 dark:text-amber-300"
-                                    : "text-muted-foreground",
-                              )}
-                            >
-                              {dueLabel(lead.nextActionOn)}
-                            </span>
-                          ) : null}
-                          {lead.nextAction}
-                        </p>
-                      ) : isOpen(lead) ? (
-                        <span className="text-xs text-muted-foreground/70">No next step</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground/70">-</span>
-                      )}
-                    </DenseCell>
-                    <DenseCell width="hidden w-28 md:block" className="truncate text-xs">
-                      {lead.ownerUserId ? (
-                        (memberName.get(lead.ownerUserId) ?? "Former teammate")
+                    <DenseCell width="hidden w-36 md:flex" className="items-center gap-2 text-xs">
+                      {owner ? (
+                        <>
+                          <AvatarMark name={owner.name} src={owner.avatarUrl} size="sm" />
+                          <span className="truncate">{owner.name}</span>
+                        </>
+                      ) : lead.ownerUserId ? (
+                        <span className="truncate">{memberName.get(lead.ownerUserId) ?? "Former teammate"}</span>
                       ) : (
                         <span className="text-muted-foreground">Unassigned</span>
                       )}
                     </DenseCell>
-                    <DenseCell align="right" width="hidden w-28 sm:block">
+                    <DenseCell align="right" width="hidden w-28 md:block">
                       <StatusChip tone={stageTone(lead.stage, stages)}>
                         {stageLabel(lead.stage, stages)}
                       </StatusChip>

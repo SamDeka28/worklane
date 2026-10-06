@@ -107,6 +107,7 @@ export function EditMemberAccessSheet({
           formData.set("permissions", JSON.stringify(access.shownPermissions));
           formData.set("project_role", projectRole);
           if (role === "member" && access.manageTeam) formData.set("manage_team", "1");
+          if (role === "member" && access.manageSmtp) formData.set("manage_smtp", "1");
           if (role === "member" && access.ownMailbox) formData.set("own_mailbox", "1");
           for (const pid of selectedProjectIds) {
             formData.append("project_ids", pid);
@@ -187,6 +188,9 @@ export function EditMemberAccessSheet({
           grantLimit={elevated ? undefined : actorPermissions}
           manageTeam={access.manageTeam}
           onManageTeamChange={role === "member" ? access.setManageTeam : undefined}
+          manageSmtp={access.manageSmtp}
+          onManageSmtpChange={role === "member" ? access.setManageSmtp : undefined}
+          manageSmtpLocked={!elevated && actorPermissions.smtp?.access !== "write"}
           ownMailbox={access.ownMailbox}
           onOwnMailboxChange={role === "member" ? access.setOwnMailbox : undefined}
           ownMailboxLocked={!elevated && actorPermissions.mailbox?.access !== "write"}

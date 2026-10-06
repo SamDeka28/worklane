@@ -25,8 +25,11 @@ import {
   ShareGrantList,
 } from "@/modules/portal/components/share-grant-forms";
 import { listShareGrants } from "@/modules/portal/queries";
+import { CustomSmtpList } from "@/modules/email-senders/components/custom-smtp-list";
 import { SmtpSenderForm } from "@/modules/email-senders/components/smtp-sender-form";
-import { getSmtpSenders, smtpStorageUnavailable } from "@/modules/email-senders/server";
+import { getSmtpSenders, listCustomMailboxes, smtpStorageUnavailable } from "@/modules/email-senders/server";
+import { canManageSmtp } from "@/modules/identity/permissions";
+import { listOrgMembers } from "@/modules/identity/org";
 import { StudioSignatureForm } from "@/modules/email-signatures/components/signature-forms";
 import { getSignatures, signatureSender } from "@/modules/email-signatures/server";
 import { isEmailConfigured } from "@/shared/email";
@@ -65,15 +68,16 @@ export default async function SettingsPage({
   const query = await searchParams;
   const ctx = await requireOrg(orgSlug);
   const elevated = ctx.role === "owner" || ctx.role === "admin";
+  const manageSmtp = canManageSmtp(ctx);
   const showPortal = ctx.org.modules.portal && ctx.canWrite;
 
   const tabItems: TabItem[] = [
     { tab: "studio", label: "Studio", icon: Store },
     { tab: "business", label: "Business details", icon: Building2 },
-    ...(elevated
+    ...(elevated || manageSmtp
       ? ([
           { tab: "email", label: "Sending email", icon: Mail },
-          { tab: "signature", label: "Email signature", icon: PenLine },
+          ...(elevated ? ([{ tab: "signature", label: "Email signature", icon: PenLine }] as const) : []),
         ] as const)
       : []),
     ...(showPortal ? ([{ tab: "portal", label: "Portal", icon: Globe }] as const) : []),
@@ -132,7 +136,13 @@ export default async function SettingsPage({
           })}
         </nav>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6 md:px-8">
-          <SettingsContent tab={tab} orgSlug={orgSlug} ctx={ctx} />
+          <SettingsContent
+        tab={tab}
+        orgSlug={orgSlug}
+        ctx={ctx}
+        elevated={elevated}
+        manageSmtp={manageSmtp}
+      />
         </div>
       </div>
     </WorkSurface>
@@ -143,10 +153,14 @@ async function SettingsContent({
   tab,
   orgSlug,
   ctx,
+  elevated,
+  manageSmtp,
 }: {
   tab: SettingsTab;
   orgSlug: string;
   ctx: Awaited<ReturnType<typeof requireOrg>>;
+  elevated: boolean;
+  manageSmtp: boolean;
 }) {
   if (tab === "business") {
     const invoiceConfig = await loadOrgInvoiceConfig(orgSlug);
@@ -165,22 +179,40 @@ async function SettingsContent({
   }
 
   if (tab === "email") {
-    const senders = await getSmtpSenders(ctx.org.id, ctx.userId);
+    const [senders, custom, teammates] = await Promise.all([
+      getSmtpSenders(ctx.org.id, ctx.userId),
+      manageSmtp ? listCustomMailboxes(ctx.org.id) : Promise.resolve([]),
+      manageSmtp ? listOrgMembers(orgSlug) : Promise.resolve([]),
+    ]);
     return (
       <SettingsPanel
         title="Sending email"
-        hint="The studio mailbox sends Compose emails, document sends, and lead emails for anyone without their own."
+        hint="The studio mailbox is the fallback. Custom mailboxes send for the teammates and modules you assign."
       >
-        <SmtpSenderForm
-          orgSlug={orgSlug}
-          scope="studio"
-          saved={senders.studio}
-          fallback={
-            isEmailConfigured() ? "Worklane's default address" : "nowhere yet, so sending is off"
-          }
-          unavailable={smtpStorageUnavailable()}
-          defaultFromName={ctx.org.name}
-        />
+        {elevated ? (
+          <SmtpSenderForm
+            orgSlug={orgSlug}
+            scope="studio"
+            saved={senders.studio}
+            fallback={
+              isEmailConfigured() ? "Worklane's default address" : "nowhere yet, so sending is off"
+            }
+            unavailable={smtpStorageUnavailable()}
+            defaultFromName={ctx.org.name}
+          />
+        ) : null}
+        {manageSmtp ? (
+          <CustomSmtpList
+            orgSlug={orgSlug}
+            mailboxes={custom}
+            members={teammates.map((member) => ({
+              userId: member.userId,
+              name: member.displayName?.trim() || member.email || "Teammate",
+            }))}
+            unavailable={smtpStorageUnavailable()}
+            defaultFromName={ctx.org.name}
+          />
+        ) : null}
         <p className="mt-5 text-xs text-muted-foreground">
           Members can also send lead emails from their own mailbox once you turn on{" "}
           <span className="text-foreground">Own mailbox</span> in their{" "}

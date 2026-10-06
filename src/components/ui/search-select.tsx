@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { Combobox } from "@base-ui/react/combobox";
+import { useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 export type SearchSelectOption = {
@@ -112,6 +114,92 @@ export function SearchSelect({
         </Combobox.Positioner>
       </Combobox.Portal>
     </Combobox.Root>
+  );
+}
+
+/** Several choices, shown as a stacked list of names in the closed control. */
+export function SearchSelectMultiple({
+  options,
+  value,
+  onValueChange,
+  id,
+  placeholder = "Select…",
+  disabled,
+  className,
+  emptyText = "No matches",
+}: {
+  options: SearchSelectOption[];
+  value: string[];
+  onValueChange: (value: string[]) => void;
+  id?: string;
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+  emptyText?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const selected = options.filter((option) => value.includes(option.value));
+  const visible = options.filter((option) => matchesQuery(option.label, query));
+
+  function toggle(id: string) {
+    onValueChange(value.includes(id) ? value.filter((item) => item !== id) : [...value, id]);
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger
+        id={id}
+        disabled={disabled}
+        className={cn(
+          "relative inline-flex h-10 w-full min-w-0 items-center rounded-lg bg-muted/60 py-0 pr-9 pl-3 text-left text-sm font-medium tracking-tight text-foreground ring-1 ring-border/40 outline-none",
+          "hover:bg-muted/80 focus-visible:bg-card focus-visible:ring-2 focus-visible:ring-ring/25",
+          "disabled:cursor-not-allowed disabled:opacity-50",
+          className,
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate">
+          {selected.length > 0 ? (
+            selected.map((option) => option.label).join(", ")
+          ) : (
+            <span className="text-muted-foreground">{placeholder}</span>
+          )}
+        </span>
+        <ChevronDown aria-hidden className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground" />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-72 gap-1.5 p-1.5">
+        <div className="relative">
+          <Search aria-hidden className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={query}
+            placeholder="Search…"
+            onChange={(event) => setQuery(event.target.value)}
+            className="h-9 w-full rounded-lg bg-muted/70 pr-2.5 pl-8 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/25"
+          />
+        </div>
+        {visible.length === 0 ? (
+          <p className="px-2.5 py-2 text-sm text-muted-foreground">{emptyText}</p>
+        ) : (
+          <ul className="max-h-64 overflow-y-auto">
+            {visible.map((option) => {
+              const on = value.includes(option.value);
+              return (
+                <li key={option.value}>
+                  <button
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => toggle(option.value)}
+                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-accent"
+                  >
+                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                    {on ? <Check className="size-3.5 shrink-0 text-primary" aria-hidden /> : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 

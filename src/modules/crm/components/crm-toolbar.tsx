@@ -5,10 +5,13 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { BarChart3, LayoutGrid, List, X } from "lucide-react";
 import { DesktopFilters, MobileFilters } from "@/components/studio/mobile-filters";
+import { useState } from "react";
+import { AvatarFilterStack } from "@/components/studio/avatar-mark";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import { cn } from "@/lib/utils";
+import { parseOwnerFilter, serializeOwnerFilter } from "@/modules/crm/owner-filter";
 import type { CrmMember } from "@/modules/crm/types";
 
 export type CrmView = "board" | "list" | "reports";
@@ -39,11 +42,13 @@ export function CrmToolbar({
   sources,
   tags,
   count,
+  currentUser,
 }: {
   orgSlug: string;
   view: CrmView;
   filters: CrmFilters;
   members: CrmMember[];
+  currentUser: { id: string; avatarUrl: string | null };
   sources: string[];
   tags: string[];
   count: number;
@@ -51,6 +56,29 @@ export function CrmToolbar({
   const router = useRouter();
   const base = `/${orgSlug}/crm`;
   const activeCount = Object.values(filters).filter(Boolean).length;
+  const [trackedOwner, setTrackedOwner] = useState(filters.owner);
+  const [owner, setOwner] = useState(filters.owner);
+  if (trackedOwner !== filters.owner) {
+    setTrackedOwner(filters.owner);
+    setOwner(filters.owner);
+  }
+  const parsedOwner = parseOwnerFilter(owner, currentUser.id);
+  const people = [
+    {
+      id: currentUser.id,
+      name: "Me",
+      src: members.find((member) => member.userId === currentUser.id)?.avatarUrl ?? currentUser.avatarUrl,
+    },
+    ...members
+      .filter((member) => member.userId !== currentUser.id)
+      .map((member) => ({ id: member.userId, name: member.name, src: member.avatarUrl })),
+  ];
+
+  function setOwnerFilter(ids: string[], unassigned: boolean, submit: boolean) {
+    const next = serializeOwnerFilter(ids, unassigned);
+    setOwner(next);
+    if (submit) router.push(href({ owner: next }));
+  }
 
   function href(next: Partial<CrmFilters> & { view?: CrmView }) {
     const merged = { ...filters, view, ...next };
@@ -89,22 +117,33 @@ export function CrmToolbar({
           placeholder="Search leads"
           className="h-9 w-full rounded-xl border-0 bg-muted md:w-44 md:rounded-full"
         />
-        <NativeSelect
-          name="owner"
-          defaultValue={filters.owner}
-          onChange={onChange}
-          className={selectClass}
-          aria-label="Owner"
-        >
-          <option value="">Everyone</option>
-          <option value="me">My leads</option>
-          <option value="none">Unassigned</option>
-          {members.map((member) => (
-            <option key={member.userId} value={member.userId}>
-              {member.name}
-            </option>
-          ))}
-        </NativeSelect>
+        <input type="hidden" name="owner" value={owner} />
+        <div className="flex items-center gap-2">
+          <AvatarFilterStack
+            people={people}
+            selectedIds={new Set(parsedOwner.ids)}
+            onToggle={(id) => {
+              const ids = parsedOwner.ids.includes(id)
+                ? parsedOwner.ids.filter((item) => item !== id)
+                : [...parsedOwner.ids, id];
+              setOwnerFilter(ids, parsedOwner.unassigned, autoSubmit);
+            }}
+            size="sm"
+          />
+          <button
+            type="button"
+            aria-pressed={parsedOwner.unassigned}
+            onClick={() => setOwnerFilter(parsedOwner.ids, !parsedOwner.unassigned, autoSubmit)}
+            className={cn(
+              "h-7 rounded-full px-2.5 text-xs font-medium ring-1",
+              parsedOwner.unassigned
+                ? "bg-foreground text-background ring-foreground"
+                : "text-muted-foreground ring-border/60 hover:text-foreground",
+            )}
+          >
+            Unassigned
+          </button>
+        </div>
         <NativeSelect
           name="due"
           defaultValue={filters.due}

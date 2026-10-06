@@ -40,8 +40,9 @@ export function canDeleteModule(
 /**
  * Not org modules: `team: write` lets a member invite people and change access;
  * `mailbox: write` lets them send lead emails from their own SMTP mailbox.
+ * `smtp: write` lets them manage the studio's custom SMTP mailboxes.
  */
-export type PermissionKey = ModuleKey | "team" | "mailbox";
+export type PermissionKey = ModuleKey | "team" | "mailbox" | "smtp";
 
 export type MemberPermissions = Partial<Record<PermissionKey, ModulePermission>>;
 
@@ -49,6 +50,12 @@ export type MemberPermissions = Partial<Record<PermissionKey, ModulePermission>>
 export function canManageTeam(input: { role: string; permissions: MemberPermissions }): boolean {
   if (input.role === "owner" || input.role === "admin") return true;
   return input.role === "member" && input.permissions.team?.access === "write";
+}
+
+/** Owners and admins always; members with `smtp: write`. */
+export function canManageSmtp(input: { role: string; permissions: MemberPermissions }): boolean {
+  if (input.role === "owner" || input.role === "admin") return true;
+  return input.role === "member" && input.permissions.smtp?.access === "write";
 }
 
 /** Owners and admins always; members with `mailbox: write` who can also edit leads. */
@@ -72,6 +79,7 @@ const GRANT_LABELS: Record<PermissionKey, string> = {
   portal: "Portal",
   team: "Team",
   mailbox: "Own mailbox",
+  smtp: "Custom SMTP",
 };
 
 /**
@@ -194,6 +202,7 @@ export function parseMemberPermissions(raw: unknown): MemberPermissions | null {
     const allowDelete =
       key !== "team" &&
       key !== "mailbox" &&
+      key !== "smtp" &&
       isDeletableModule(key) &&
       mod.access === "write" &&
       mod.delete === true;
@@ -245,7 +254,7 @@ export function resolveMemberPermissions(input: {
   for (const key of Object.keys(base) as PermissionKey[]) {
     const mod = base[key];
     if (!mod) continue;
-    if (key !== "team" && key !== "mailbox" && key !== "portal" && !input.orgModules[key]) {
+    if (key !== "team" && key !== "mailbox" && key !== "smtp" && key !== "portal" && !input.orgModules[key]) {
       resolved[key] = { ...mod, access: "none" };
       continue;
     }

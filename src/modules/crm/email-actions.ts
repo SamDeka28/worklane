@@ -77,7 +77,7 @@ async function sendAllowed(
 ): Promise<{ error: string } | { sender: ResolvedSender; signature: RenderedSignature | null }> {
   if (!ctx.org.modules.crm) return { error: "CRM is disabled for this studio" };
   const [sender, { count }, signature] = await Promise.all([
-    resolveSender(ctx.org.id, ctx.userId, { ownMailbox: canUseOwnMailbox(ctx) }),
+    resolveSender(ctx.org.id, ctx.userId, { module: "crm", ownMailbox: canUseOwnMailbox(ctx) }),
     ctx.supabase
       .from("lead_emails")
       .select("id", { count: "exact", head: true })

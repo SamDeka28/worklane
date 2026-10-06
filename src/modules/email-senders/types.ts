@@ -1,3 +1,17 @@
+export const SMTP_MODULES = [
+  { id: "crm", label: "Leads" },
+  { id: "documents", label: "Documents" },
+  { id: "compose", label: "Compose" },
+  { id: "finance", label: "Invoices" },
+  { id: "delivery", label: "Projects" },
+] as const;
+
+export type SmtpModuleId = (typeof SMTP_MODULES)[number]["id"];
+
+export function smtpModuleLabel(id: string) {
+  return SMTP_MODULES.find((module) => module.id === id)?.label ?? id;
+}
+
 export type SmtpScope = "studio" | "personal";
 
 /** Which account an email goes out through: yours, the studio's, or the workspace default. */

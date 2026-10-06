@@ -59,6 +59,7 @@ function withoutTeam(value: MemberPermissions): MemberPermissions {
   const rest = { ...value };
   delete rest.team;
   delete rest.mailbox;
+  delete rest.smtp;
   return rest;
 }
 
@@ -120,6 +121,7 @@ export function useAccessPermissionsState(
   );
   const [permissions, setPermissions] = useState<MemberPermissions>(seed);
   const [manageTeam, setManageTeam] = useState(initial?.team?.access === "write");
+  const [manageSmtp, setManageSmtp] = useState(initial?.smtp?.access === "write");
   const [ownMailbox, setOwnMailbox] = useState(initial?.mailbox?.access === "write");
 
   const shownPermissions = useMemo(() => {
@@ -177,6 +179,7 @@ export function useAccessPermissionsState(
 
   function reset(next: MemberPermissions | null | undefined, role?: string) {
     setManageTeam(next?.team?.access === "write");
+    setManageSmtp(next?.smtp?.access === "write");
     setOwnMailbox(next?.mailbox?.access === "write");
     setPreset(inferAccessPreset(next, role));
     setPermissions(
@@ -196,6 +199,8 @@ export function useAccessPermissionsState(
     setTab,
     manageTeam,
     setManageTeam,
+    manageSmtp,
+    setManageSmtp,
     ownMailbox,
     setOwnMailbox,
   };
@@ -307,6 +312,9 @@ export function AccessPermissionsFields({
   grantLimit,
   manageTeam,
   onManageTeamChange,
+  manageSmtp,
+  onManageSmtpChange,
+  manageSmtpLocked = false,
   ownMailbox,
   onOwnMailboxChange,
   ownMailboxLocked = false,
@@ -323,6 +331,10 @@ export function AccessPermissionsFields({
   /** Shown only when the role can hold it (members). */
   manageTeam?: boolean;
   onManageTeamChange?: (next: boolean) => void;
+  /** Shown only when the role can hold it (members). */
+  manageSmtp?: boolean;
+  onManageSmtpChange?: (next: boolean) => void;
+  manageSmtpLocked?: boolean;
   /** Shown only when the role can hold it (members). */
   ownMailbox?: boolean;
   onOwnMailboxChange?: (next: boolean) => void;
@@ -469,6 +481,20 @@ export function AccessPermissionsFields({
           hint="Invite people and change access, up to their own level"
           on={Boolean(manageTeam)}
           onChange={onManageTeamChange}
+        />
+      ) : null}
+
+      {onManageSmtpChange ? (
+        <FlagSwitch
+          title="Manage custom SMTP"
+          hint={
+            manageSmtpLocked
+              ? "You can’t grant this without having it yourself"
+              : "Add mailboxes and choose who sends through them"
+          }
+          on={Boolean(manageSmtp)}
+          disabled={manageSmtpLocked && !manageSmtp}
+          onChange={onManageSmtpChange}
         />
       ) : null}
 

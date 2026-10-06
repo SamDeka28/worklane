@@ -352,7 +352,7 @@ export type LeadEmailSender = {
 
 export async function leadEmailSender(ctx: OrgContext): Promise<LeadEmailSender> {
   const [resolved, { signature, moduleOn }] = await Promise.all([
-    resolveSender(ctx.org.id, ctx.userId, { ownMailbox: canUseOwnMailbox(ctx) }),
+    resolveSender(ctx.org.id, ctx.userId, { module: "crm", ownMailbox: canUseOwnMailbox(ctx) }),
     senderSignatureState(ctx, "leads"),
   ]);
   return {

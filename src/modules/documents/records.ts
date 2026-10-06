@@ -371,7 +371,7 @@ export async function deliverDocumentEmail(
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "documents");
   if (blocked) return blocked;
-  const sender = await resolveSender(ctx.org.id, ctx.userId);
+  const sender = await resolveSender(ctx.org.id, ctx.userId, { module: "documents" });
   if (!sender.via) {
     return { error: "Email sending isn't set up. An owner or admin can connect the studio's mailbox in Settings." };
   }

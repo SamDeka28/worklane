@@ -2,14 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { requireOrg, type OrgContext } from "@/modules/identity/org";
-import { canUseOwnMailbox } from "@/modules/identity/permissions";
+import { canManageSmtp, canUseOwnMailbox } from "@/modules/identity/permissions";
+import { assignmentConflict } from "@/modules/email-senders/assign";
 import {
   isSmtpAdmin,
+  listCustomMailboxes,
+  loadCustomSmtpAccount,
   loadSmtpAccount,
-  smtpSecretContext,
   smtpStorageUnavailable,
 } from "@/modules/email-senders/server";
-import type { SmtpScope, SmtpSenderInput } from "@/modules/email-senders/types";
+import { SMTP_MODULES, smtpModuleLabel, type SmtpModuleId, type SmtpScope, type SmtpSenderInput } from "@/modules/email-senders/types";
 import { sealSecret } from "@/shared/crypto/secrets";
 import { createAdminSupabaseClient } from "@/shared/db/supabase/admin";
 import { personalEmailHtml, verifySmtpAccount, type SmtpAccount } from "@/shared/email";
@@ -100,9 +102,13 @@ export async function saveSmtpSenderAction(
   const failed = await verifySmtpAccount(smtp);
   if (failed) return { error: `Couldn't sign in to ${host}: ${failed}` };
 
-  const sealed = sealSecret(password, smtpSecretContext(ctx.org.id, userId));
   const admin = createAdminSupabaseClient()!;
   const now = new Date().toISOString();
+  let lookup = admin.from("smtp_senders").select("id").eq("organization_id", ctx.org.id);
+  lookup = userId ? lookup.eq("user_id", userId) : lookup.eq("is_fallback", true);
+  const { data: existing } = await lookup.maybeSingle();
+  const rowId = (existing?.id as string | undefined) ?? crypto.randomUUID();
+  const sealed = sealSecret(password, `smtp_sender:${ctx.org.id}:${rowId}`);
   const row = {
     host,
     port,
@@ -117,16 +123,16 @@ export async function saveSmtpSenderAction(
     verified_at: now,
     updated_by: ctx.userId,
     updated_at: now,
+    name: userId ? "Personal mailbox" : "Studio mailbox",
+    is_fallback: userId == null,
+    modules: [] as string[],
   };
 
-  let query = admin.from("smtp_senders").select("id").eq("organization_id", ctx.org.id);
-  query = userId ? query.eq("user_id", userId) : query.is("user_id", null);
-  const { data: existing } = await query.maybeSingle();
   const { error } = existing
     ? await admin.from("smtp_senders").update(row).eq("id", existing.id)
     : await admin
         .from("smtp_senders")
-        .insert({ ...row, organization_id: ctx.org.id, user_id: userId });
+        .insert({ ...row, id: rowId, organization_id: ctx.org.id, user_id: userId });
   if (error) return { error: "Couldn't save the SMTP account" };
 
   revalidate(orgSlug);
@@ -147,7 +153,7 @@ export async function deleteSmtpSenderAction(
   if ("error" in target) return target;
 
   let query = admin.from("smtp_senders").delete().eq("organization_id", ctx.org.id);
-  query = target.userId ? query.eq("user_id", target.userId) : query.is("user_id", null);
+  query = target.userId ? query.eq("user_id", target.userId) : query.eq("is_fallback", true);
   const { error } = await query;
   if (error) return { error: "Couldn't remove the SMTP account" };
 
@@ -169,6 +175,174 @@ export async function sendSmtpTestAction(
   const smtp = await loadSmtpAccount(ctx.org.id, target.userId);
   if (!smtp) return { error: "Connect the mailbox first" };
 
+  const body = `This is a test from Worklane.\n\nEmails sent through this mailbox go out as ${smtp.fromEmail}.`;
+  const result = await sendTrackedApplicationEmail(ctx.supabase, {
+    organizationId: ctx.org.id,
+    userId: ctx.userId,
+  }, {
+    to,
+    subject: `Worklane test email · ${ctx.org.name}`,
+    html: personalEmailHtml({ body, pixelUrl: null }),
+    text: body,
+    body,
+    smtp,
+  });
+  if (!result.ok) return { error: result.error };
+  return { ok: true, via: smtp.fromEmail };
+}
+
+export type CustomSmtpInput = SmtpSenderInput & {
+  name: string;
+  modules: string[];
+  memberIds: string[];
+};
+
+async function requireCustomSmtp(
+  orgSlug: string,
+): Promise<{ error: string } | { ctx: OrgContext }> {
+  const ctx = await requireOrg(orgSlug);
+  if (!canManageSmtp(ctx)) return { error: "You can't manage custom SMTP mailboxes" };
+  return { ctx };
+}
+
+/** Saves a custom mailbox after signing in, and assigns it to teammates for the chosen modules. */
+export async function saveCustomSmtpAction(
+  orgSlug: string,
+  input: CustomSmtpInput,
+  mailboxId?: string,
+): Promise<Result> {
+  const gate = await requireCustomSmtp(orgSlug);
+  if ("error" in gate) return gate;
+  const { ctx } = gate;
+  const unavailable = smtpStorageUnavailable();
+  if (unavailable) return { error: unavailable };
+
+  const name = input.name.trim().slice(0, 80);
+  const modules = [...new Set(input.modules.filter((id): id is SmtpModuleId => SMTP_MODULES.some((module) => module.id === id)))];
+  const memberIds = [...new Set(input.memberIds.map((id) => id.trim()).filter(Boolean))];
+  if (!name) return { error: "Name this mailbox" };
+  if (modules.length === 0) return { error: "Choose at least one module" };
+  if (memberIds.length === 0) return { error: "Choose at least one teammate" };
+
+  const { data: members } = await ctx.supabase
+    .from("organization_members")
+    .select("user_id")
+    .eq("organization_id", ctx.org.id)
+    .in("user_id", memberIds);
+  const allowed = new Set((members ?? []).map((row) => row.user_id as string));
+  if (memberIds.some((id) => !allowed.has(id))) return { error: "That person isn't in this studio" };
+
+  const existing = await listCustomMailboxes(ctx.org.id);
+  const conflict = assignmentConflict(existing, { id: mailboxId, modules, memberIds });
+  if (conflict) {
+    return {
+      error: `${conflict} is already assigned to that person for ${modules.map(smtpModuleLabel).join(", ")}.`,
+    };
+  }
+
+  const host = input.host.trim().toLowerCase();
+  const port = Math.trunc(Number(input.port));
+  const username = input.username.trim();
+  const fromEmail = input.fromEmail.trim().toLowerCase();
+  const fromName = input.fromName.trim().slice(0, 120) || null;
+  if (!host || !HOST_PATTERN.test(host)) return { error: "Enter the SMTP server, like smtp.gmail.com" };
+  if (!(port >= 1 && port <= 65535)) return { error: "Enter a port between 1 and 65535" };
+  if (!username) return { error: "Enter the username you sign in with" };
+  if (!EMAIL_PATTERN.test(fromEmail)) return { error: "Enter the address emails come from" };
+
+  const password =
+    input.password.replace(/\s+/g, "") ||
+    (mailboxId ? (await loadCustomSmtpAccount(ctx.org.id, mailboxId))?.pass : null) ||
+    null;
+  if (!password) return { error: "Enter the password" };
+
+  const smtp: SmtpAccount = {
+    host,
+    port,
+    secure: input.security === "ssl",
+    user: username,
+    pass: password,
+    fromEmail,
+    fromName,
+  };
+  const failed = await verifySmtpAccount(smtp);
+  if (failed) return { error: `Couldn't sign in to ${host}: ${failed}` };
+
+  const admin = createAdminSupabaseClient()!;
+  const rowId = mailboxId ?? crypto.randomUUID();
+  const sealed = sealSecret(password, `smtp_sender:${ctx.org.id}:${rowId}`);
+  const now = new Date().toISOString();
+  const row = {
+    name,
+    modules,
+    host,
+    port,
+    secure: smtp.secure,
+    username,
+    from_email: fromEmail,
+    from_name: fromName,
+    key_version: sealed.keyVersion,
+    iv: sealed.iv,
+    auth_tag: sealed.authTag,
+    ciphertext: sealed.ciphertext,
+    verified_at: now,
+    updated_by: ctx.userId,
+    updated_at: now,
+    is_fallback: false,
+    user_id: null,
+  };
+  const { error } = mailboxId
+    ? await admin
+        .from("smtp_senders")
+        .update(row)
+        .eq("id", mailboxId)
+        .eq("organization_id", ctx.org.id)
+        .eq("is_fallback", false)
+        .is("user_id", null)
+    : await admin.from("smtp_senders").insert({ ...row, id: rowId, organization_id: ctx.org.id });
+  if (error) return { error: "Couldn't save the SMTP account" };
+
+  await admin.from("smtp_sender_members").delete().eq("smtp_sender_id", rowId).eq("organization_id", ctx.org.id);
+  const { error: memberError } = await admin.from("smtp_sender_members").insert(
+    memberIds.map((userId) => ({
+      smtp_sender_id: rowId,
+      user_id: userId,
+      organization_id: ctx.org.id,
+    })),
+  );
+  if (memberError) return { error: "The mailbox was saved, but the teammate assignment failed" };
+
+  revalidate(orgSlug);
+  revalidatePath(`/${orgSlug}/crm`);
+  return { ok: true };
+}
+
+export async function deleteCustomSmtpAction(orgSlug: string, mailboxId: string): Promise<Result> {
+  const gate = await requireCustomSmtp(orgSlug);
+  if ("error" in gate) return gate;
+  const admin = createAdminSupabaseClient();
+  if (!admin) return { error: "The Supabase service key isn't configured" };
+  const { error } = await admin
+    .from("smtp_senders")
+    .delete()
+    .eq("id", mailboxId)
+    .eq("organization_id", gate.ctx.org.id)
+    .eq("is_fallback", false)
+    .is("user_id", null);
+  if (error) return { error: "Couldn't remove the SMTP account" };
+  revalidate(orgSlug);
+  revalidatePath(`/${orgSlug}/crm`);
+  return { ok: true };
+}
+
+export async function sendCustomSmtpTestAction(orgSlug: string, mailboxId: string): Promise<Result & { via?: string }> {
+  const gate = await requireCustomSmtp(orgSlug);
+  if ("error" in gate) return gate;
+  const { ctx } = gate;
+  const to = ctx.user.email;
+  if (!to) return { error: "Your account has no email address to send the test to" };
+  const smtp = await loadCustomSmtpAccount(ctx.org.id, mailboxId);
+  if (!smtp) return { error: "Connect the mailbox first" };
   const body = `This is a test from Worklane.\n\nEmails sent through this mailbox go out as ${smtp.fromEmail}.`;
   const result = await sendTrackedApplicationEmail(ctx.supabase, {
     organizationId: ctx.org.id,

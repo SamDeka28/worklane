@@ -188,7 +188,7 @@ export async function sendTrackedEmailForContext(
   input: ComposeEmailInput,
 ): Promise<{ ok: true; id: string; signatureIncluded: boolean } | { error: string }> {
   const orgSlug = ctx.org.slug;
-  const sender = await resolveSender(ctx.org.id, ctx.userId);
+  const sender = await resolveSender(ctx.org.id, ctx.userId, { module: "compose" });
   if (!sender.via) {
     return {
       error: "Email sending isn't set up. An owner or admin can connect the studio's mailbox in Settings.",

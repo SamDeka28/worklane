@@ -30,7 +30,7 @@ export default async function EmailsPage({ params, searchParams }: PageProps<"/[
   const [emails, contacts, sender, signatureState] = await Promise.all([
     listTrackedEmails(orgSlug, scope),
     ctx.canWrite ? listEmailContacts(ctx) : Promise.resolve([]),
-    resolveSender(ctx.org.id, ctx.userId),
+    resolveSender(ctx.org.id, ctx.userId, { module: "compose" }),
     ctx.canWrite ? senderSignatureState(ctx, "emails") : Promise.resolve(null),
   ]);
   const pixelBase = mailPixelUrl("");

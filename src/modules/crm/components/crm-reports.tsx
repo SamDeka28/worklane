@@ -91,7 +91,7 @@ function Bar({
   sub?: string;
 }) {
   return (
-    <li className="grid gap-1">
+    <li className="grid gap-1.5">
       <div className="flex items-baseline justify-between gap-3 text-sm">
         <span className="min-w-0 truncate font-medium">{label}</span>
         <span className="shrink-0 tabular-nums">
@@ -161,16 +161,13 @@ export function CrmReports({
       ? Math.round(cycleDays.reduce((sum, days) => sum + days, 0) / cycleDays.length)
       : null;
 
-  // Forecast by expected close month (weighted), next six months plus overdue / undated.
+  // Forecast by expected close month (weighted). Only overdue, undated, and months that have a value.
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const months: string[] = [];
-  for (let offset = 0; offset < 6; offset++) {
-    const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-    months.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`);
-  }
-  const buckets = new Map<string, Totals>([["overdue", new Map()], ["undated", new Map()]]);
-  for (const key of months) buckets.set(key, new Map());
+  const buckets = new Map<string, Totals>([
+    ["overdue", new Map()],
+    ["undated", new Map()],
+  ]);
   for (const lead of open) {
     if (lead.estimatedValueMinor == null) continue;
     const amount = weighted(lead, stageBySlug.get(lead.stage), stages);
@@ -179,14 +176,18 @@ export function CrmReports({
       : monthKey(lead.closeOn) < thisMonth
         ? "overdue"
         : monthKey(lead.closeOn);
-    const bucket = buckets.get(key);
-    if (bucket) add(bucket, lead.currency, amount);
+    const bucket = buckets.get(key) ?? new Map();
+    add(bucket, lead.currency, amount);
+    buckets.set(key, bucket);
   }
   const forecastRows = [
     ...(primaryAmount(buckets.get("overdue")!) > 0
       ? [{ key: "overdue", label: "Past close date" }]
       : []),
-    ...months.map((key) => ({ key, label: monthLabel(key) })),
+    ...[...buckets.keys()]
+      .filter((key) => key !== "overdue" && key !== "undated" && primaryAmount(buckets.get(key)!) > 0)
+      .sort()
+      .map((key) => ({ key, label: monthLabel(key) })),
     ...(primaryAmount(buckets.get("undated")!) > 0 ? [{ key: "undated", label: "No close date" }] : []),
   ];
   const forecastMax = Math.max(1, ...forecastRows.map((row) => primaryAmount(buckets.get(row.key)!)));
@@ -261,7 +262,7 @@ export function CrmReports({
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-6 sm:px-6 sm:pt-4">
-      <div className="mx-auto grid max-w-6xl gap-4">
+      <div className="mx-auto grid max-w-6xl gap-6">
         <SummaryStrip>
           {showMoney ? (
             <SummaryStat
@@ -297,37 +298,9 @@ export function CrmReports({
           )}
         </SummaryStrip>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          {showMoney ? (
-            <Panel
-              title="Forecast by close month"
-              hint="Estimated value × stage win probability, by expected close date."
-            >
-              <ul className="grid gap-3">
-                {forecastRows.map((row) => {
-                  const totals = buckets.get(row.key)!;
-                  return (
-                    <Bar
-                      key={row.key}
-                      label={row.label}
-                      value={formatTotals(totals, currency)}
-                      ratio={primaryAmount(totals) / forecastMax}
-                      tone={
-                        row.key === "overdue"
-                          ? "bg-rose-400"
-                          : row.key === "undated"
-                            ? "bg-muted-foreground/40"
-                            : "bg-sky-500/80"
-                      }
-                    />
-                  );
-                })}
-              </ul>
-            </Panel>
-          ) : null}
-
+        <div className="grid items-start gap-6 lg:grid-cols-2">
           <Panel title="Pipeline funnel" hint="Leads that reached each stage, from stage history.">
-            <ul className="grid gap-3">
+            <ul className="grid gap-4">
               {funnel.map(({ stage, count }, index) => (
                 <Bar
                   key={stage.id}
@@ -341,11 +314,45 @@ export function CrmReports({
             </ul>
           </Panel>
 
+          {showMoney ? (
+            <Panel
+              title="Forecast by close month"
+              hint="Estimated value × stage win probability, by expected close date."
+            >
+              {forecastRows.length === 0 ? (
+                <Empty>No dated pipeline yet.</Empty>
+              ) : (
+              <ul className="grid gap-4">
+                {forecastRows.map((row) => {
+                  const totals = buckets.get(row.key) ?? new Map();
+                  const tone =
+                    row.key === "overdue"
+                      ? "bg-rose-400"
+                      : row.key === "undated"
+                        ? "bg-muted-foreground/40"
+                        : "bg-sky-500/80";
+                  return (
+                    <Bar
+                      key={row.key}
+                      label={row.label}
+                      value={formatTotals(totals, currency)}
+                      ratio={primaryAmount(totals) / forecastMax}
+                      tone={tone}
+                    />
+                  );
+                })}
+              </ul>
+              )}
+            </Panel>
+          ) : null}
+        </div>
+
+        <div className="grid items-start gap-6 lg:grid-cols-2">
           <Panel title="By source" hint="Where leads come from, and which sources convert.">
             {sourceRows.length === 0 ? (
               <Empty>No sources yet.</Empty>
             ) : (
-              <ul className="grid gap-3">
+              <ul className="grid gap-4">
                 {sourceRows.map(([source, row]) => (
                   <Bar
                     key={source}
@@ -370,7 +377,7 @@ export function CrmReports({
             {reasonRows.length === 0 ? (
               <Empty>No lost deals yet.</Empty>
             ) : (
-              <ul className="grid gap-3">
+              <ul className="grid gap-4">
                 {reasonRows.map(([reason, count]) => (
                   <Bar
                     key={reason}
@@ -384,8 +391,9 @@ export function CrmReports({
               </ul>
             )}
           </Panel>
+        </div>
 
-          <Panel title="By owner" className="lg:col-span-2">
+        <Panel title="By owner">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead className="text-xs text-muted-foreground">
@@ -401,27 +409,26 @@ export function CrmReports({
                 <tbody className="tabular-nums">
                   {ownerRows.map(([owner, row]) => (
                     <tr key={owner} className="border-t border-border/50">
-                      <td className="py-2 font-medium">
+                      <td className="py-3 font-medium">
                         {owner === "none" ? (
                           <span className="text-muted-foreground">Unassigned</span>
                         ) : (
                           (memberName.get(owner) ?? "Former teammate")
                         )}
                       </td>
-                      <td className="py-2 text-right">{row.open}</td>
+                      <td className="py-3 text-right">{row.open}</td>
                       {showMoney ? (
-                        <td className="py-2 text-right">{formatTotals(row.pipeline, currency)}</td>
+                        <td className="py-3 text-right">{formatTotals(row.pipeline, currency)}</td>
                       ) : null}
-                      <td className="py-2 text-right">{row.won}</td>
-                      <td className="py-2 text-right">{row.lost}</td>
-                      <td className="py-2 text-right">{percent(row.won, row.won + row.lost)}</td>
+                      <td className="py-3 text-right">{row.won}</td>
+                      <td className="py-3 text-right">{row.lost}</td>
+                      <td className="py-3 text-right">{percent(row.won, row.won + row.lost)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </Panel>
-        </div>
       </div>
     </div>
   );

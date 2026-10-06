@@ -3,6 +3,7 @@ import { renderTimesheetPdfBuffer } from "@/modules/delivery/timesheet-pdf";
 import { personalEmailHtml, personalEmailText } from "@/shared/email";
 import { parseEmailAttachments } from "@/shared/email/attachments";
 import type { EmailAttachmentPayload } from "@/modules/emails/types";
+import { resolveSender } from "@/modules/email-senders/server";
 import { sendTrackedApplicationEmail } from "@/modules/emails/application-send";
 import { asIsoCurrency } from "@/shared/money";
 
@@ -65,6 +66,7 @@ export async function sendProjectTimesheetForContext(
     currency: asIsoCurrency((client?.currency as string | undefined) ?? "USD"),
     entries,
   });
+  const sender = await resolveSender(ctx.org.id, ctx.userId, { module: "delivery" });
   const mailed = await sendTrackedApplicationEmail(ctx.supabase, {
     organizationId: ctx.org.id,
     userId: ctx.userId,
@@ -75,6 +77,7 @@ export async function sendProjectTimesheetForContext(
     html: personalEmailHtml({ body }),
     text: personalEmailText({ body }),
     body,
+    smtp: sender.smtp ?? undefined,
     attachments: [
       ...extraAttachments.attachments,
       {

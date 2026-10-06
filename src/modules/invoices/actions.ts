@@ -36,6 +36,7 @@ import {
   lineTotalMinor,
 } from "@/modules/invoices/totals";
 import { asIsoCurrency, netFromGross, parseMajorToMinor, type IsoCurrency } from "@/shared/money";
+import { resolveSender } from "@/modules/email-senders/server";
 import { sendTrackedApplicationEmail } from "@/modules/emails/application-send";
 
 function asCurrency(value: string, fallback: IsoCurrency): IsoCurrency {
@@ -1259,6 +1260,7 @@ export async function sendInvoiceForContext(
     paymentInstructions: invoice.paymentInstructions,
     reminder,
   };
+  const sender = await resolveSender(ctx.org.id, ctx.userId, { module: "finance" });
   const mailed = await sendTrackedApplicationEmail(ctx.supabase, {
     organizationId: ctx.org.id,
     userId: ctx.userId,
@@ -1272,6 +1274,7 @@ export async function sendInvoiceForContext(
     text: invoiceEmailText(emailInput),
     body: emailInput.memo ?? `Invoice ${invoice.number} · ${emailInput.amountLabel}`,
     replyTo: brand.business.email || undefined,
+    smtp: sender.smtp ?? undefined,
     attachments: [
       { filename: `${invoice.number}.pdf`, content: buffer, contentType: "application/pdf" },
     ],

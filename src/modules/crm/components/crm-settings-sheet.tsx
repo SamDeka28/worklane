@@ -56,6 +56,13 @@ export type CrmMailbox = {
   allowed: boolean;
   isAdmin: boolean;
   saved: SmtpSenderSummary | null;
+  /** A studio mailbox assigned to this person for lead emails. */
+  assigned?: {
+    name: string;
+    fromEmail: string;
+    host: string;
+    security: "ssl" | "starttls";
+  } | null;
   /** Where lead emails go out from without a personal mailbox. */
   fallback: string;
   unavailable: string | null;
@@ -388,16 +395,32 @@ export function CrmSettingsSheet({
           title="Your mailbox"
           description="Send lead emails from your own Gmail, Outlook, or any SMTP mailbox, so they come from you and replies land in your inbox. Only used for lead emails."
         >
+          {mailbox.assigned ? (
+            <div className="rounded-xl bg-muted/50 px-3 py-3 ring-1 ring-border/40">
+              <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Active</p>
+              <p className="mt-1 text-sm font-medium">{mailbox.assigned.name}</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Lead emails go out as {mailbox.assigned.fromEmail} through {mailbox.assigned.host}.
+              </p>
+            </div>
+          ) : null}
           {mailbox.allowed ? (
-            <SmtpSenderForm
-              orgSlug={orgSlug}
-              scope="personal"
-              saved={mailbox.saved}
-              fallback={mailbox.fallback}
-              unavailable={mailbox.unavailable}
-              defaultFromName={mailbox.defaultFromName}
-            />
-          ) : (
+            <>
+              {mailbox.assigned ? (
+                <p className="text-xs text-muted-foreground">
+                  Your own mailbox is not used for leads while this assignment is active.
+                </p>
+              ) : null}
+              <SmtpSenderForm
+                orgSlug={orgSlug}
+                scope="personal"
+                saved={mailbox.saved}
+                fallback={mailbox.fallback}
+                unavailable={mailbox.unavailable}
+                defaultFromName={mailbox.defaultFromName}
+              />
+            </>
+          ) : mailbox.assigned ? null : (
             <p className="text-sm text-muted-foreground">
               Your lead emails go out from {mailbox.fallback}. To use your own mailbox, ask an owner
               or admin to turn on <span className="text-foreground">Own mailbox</span> in your Team
