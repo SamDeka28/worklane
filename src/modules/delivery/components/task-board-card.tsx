@@ -23,7 +23,7 @@ import type { TaskKind, TaskPriority } from "@/modules/delivery/types";
 /** Color lives only on the badge — cards stay neutral. */
 export const PRIORITY_MARK: Record<
   TaskPriority,
-  { letter: string; label: string; badge: string; Icon: typeof ArrowUp }
+  { letter: string; label: string; badge: string; text: string; Icon: typeof ArrowUp }
 > = {
   high: {
     letter: "H",
@@ -50,7 +50,7 @@ export const PRIORITY_MARK: Record<
 
 export const KIND_MARK: Record<
   TaskKind,
-  { label: string; Icon: typeof CheckSquare; tone: string }
+  { label: string; Icon: typeof CheckSquare; color: string; tone: string }
 > = {
   task: {
     label: "Task",
