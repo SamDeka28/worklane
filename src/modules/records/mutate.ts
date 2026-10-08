@@ -17,7 +17,8 @@ import {
   taskMilestoneFields,
   type TaskMilestonePlan,
 } from "@/modules/delivery/task-milestone";
-import type { BillingMode } from "@/modules/delivery/types";
+import { planAssigneeIds, planTaskChoice, planTaskLabels } from "@/modules/delivery/task-fields";
+import { TASK_KINDS, TASK_PRIORITIES, TASK_STATUSES, type BillingMode } from "@/modules/delivery/types";
 import {
   allocatePartnersForCharge,
   allocatePartnersForReceipt,
@@ -293,6 +294,20 @@ function milestoneWrite(plan: TaskMilestonePlan) {
   return taskMilestoneFields(plan);
 }
 
+async function assigneesOnProject(ctx: OrgContext, projectId: string, ids: string[]) {
+  if (ids.length === 0) return { assigneeUserIds: [] as string[], assigneeUserId: null as string | null };
+  const { data, error } = await ctx.supabase
+    .from("project_members")
+    .select("user_id")
+    .eq("organization_id", ctx.org.id)
+    .eq("project_id", projectId)
+    .in("user_id", ids);
+  if (error) return { error: error.message };
+  const allowed = new Set((data ?? []).map((row) => row.user_id as string));
+  if (ids.some((id) => !allowed.has(id))) return { error: "Assignees must be project members" };
+  return { assigneeUserIds: ids, assigneeUserId: ids[0] ?? null };
+}
+
 export async function createTaskRecord(
   ctx: OrgContext,
   input: {
@@ -302,12 +317,24 @@ export async function createTaskRecord(
     status?: string;
     dueOn?: string;
     milestoneId?: string | null;
+    kind?: string | null;
+    priority?: string | null;
+    labels?: string | string[] | null;
+    assigneeUserIds?: string | string[] | null;
   },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "delivery");
   if (blocked) return blocked;
   const title = input.title.trim();
   if (!title || !input.projectId) return { error: "Task title and project are required" };
+  const status = planTaskChoice(input.status, TASK_STATUSES, "status");
+  const kind = planTaskChoice(input.kind, TASK_KINDS, "kind");
+  const priority = planTaskChoice(input.priority, TASK_PRIORITIES, "priority");
+  const labels = planTaskLabels(input.labels);
+  const assignees = planAssigneeIds(input.assigneeUserIds);
+  for (const plan of [status, kind, priority, labels, assignees]) {
+    if ("error" in plan) return plan;
+  }
   const milestonePlan = await planTaskMilestoneLink({
     mode: "create",
     requestedId: input.milestoneId,
@@ -315,6 +342,13 @@ export async function createTaskRecord(
     loadMilestone: (id) => loadMilestoneForTask(ctx, id),
   });
   if ("error" in milestonePlan) return milestonePlan;
+  const storedStatus = "value" in status ? status.value : "todo";
+  const storedKind = "value" in kind ? kind.value : "task";
+  const storedPriority = "value" in priority ? priority.value : "medium";
+  const storedLabels = "value" in labels ? labels.value : [];
+  const storedAssignees = "value" in assignees ? assignees.value : [];
+  const people = await assigneesOnProject(ctx, input.projectId, storedAssignees);
+  if ("error" in people) return people;
   const { data, error } = await ctx.supabase
     .from("tasks")
     .insert({
@@ -323,13 +357,28 @@ export async function createTaskRecord(
       ...milestoneColumnPatch(milestonePlan),
       title,
       description: input.description?.trim() || null,
-      status: input.status || "todo",
-      due_on: input.dueOn || null,
+      status: storedStatus,
+      kind: storedKind,
+      priority: storedPriority,
+      labels: storedLabels,
+      due_on: input.dueOn?.trim() || null,
+      assignee_user_id: people.assigneeUserId,
+      assignee_user_ids: people.assigneeUserIds,
     })
     .select("id")
     .single();
   if (error || !data) return { error: error?.message ?? "Could not create task" };
-  return { id: data.id as string, ...milestoneWrite(milestonePlan) };
+  return {
+    id: data.id as string,
+    status: storedStatus,
+    kind: storedKind,
+    priority: storedPriority,
+    labels: storedLabels,
+    dueOn: input.dueOn?.trim() || null,
+    assigneeUserIds: people.assigneeUserIds,
+    assignee_user_ids: people.assigneeUserIds,
+    ...milestoneWrite(milestonePlan),
+  };
 }
 
 export async function updateTaskRecord(
@@ -338,20 +387,58 @@ export async function updateTaskRecord(
   input: {
     title?: string;
     description?: string;
-    status?: string;
+    status?: string | null;
     dueOn?: string | null;
     milestoneId?: string | null;
+    kind?: string | null;
+    priority?: string | null;
+    labels?: string | string[] | null;
+    assigneeUserIds?: string | string[] | null;
   },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "delivery");
   if (blocked) return blocked;
+  const status = planTaskChoice(input.status, TASK_STATUSES, "status");
+  const kind = planTaskChoice(input.kind, TASK_KINDS, "kind");
+  const priority = planTaskChoice(input.priority, TASK_PRIORITIES, "priority");
+  const labels = planTaskLabels(input.labels);
+  const assignees = planAssigneeIds(input.assigneeUserIds);
+  for (const plan of [status, kind, priority, labels, assignees]) {
+    if ("error" in plan) return plan;
+  }
   const patch: Record<string, unknown> = {};
-  if (input.title?.trim()) patch.title = input.title.trim();
-  if (input.description !== undefined) patch.description = input.description?.trim() || null;
-  if (input.status) patch.status = input.status;
-  if (input.dueOn !== undefined) patch.due_on = input.dueOn;
+  const echoed: Record<string, unknown> = {};
+  if (input.title?.trim()) {
+    patch.title = input.title.trim();
+    echoed.title = patch.title;
+  }
+  if (input.description !== undefined) {
+    patch.description = input.description?.trim() || null;
+    echoed.description = patch.description;
+  }
+  if ("value" in status) {
+    patch.status = status.value;
+    echoed.status = status.value;
+  }
+  if ("value" in kind) {
+    patch.kind = kind.value;
+    echoed.kind = kind.value;
+  }
+  if ("value" in priority) {
+    patch.priority = priority.value;
+    echoed.priority = priority.value;
+  }
+  if ("value" in labels) {
+    patch.labels = labels.value;
+    echoed.labels = labels.value;
+  }
+  if (input.dueOn !== undefined) {
+    patch.due_on = input.dueOn?.trim() || null;
+    echoed.dueOn = patch.due_on;
+  }
   let milestoneResult: Record<string, unknown> = {};
-  if (input.milestoneId !== undefined) {
+  const needsTask = input.milestoneId !== undefined || "value" in assignees;
+  if (needsTask) {
     const { data: task } = await ctx.supabase
       .from("tasks")
       .select("project_id, milestone_id")
@@ -359,20 +446,30 @@ export async function updateTaskRecord(
       .eq("organization_id", ctx.org.id)
       .maybeSingle();
     if (!task) return { error: "Task not found" };
-    const milestonePlan = await planTaskMilestoneLink({
-      mode: "update",
-      requestedId: input.milestoneId,
-      taskProjectId: task.project_id as string,
-      currentMilestoneId: (task.milestone_id as string | null) ?? null,
-      loadMilestone: (id) => loadMilestoneForTask(ctx, id),
-    });
-    if ("error" in milestonePlan) return milestonePlan;
-    Object.assign(patch, milestoneColumnPatch(milestonePlan));
-    milestoneResult = milestoneWrite(milestonePlan);
+    if (input.milestoneId !== undefined) {
+      const milestonePlan = await planTaskMilestoneLink({
+        mode: "update",
+        requestedId: input.milestoneId,
+        taskProjectId: task.project_id as string,
+        currentMilestoneId: (task.milestone_id as string | null) ?? null,
+        loadMilestone: (id) => loadMilestoneForTask(ctx, id),
+      });
+      if ("error" in milestonePlan) return milestonePlan;
+      Object.assign(patch, milestoneColumnPatch(milestonePlan));
+      milestoneResult = milestoneWrite(milestonePlan);
+    }
+    if ("value" in assignees) {
+      const people = await assigneesOnProject(ctx, task.project_id as string, assignees.value);
+      if ("error" in people) return people;
+      patch.assignee_user_id = people.assigneeUserId;
+      patch.assignee_user_ids = people.assigneeUserIds;
+      echoed.assigneeUserIds = people.assigneeUserIds;
+      echoed.assignee_user_ids = people.assigneeUserIds;
+    }
   }
   const { error } = await ctx.supabase.from("tasks").update(patch).eq("id", taskId).eq("organization_id", ctx.org.id);
   if (error) return { error: error.message };
-  return { id: taskId, updated: true, ...milestoneResult };
+  return { id: taskId, updated: true, ...echoed, ...milestoneResult };
 }
 
 export async function deleteTaskRecord(ctx: OrgContext, taskId: string): Promise<WriteResult> {

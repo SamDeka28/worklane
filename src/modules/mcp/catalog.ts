@@ -221,7 +221,7 @@ export const DATASETS: Dataset[] = [
   {
     name: "tasks",
     table: "tasks",
-    description: "Board cards. Assignees are user ids, not display names. Use members to resolve names. milestone_id links a card to a milestone on the same project.",
+    description: "Board cards. create_task and update_task set title, description, status, kind, priority, due_on, labels, assignee_user_ids, and milestone_id. Assignees are user ids, not display names. Use members to resolve names. milestone_id links a card to a milestone on the same project.",
     module: "delivery",
     dateField: "due_on",
     orderField: "created_at",
@@ -233,7 +233,9 @@ export const DATASETS: Dataset[] = [
       text("title", "Task title.", true),
       text("description", "Task description.", true),
       text("status", "todo, doing, or done."),
+      text("kind", "Card type: task, bug, feature, or chore."),
       text("priority", "low, medium, or high."),
+      text("labels", "Freeform labels on the card."),
       date("due_on", "Due date."),
       id("assignee_user_id", "Primary assignee user id."),
       text("assignee_user_ids", "All assignee user ids."),

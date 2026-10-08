@@ -14,6 +14,7 @@ import {
   setMilestoneStatusForContext,
 } from "@/modules/delivery/actions";
 import { milestoneIdFromToolInput } from "@/modules/delivery/task-milestone";
+import { cardListFromToolInput } from "@/modules/delivery/task-fields";
 import {
   addInvoiceLineForContext,
   createDraftInvoiceForContext,
@@ -71,6 +72,13 @@ import {
 } from "@/modules/records/mutate";
 
 type Reader = { supabase: SupabaseClient; userId: string; scopes?: string[] };
+
+const cardListField = (detail: string) =>
+  z
+    .union([z.string(), z.array(z.string())])
+    .nullable()
+    .optional()
+    .describe(detail);
 
 function milestoneIdField(detail: string) {
   return z
@@ -292,8 +300,17 @@ const toolShapes: Record<string, z.ZodRawShape> = {
     projectId: z.string(),
     title: z.string(),
     description: z.string().optional(),
-    status: z.string().optional(),
-    dueOn: z.string().optional(),
+    status: z.string().optional().describe("todo, doing, or done."),
+    kind: z.string().optional().describe("Card type: task, bug, feature, or chore."),
+    priority: z.string().optional().describe("low, medium, or high."),
+    dueOn: z.string().optional().describe("Due date, YYYY-MM-DD."),
+    labels: cardListField(
+      "Labels. A comma-separated list or an array of up to 12 labels. Each label is at most 24 characters.",
+    ),
+    assigneeUserIds: cardListField("Same as assignee_user_ids."),
+    assignee_user_ids: cardListField(
+      "Project member user ids. A comma-separated list or an array of up to 8. Use the members dataset to resolve names to ids.",
+    ),
     milestone_id: milestoneIdField("Preferred name."),
     milestoneId: milestoneIdField("Same as milestone_id."),
   },
@@ -301,8 +318,17 @@ const toolShapes: Record<string, z.ZodRawShape> = {
     id: recordId,
     title: z.string().optional(),
     description: z.string().optional(),
-    status: z.string().optional(),
-    dueOn: z.string().optional(),
+    status: z.string().optional().describe("todo, doing, or done. Omit to leave it unchanged."),
+    kind: z.string().optional().describe("Card type: task, bug, feature, or chore. Omit to leave it unchanged."),
+    priority: z.string().optional().describe("low, medium, or high. Omit to leave it unchanged."),
+    dueOn: z.string().optional().describe("Due date, YYYY-MM-DD. An empty string clears it."),
+    labels: cardListField(
+      "Labels. A comma-separated list or an array of up to 12. An empty string or empty array clears them. Omit to leave them unchanged.",
+    ),
+    assigneeUserIds: cardListField("Same as assignee_user_ids."),
+    assignee_user_ids: cardListField(
+      "Project member user ids. A comma-separated list or an array of up to 8. An empty string or empty array clears them. Omit to leave them unchanged.",
+    ),
     milestone_id: milestoneIdField("Preferred name."),
     milestoneId: milestoneIdField("Same as milestone_id."),
   },
@@ -442,6 +468,10 @@ type ToolInput = {
   dueOn?: string;
   milestoneId?: string | null;
   milestone_id?: string | null;
+  priority?: string | null;
+  labels?: string | string[] | null;
+  assigneeUserIds?: string | string[] | null;
+  assignee_user_ids?: string | string[] | null;
   attachments?: string;
   filename?: string;
   mimeType?: string;
@@ -668,7 +698,7 @@ export function registerStudioActions(
   );
   add(
     "create_task",
-    "Create a task on a project. Pass milestone_id to link it to a milestone on that same project, as in create task X in project Y with milestone_id Z. milestoneId is the same field. Omit it to leave the task unlinked. The result includes milestone_id and milestone. A milestone from another project is rejected.",
+    "Create a task on a project. Accepts the card fields: title, description, status (todo, doing, done), kind (task, bug, feature, chore), priority (low, medium, high), dueOn, labels, assignee_user_ids, and milestone_id. labels and assignee_user_ids are a comma-separated list or an array. Assignees must be project member user ids from the members dataset. milestone_id links a milestone on that same project. The result echoes the stored card fields.",
     false,
     true,
     (input) =>
@@ -678,14 +708,18 @@ export function registerStudioActions(
           title: input.title || input.name || "",
           description: input.description,
           status: input.status,
+          kind: input.kind,
+          priority: input.priority,
           dueOn: input.dueOn,
+          labels: input.labels,
+          assigneeUserIds: cardListFromToolInput(input.assignee_user_ids, input.assigneeUserIds),
           milestoneId: milestoneIdFromToolInput(input),
         }),
       ),
   );
   add(
     "update_task",
-    "Update a task title, description, status, or due date. Pass milestone_id to link or move the task onto a milestone on the same project. Pass an empty milestone_id to clear the link. Omit milestone_id to leave the current link unchanged. milestoneId is the same field. The result includes milestone_id and milestone when the link changes.",
+    "Update a task card. Accepts title, description, status (todo, doing, done), kind (task, bug, feature, chore), priority (low, medium, high), dueOn, labels, assignee_user_ids, and milestone_id. Omit a field to leave it unchanged. An empty labels, assignee_user_ids, dueOn, or milestone_id clears that value. labels and assignee_user_ids are a comma-separated list or an array. Assignees must be project member user ids. milestone_id must belong to the task's project.",
     false,
     true,
     (input) =>
@@ -694,7 +728,11 @@ export function registerStudioActions(
           title: input.title,
           description: input.description,
           status: input.status,
+          kind: input.kind,
+          priority: input.priority,
           dueOn: input.dueOn,
+          labels: input.labels,
+          assigneeUserIds: cardListFromToolInput(input.assignee_user_ids, input.assigneeUserIds),
           milestoneId: milestoneIdFromToolInput(input),
         }),
       ),
