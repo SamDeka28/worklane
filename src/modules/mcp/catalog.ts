@@ -228,7 +228,7 @@ export const DATASETS: Dataset[] = [
     fields: [
       id("id", "Task id."),
       id("project_id", "Project id."),
-      id("milestone_id", "Milestone id, if linked."),
+      id("milestone_id", "Milestone id, if linked. Set with create_task or update_task milestone_id. The milestone must belong to the task's project."),
       id("column_id", "Board column id."),
       text("title", "Task title.", true),
       text("description", "Task description.", true),

@@ -10,6 +10,7 @@ import {
   parseHours,
 } from "@/modules/delivery/ledger";
 import { statusForColumn } from "@/modules/delivery/board";
+import { milestoneColumnPatch, planTaskMilestoneLink } from "@/modules/delivery/task-milestone";
 import { createWorkLogRecord, isWriteError } from "@/modules/records/mutate";
 import {
   BILLING_MODES,
@@ -1115,7 +1116,18 @@ export async function createTaskFromMilestoneAction(orgSlug: string, milestoneId
     title: milestone.name,
   });
   revalidatePath(`/${orgSlug}/projects/${milestone.project_id}`);
-  return { ok: true as const, taskId: task.id as string };
+  return {
+    ok: true as const,
+    taskId: task.id as string,
+    milestone_id: milestone.id as string,
+    milestoneId: milestone.id as string,
+    milestone: {
+      id: milestone.id as string,
+      name: milestone.name as string,
+      projectId: milestone.project_id as string,
+      status: milestone.status as string,
+    },
+  };
 }
 
 export async function addMilestoneItemAction(
@@ -1204,7 +1216,7 @@ export async function createTaskFromMilestoneItemAction(orgSlug: string, itemId:
 
   const { data: milestone } = await ctx.supabase
     .from("milestones")
-    .select("id, project_id, due_on, status")
+    .select("id, name, project_id, due_on, status")
     .eq("id", item.milestone_id)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -1269,7 +1281,18 @@ export async function createTaskFromMilestoneItemAction(orgSlug: string, itemId:
     title: item.title,
   });
   revalidatePath(`/${orgSlug}/projects/${milestone.project_id}`);
-  return { ok: true as const, taskId: task.id as string };
+  return {
+    ok: true as const,
+    taskId: task.id as string,
+    milestone_id: milestone.id as string,
+    milestoneId: milestone.id as string,
+    milestone: {
+      id: milestone.id as string,
+      name: (milestone.name as string) ?? "",
+      projectId: milestone.project_id as string,
+      status: milestone.status as string,
+    },
+  };
 }
 
 export async function removeMilestoneBoardTaskAction(orgSlug: string, milestoneId: string) {
@@ -1778,6 +1801,35 @@ async function resolveProjectAssignees(
   };
 }
 
+async function resolveTaskMilestone(
+  ctx: Awaited<ReturnType<typeof requireWritableOrg>>,
+  input: {
+    mode: "create" | "update";
+    requestedId: string | null | undefined;
+    taskProjectId: string;
+    currentMilestoneId?: string | null;
+  },
+) {
+  return planTaskMilestoneLink({
+    ...input,
+    loadMilestone: async (id) => {
+      const { data } = await ctx.supabase
+        .from("milestones")
+        .select("id, name, project_id, status")
+        .eq("id", id)
+        .eq("organization_id", ctx.org.id)
+        .maybeSingle();
+      if (!data) return null;
+      return {
+        id: data.id as string,
+        name: (data.name as string) ?? "",
+        projectId: data.project_id as string,
+        status: data.status as string,
+      };
+    },
+  });
+}
+
 export async function createTaskAction(
   orgSlug: string,
   projectId: string,
@@ -1810,7 +1862,13 @@ export async function createTaskAction(
   ) satisfies TaskKind;
   const labels = normalizeTaskLabels(formData.get("labels"));
   const dueOn = String(formData.get("due_on") ?? "").trim() || null;
-  const milestoneId = String(formData.get("milestone_id") ?? "").trim() || null;
+  const milestoneRaw = formData.get("milestone_id");
+  const milestonePlan = await resolveTaskMilestone(ctx, {
+    mode: "create",
+    requestedId: milestoneRaw == null ? null : String(milestoneRaw),
+    taskProjectId: projectId,
+  });
+  if ("error" in milestonePlan) return milestonePlan;
   const columnId = String(formData.get("column_id") ?? "").trim() || null;
   const assignee = await resolveProjectAssignees(ctx, projectId, formData);
   if ("error" in assignee && assignee.error) return { error: assignee.error };
@@ -1848,7 +1906,7 @@ export async function createTaskAction(
     .insert({
       organization_id: ctx.org.id,
       project_id: projectId,
-      milestone_id: milestoneId,
+      ...milestoneColumnPatch(milestonePlan),
       column_id: column.id,
       title,
       description,
@@ -1893,7 +1951,17 @@ export async function createTaskAction(
   });
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
   revalidatePath(`/${orgSlug}/board`);
-  return { id: data.id as string, title, ok: true as const };
+  if (milestonePlan.op !== "set" || !milestonePlan.milestoneId) {
+    return { id: data.id as string, title, ok: true as const, milestone_id: null, milestoneId: null, milestone: null };
+  }
+  return {
+    id: data.id as string,
+    title,
+    ok: true as const,
+    milestone_id: milestonePlan.milestoneId,
+    milestoneId: milestonePlan.milestoneId,
+    milestone: milestonePlan.milestone,
+  };
 }
 
 export async function updateTaskStatusAction(
@@ -1982,7 +2050,7 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
   const ctx = await requireWritableOrg(orgSlug);
   const { data: task } = await ctx.supabase
     .from("tasks")
-    .select("id, project_id, assignee_user_ids, description_doc")
+    .select("id, project_id, milestone_id, assignee_user_ids, description_doc")
     .eq("id", taskId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
@@ -2012,7 +2080,17 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
   ) satisfies TaskKind;
   const labels = normalizeTaskLabels(formData.get("labels"));
   const dueOn = String(formData.get("due_on") ?? "").trim() || null;
-  const milestoneId = String(formData.get("milestone_id") ?? "").trim() || null;
+  const milestoneRaw = formData.get("milestone_id");
+  const milestonePlan =
+    milestoneRaw == null
+      ? null
+      : await resolveTaskMilestone(ctx, {
+          mode: "update",
+          requestedId: String(milestoneRaw),
+          taskProjectId: task.project_id as string,
+          currentMilestoneId: (task.milestone_id as string | null) ?? null,
+        });
+  if (milestonePlan && "error" in milestonePlan) return milestonePlan;
   const assignee = await resolveProjectAssignees(ctx, task.project_id as string, formData);
   if ("error" in assignee && assignee.error) return { error: assignee.error };
 
@@ -2026,7 +2104,7 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
       kind,
       labels,
       due_on: dueOn,
-      milestone_id: milestoneId,
+      ...(milestonePlan ? milestoneColumnPatch(milestonePlan) : {}),
       assignee_user_id: assignee.assigneeUserId,
       assignee_user_ids: assignee.assigneeUserIds,
     })
@@ -2051,7 +2129,14 @@ export async function updateTaskAction(orgSlug: string, taskId: string, formData
   });
   revalidatePath(`/${orgSlug}/projects/${task.project_id}`);
   revalidatePath(`/${orgSlug}/board`);
-  return { ok: true as const };
+  if (!milestonePlan || milestonePlan.op !== "set") return { ok: true as const, error: undefined };
+  return {
+    ok: true as const,
+    error: undefined,
+    milestone_id: milestonePlan.milestoneId,
+    milestoneId: milestonePlan.milestoneId,
+    milestone: milestonePlan.milestone,
+  };
 }
 
 /** A task's clock that just stopped, ready to log. */

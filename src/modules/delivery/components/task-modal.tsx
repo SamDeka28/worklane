@@ -63,6 +63,7 @@ export type TaskModalState =
       columnId?: string | null;
       status?: TaskStatus;
       projectId?: string;
+      milestoneId?: string;
     };
 
 function initialDoc(task: BoardTask | null): JSONContent | null {
@@ -149,19 +150,26 @@ export function TaskModal({
       setMilestoneId(next?.milestoneId ?? "");
       setAssigneeUserIds(next?.assigneeUserIds ?? (next?.assigneeUserId ? [next.assigneeUserId] : []));
     } else {
-      setProjectId(state.projectId || projects[0]?.id || "");
+      const nextProject = state.projectId || projects[0]?.id || "";
+      const options =
+        showProjectPicker && nextProject ? (milestonesByProject[nextProject] ?? []) : milestones;
+      const preset =
+        state.milestoneId && options.some((row) => row.id === state.milestoneId)
+          ? state.milestoneId
+          : "";
+      setProjectId(nextProject);
       setDescriptionDoc(null);
       setDescriptionPlain("");
       setKind("task");
       setPriority("medium");
       setDueOn("");
-      setMilestoneId("");
+      setMilestoneId(preset);
       setAssigneeUserIds([]);
       setLabels([]);
     }
     setCommentDoc(null);
     setCommentPlain("");
-  }, [open, state, tasks, projects]);
+  }, [open, state, tasks, projects, showProjectPicker, milestones, milestonesByProject]);
 
   useEffect(() => {
     if (!open || !task?.id) {

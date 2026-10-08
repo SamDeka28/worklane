@@ -460,7 +460,6 @@ export async function listMilestonesForProjects(orgSlug: string, projectIds: str
     .select("id, project_id, name, status")
     .eq("organization_id", org.id)
     .in("project_id", projectIds)
-    .neq("status", "cancelled")
     .order("created_at");
   if (error) throw new Error(error.message);
 

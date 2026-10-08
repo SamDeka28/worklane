@@ -941,10 +941,11 @@ export default async function ProjectDetailPage({
                   projectId={project.id}
                   columns={columns}
                   tasks={tasks}
-                  milestones={milestones.map((item, index) => ({
-                    id: item.id,
-                    name: `M${index + 1} · ${item.name}`,
-                  }))}
+                  milestones={milestones.flatMap((item, index) =>
+                    item.projectId === project.id
+                      ? [{ id: item.id, name: `M${index + 1} · ${item.name}` }]
+                      : [],
+                  )}
                   taskMilestoneRefs={taskMilestoneRefs}
                   comments={comments}
                   canWrite={ctx.canWrite}

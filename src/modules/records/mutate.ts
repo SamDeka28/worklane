@@ -11,6 +11,12 @@ import type { DocumentKind } from "@/modules/documents/types";
 import { invoiceLayoutSpec, INVOICE_LAYOUT_SPECS } from "@/modules/invoices/layouts";
 import { INVOICE_LAYOUTS, type InvoiceLayout } from "@/modules/invoices/settings";
 import { chargeFromWorkLog, hoursToMillis } from "@/modules/delivery/ledger";
+import {
+  milestoneColumnPatch,
+  planTaskMilestoneLink,
+  taskMilestoneFields,
+  type TaskMilestonePlan,
+} from "@/modules/delivery/task-milestone";
 import type { BillingMode } from "@/modules/delivery/types";
 import {
   allocatePartnersForCharge,
@@ -266,17 +272,25 @@ export async function deleteProjectRecord(ctx: OrgContext, projectId: string, co
   return { id: projectId, deleted: true };
 }
 
-async function milestoneForTask(ctx: OrgContext, milestoneId: string, projectId: string) {
+async function loadMilestoneForTask(ctx: OrgContext, milestoneId: string) {
   const { data } = await ctx.supabase
     .from("milestones")
-    .select("id, project_id, status")
+    .select("id, name, project_id, status")
     .eq("id", milestoneId)
     .eq("organization_id", ctx.org.id)
     .maybeSingle();
-  if (!data) return { error: "Milestone not found" };
-  if (data.project_id !== projectId) return { error: "That milestone is on a different project" };
-  if (data.status === "cancelled") return { error: "Cancelled milestones can't be linked to tasks" };
-  return { id: data.id as string };
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    name: (data.name as string) ?? "",
+    projectId: data.project_id as string,
+    status: data.status as string,
+  };
+}
+
+function milestoneWrite(plan: TaskMilestonePlan) {
+  if ("error" in plan || plan.op !== "set") return {};
+  return taskMilestoneFields(plan);
 }
 
 export async function createTaskRecord(
@@ -294,18 +308,19 @@ export async function createTaskRecord(
   if (blocked) return blocked;
   const title = input.title.trim();
   if (!title || !input.projectId) return { error: "Task title and project are required" };
-  let milestoneId: string | null = null;
-  if (input.milestoneId) {
-    const linked = await milestoneForTask(ctx, input.milestoneId, input.projectId);
-    if ("error" in linked) return linked;
-    milestoneId = linked.id;
-  }
+  const milestonePlan = await planTaskMilestoneLink({
+    mode: "create",
+    requestedId: input.milestoneId,
+    taskProjectId: input.projectId,
+    loadMilestone: (id) => loadMilestoneForTask(ctx, id),
+  });
+  if ("error" in milestonePlan) return milestonePlan;
   const { data, error } = await ctx.supabase
     .from("tasks")
     .insert({
       organization_id: ctx.org.id,
       project_id: input.projectId,
-      milestone_id: milestoneId,
+      ...milestoneColumnPatch(milestonePlan),
       title,
       description: input.description?.trim() || null,
       status: input.status || "todo",
@@ -314,7 +329,7 @@ export async function createTaskRecord(
     .select("id")
     .single();
   if (error || !data) return { error: error?.message ?? "Could not create task" };
-  return { id: data.id as string, milestoneId };
+  return { id: data.id as string, ...milestoneWrite(milestonePlan) };
 }
 
 export async function updateTaskRecord(
@@ -335,29 +350,29 @@ export async function updateTaskRecord(
   if (input.description !== undefined) patch.description = input.description?.trim() || null;
   if (input.status) patch.status = input.status;
   if (input.dueOn !== undefined) patch.due_on = input.dueOn;
+  let milestoneResult: Record<string, unknown> = {};
   if (input.milestoneId !== undefined) {
-    if (!input.milestoneId) {
-      patch.milestone_id = null;
-    } else {
-      const { data: task } = await ctx.supabase
-        .from("tasks")
-        .select("project_id")
-        .eq("id", taskId)
-        .eq("organization_id", ctx.org.id)
-        .maybeSingle();
-      if (!task) return { error: "Task not found" };
-      const linked = await milestoneForTask(ctx, input.milestoneId, task.project_id as string);
-      if ("error" in linked) return linked;
-      patch.milestone_id = linked.id;
-    }
+    const { data: task } = await ctx.supabase
+      .from("tasks")
+      .select("project_id, milestone_id")
+      .eq("id", taskId)
+      .eq("organization_id", ctx.org.id)
+      .maybeSingle();
+    if (!task) return { error: "Task not found" };
+    const milestonePlan = await planTaskMilestoneLink({
+      mode: "update",
+      requestedId: input.milestoneId,
+      taskProjectId: task.project_id as string,
+      currentMilestoneId: (task.milestone_id as string | null) ?? null,
+      loadMilestone: (id) => loadMilestoneForTask(ctx, id),
+    });
+    if ("error" in milestonePlan) return milestonePlan;
+    Object.assign(patch, milestoneColumnPatch(milestonePlan));
+    milestoneResult = milestoneWrite(milestonePlan);
   }
   const { error } = await ctx.supabase.from("tasks").update(patch).eq("id", taskId).eq("organization_id", ctx.org.id);
   if (error) return { error: error.message };
-  return {
-    id: taskId,
-    updated: true,
-    ...(input.milestoneId !== undefined ? { milestoneId: (patch.milestone_id as string | null) ?? null } : {}),
-  };
+  return { id: taskId, updated: true, ...milestoneResult };
 }
 
 export async function deleteTaskRecord(ctx: OrgContext, taskId: string): Promise<WriteResult> {

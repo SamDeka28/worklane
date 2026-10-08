@@ -1179,16 +1179,20 @@ export function TaskForm({
         <span className="text-[11px] text-muted-foreground">Due</span>
         <Input name="due_on" type="date" />
       </label>
-      {milestones.length > 0 ? (
+      {milestones.some((item) => item.status !== "cancelled") ? (
         <label className="flex w-40 flex-col gap-1">
           <span className="text-[11px] text-muted-foreground">Milestone</span>
           <NativeSelect name="milestone_id" defaultValue="">
             <option value="">None</option>
-            {milestones.map((item, index) => (
-              <option key={item.id} value={item.id}>
-                {`M${index + 1} · ${item.name}`}
-              </option>
-            ))}
+            {milestones.flatMap((item, index) =>
+              item.status === "cancelled" || item.projectId !== projectId
+                ? []
+                : [
+                    <option key={item.id} value={item.id}>
+                      {`M${index + 1} · ${item.name}`}
+                    </option>,
+                  ],
+            )}
           </NativeSelect>
         </label>
       ) : null}

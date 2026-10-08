@@ -13,6 +13,7 @@ import {
   createMilestoneForContext,
   setMilestoneStatusForContext,
 } from "@/modules/delivery/actions";
+import { milestoneIdFromToolInput } from "@/modules/delivery/task-milestone";
 import {
   addInvoiceLineForContext,
   createDraftInvoiceForContext,
@@ -71,6 +72,15 @@ import {
 
 type Reader = { supabase: SupabaseClient; userId: string; scopes?: string[] };
 
+function milestoneIdField(detail: string) {
+  return z
+    .string()
+    .nullable()
+    .optional()
+    .describe(
+      `${detail} milestones.id on the same project as the task. Pass it to link the task. On update_task, pass an empty string to clear the link. Omit it to leave the current link unchanged.`,
+    );
+}
 const orgField = z.string().optional().describe("Studio slug when you belong to more than one studio.");
 const recordId = z.string().describe("Record id.");
 const ccField = z.string().optional().describe("CC addresses, separated by commas. Up to 5.");
@@ -284,7 +294,8 @@ const toolShapes: Record<string, z.ZodRawShape> = {
     description: z.string().optional(),
     status: z.string().optional(),
     dueOn: z.string().optional(),
-    milestoneId: z.string().optional().describe("Milestone on this project to link the task to."),
+    milestone_id: milestoneIdField("Preferred name."),
+    milestoneId: milestoneIdField("Same as milestone_id."),
   },
   update_task: {
     id: recordId,
@@ -292,10 +303,8 @@ const toolShapes: Record<string, z.ZodRawShape> = {
     description: z.string().optional(),
     status: z.string().optional(),
     dueOn: z.string().optional(),
-    milestoneId: z
-      .string()
-      .optional()
-      .describe("Milestone on the task's project. Pass an empty string to unlink."),
+    milestone_id: milestoneIdField("Preferred name."),
+    milestoneId: milestoneIdField("Same as milestone_id."),
   },
   delete_task: { id: recordId },
   comment_on_task: { id: recordId, body: z.string() },
@@ -431,7 +440,8 @@ type ToolInput = {
   scope?: string;
   phone?: string;
   dueOn?: string;
-  milestoneId?: string;
+  milestoneId?: string | null;
+  milestone_id?: string | null;
   attachments?: string;
   filename?: string;
   mimeType?: string;
@@ -656,11 +666,38 @@ export function registerStudioActions(
   add("delete_project", "Delete a project. Pass confirmName equal to the project name.", true, true, (input) =>
     run(input, (ctx) => deleteProjectRecord(ctx, input.id || "", input.confirmName || "")),
   );
-  add("create_task", "Create a task on a project. Pass milestoneId to link it to a milestone on that same project.", false, true, (input) =>
-    run(input, (ctx) => createTaskRecord(ctx, { projectId: input.projectId || "", title: input.title || input.name || "", description: input.description, status: input.status, dueOn: input.dueOn, milestoneId: input.milestoneId })),
+  add(
+    "create_task",
+    "Create a task on a project. Pass milestone_id to link it to a milestone on that same project, as in create task X in project Y with milestone_id Z. milestoneId is the same field. Omit it to leave the task unlinked. The result includes milestone_id and milestone. A milestone from another project is rejected.",
+    false,
+    true,
+    (input) =>
+      run(input, (ctx) =>
+        createTaskRecord(ctx, {
+          projectId: input.projectId || "",
+          title: input.title || input.name || "",
+          description: input.description,
+          status: input.status,
+          dueOn: input.dueOn,
+          milestoneId: milestoneIdFromToolInput(input),
+        }),
+      ),
   );
-  add("update_task", "Update a task title, description, status, or due date. Pass milestoneId to link it to a milestone on the same project, or an empty milestoneId to unlink.", false, true, (input) =>
-    run(input, (ctx) => updateTaskRecord(ctx, input.id || "", { title: input.title, description: input.description, status: input.status, dueOn: input.dueOn, milestoneId: input.milestoneId })),
+  add(
+    "update_task",
+    "Update a task title, description, status, or due date. Pass milestone_id to link or move the task onto a milestone on the same project. Pass an empty milestone_id to clear the link. Omit milestone_id to leave the current link unchanged. milestoneId is the same field. The result includes milestone_id and milestone when the link changes.",
+    false,
+    true,
+    (input) =>
+      run(input, (ctx) =>
+        updateTaskRecord(ctx, input.id || "", {
+          title: input.title,
+          description: input.description,
+          status: input.status,
+          dueOn: input.dueOn,
+          milestoneId: milestoneIdFromToolInput(input),
+        }),
+      ),
   );
   add("delete_task", "Delete a task.", true, true, (input) => run(input, (ctx) => deleteTaskRecord(ctx, input.id || "")));
   add("comment_on_task", "Add a comment on a task.", false, true, (input) =>
