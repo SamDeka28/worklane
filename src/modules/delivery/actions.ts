@@ -1952,12 +1952,13 @@ export async function createTaskAction(
   revalidatePath(`/${orgSlug}/projects/${projectId}`);
   revalidatePath(`/${orgSlug}/board`);
   if (milestonePlan.op !== "set" || !milestonePlan.milestoneId) {
-    return { id: data.id as string, title, ok: true as const, milestone_id: null, milestoneId: null, milestone: null };
+    return { id: data.id as string, title, ok: true as const, error: undefined, milestone_id: null, milestoneId: null, milestone: null };
   }
   return {
     id: data.id as string,
     title,
     ok: true as const,
+    error: undefined,
     milestone_id: milestonePlan.milestoneId,
     milestoneId: milestonePlan.milestoneId,
     milestone: milestonePlan.milestone,
