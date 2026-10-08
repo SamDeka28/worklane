@@ -266,19 +266,46 @@ export async function deleteProjectRecord(ctx: OrgContext, projectId: string, co
   return { id: projectId, deleted: true };
 }
 
+async function milestoneForTask(ctx: OrgContext, milestoneId: string, projectId: string) {
+  const { data } = await ctx.supabase
+    .from("milestones")
+    .select("id, project_id, status")
+    .eq("id", milestoneId)
+    .eq("organization_id", ctx.org.id)
+    .maybeSingle();
+  if (!data) return { error: "Milestone not found" };
+  if (data.project_id !== projectId) return { error: "That milestone is on a different project" };
+  if (data.status === "cancelled") return { error: "Cancelled milestones can't be linked to tasks" };
+  return { id: data.id as string };
+}
+
 export async function createTaskRecord(
   ctx: OrgContext,
-  input: { projectId: string; title: string; description?: string; status?: string; dueOn?: string },
+  input: {
+    projectId: string;
+    title: string;
+    description?: string;
+    status?: string;
+    dueOn?: string;
+    milestoneId?: string | null;
+  },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "delivery");
   if (blocked) return blocked;
   const title = input.title.trim();
   if (!title || !input.projectId) return { error: "Task title and project are required" };
+  let milestoneId: string | null = null;
+  if (input.milestoneId) {
+    const linked = await milestoneForTask(ctx, input.milestoneId, input.projectId);
+    if ("error" in linked) return linked;
+    milestoneId = linked.id;
+  }
   const { data, error } = await ctx.supabase
     .from("tasks")
     .insert({
       organization_id: ctx.org.id,
       project_id: input.projectId,
+      milestone_id: milestoneId,
       title,
       description: input.description?.trim() || null,
       status: input.status || "todo",
@@ -287,13 +314,19 @@ export async function createTaskRecord(
     .select("id")
     .single();
   if (error || !data) return { error: error?.message ?? "Could not create task" };
-  return { id: data.id as string };
+  return { id: data.id as string, milestoneId };
 }
 
 export async function updateTaskRecord(
   ctx: OrgContext,
   taskId: string,
-  input: { title?: string; description?: string; status?: string; dueOn?: string | null },
+  input: {
+    title?: string;
+    description?: string;
+    status?: string;
+    dueOn?: string | null;
+    milestoneId?: string | null;
+  },
 ): Promise<WriteResult> {
   const blocked = assertWrite(ctx, "delivery");
   if (blocked) return blocked;
@@ -302,9 +335,29 @@ export async function updateTaskRecord(
   if (input.description !== undefined) patch.description = input.description?.trim() || null;
   if (input.status) patch.status = input.status;
   if (input.dueOn !== undefined) patch.due_on = input.dueOn;
+  if (input.milestoneId !== undefined) {
+    if (!input.milestoneId) {
+      patch.milestone_id = null;
+    } else {
+      const { data: task } = await ctx.supabase
+        .from("tasks")
+        .select("project_id")
+        .eq("id", taskId)
+        .eq("organization_id", ctx.org.id)
+        .maybeSingle();
+      if (!task) return { error: "Task not found" };
+      const linked = await milestoneForTask(ctx, input.milestoneId, task.project_id as string);
+      if ("error" in linked) return linked;
+      patch.milestone_id = linked.id;
+    }
+  }
   const { error } = await ctx.supabase.from("tasks").update(patch).eq("id", taskId).eq("organization_id", ctx.org.id);
   if (error) return { error: error.message };
-  return { id: taskId, updated: true };
+  return {
+    id: taskId,
+    updated: true,
+    ...(input.milestoneId !== undefined ? { milestoneId: (patch.milestone_id as string | null) ?? null } : {}),
+  };
 }
 
 export async function deleteTaskRecord(ctx: OrgContext, taskId: string): Promise<WriteResult> {

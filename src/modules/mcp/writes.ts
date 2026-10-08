@@ -284,6 +284,7 @@ const toolShapes: Record<string, z.ZodRawShape> = {
     description: z.string().optional(),
     status: z.string().optional(),
     dueOn: z.string().optional(),
+    milestoneId: z.string().optional().describe("Milestone on this project to link the task to."),
   },
   update_task: {
     id: recordId,
@@ -291,6 +292,10 @@ const toolShapes: Record<string, z.ZodRawShape> = {
     description: z.string().optional(),
     status: z.string().optional(),
     dueOn: z.string().optional(),
+    milestoneId: z
+      .string()
+      .optional()
+      .describe("Milestone on the task's project. Pass an empty string to unlink."),
   },
   delete_task: { id: recordId },
   comment_on_task: { id: recordId, body: z.string() },
@@ -426,6 +431,7 @@ type ToolInput = {
   scope?: string;
   phone?: string;
   dueOn?: string;
+  milestoneId?: string;
   attachments?: string;
   filename?: string;
   mimeType?: string;
@@ -650,11 +656,11 @@ export function registerStudioActions(
   add("delete_project", "Delete a project. Pass confirmName equal to the project name.", true, true, (input) =>
     run(input, (ctx) => deleteProjectRecord(ctx, input.id || "", input.confirmName || "")),
   );
-  add("create_task", "Create a task on a project.", false, true, (input) =>
-    run(input, (ctx) => createTaskRecord(ctx, { projectId: input.projectId || "", title: input.title || input.name || "", description: input.description, status: input.status, dueOn: input.dueOn })),
+  add("create_task", "Create a task on a project. Pass milestoneId to link it to a milestone on that same project.", false, true, (input) =>
+    run(input, (ctx) => createTaskRecord(ctx, { projectId: input.projectId || "", title: input.title || input.name || "", description: input.description, status: input.status, dueOn: input.dueOn, milestoneId: input.milestoneId })),
   );
-  add("update_task", "Update a task title, description, status, or due date.", false, true, (input) =>
-    run(input, (ctx) => updateTaskRecord(ctx, input.id || "", { title: input.title, description: input.description, status: input.status, dueOn: input.dueOn })),
+  add("update_task", "Update a task title, description, status, or due date. Pass milestoneId to link it to a milestone on the same project, or an empty milestoneId to unlink.", false, true, (input) =>
+    run(input, (ctx) => updateTaskRecord(ctx, input.id || "", { title: input.title, description: input.description, status: input.status, dueOn: input.dueOn, milestoneId: input.milestoneId })),
   );
   add("delete_task", "Delete a task.", true, true, (input) => run(input, (ctx) => deleteTaskRecord(ctx, input.id || "")));
   add("comment_on_task", "Add a comment on a task.", false, true, (input) =>

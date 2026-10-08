@@ -163,7 +163,7 @@ export const DATASETS: Dataset[] = [
   {
     name: "milestones",
     table: "milestones",
-    description: "Billable or delivery checkpoints on a project.",
+    description: "Billable or delivery checkpoints on a project. Tasks link here through milestone_id.",
     module: "delivery",
     dateField: "due_on",
     orderField: "due_on",
@@ -182,6 +182,7 @@ export const DATASETS: Dataset[] = [
       { dataset: "projects", from: "project_id", to: "id" },
       { dataset: "milestone_items", from: "id", to: "milestone_id" },
       { dataset: "charges", from: "charge_id", to: "id" },
+      { dataset: "tasks", from: "id", to: "milestone_id" },
     ],
   },
   {
@@ -220,7 +221,7 @@ export const DATASETS: Dataset[] = [
   {
     name: "tasks",
     table: "tasks",
-    description: "Board cards. Assignees are user ids, not display names. Use members to resolve names.",
+    description: "Board cards. Assignees are user ids, not display names. Use members to resolve names. milestone_id links a card to a milestone on the same project.",
     module: "delivery",
     dateField: "due_on",
     orderField: "created_at",
@@ -242,6 +243,7 @@ export const DATASETS: Dataset[] = [
     ],
     relations: [
       { dataset: "projects", from: "project_id", to: "id" },
+      { dataset: "milestones", from: "milestone_id", to: "id" },
       { dataset: "task_comments", from: "id", to: "task_id" },
       { dataset: "work_logs", from: "id", to: "task_id" },
       { dataset: "project_columns", from: "column_id", to: "id" },
