@@ -43,6 +43,7 @@ import { projectNextStep } from "@/modules/delivery/next-step";
 import {
   getProject,
   listMilestones,
+  loadBoardSettings,
   listMilestoneItemsForProject,
   listProjectColumns,
   listTaskCommentsForProject,
@@ -212,6 +213,7 @@ export default async function ProjectDetailPage({
     comments,
     credentials,
     credentialPeople,
+    boardSettings,
   ] = await Promise.all([
     needMilestones
       ? listMilestones(orgSlug, projectId)
@@ -273,6 +275,9 @@ export default async function ProjectDetailPage({
       : Promise.resolve({ team: [], always: [], all: [] } as Awaited<
           ReturnType<typeof listCredentialPeople>
         >),
+    needColumns
+      ? loadBoardSettings(orgSlug)
+      : Promise.resolve({ shared: false, columns: [] }),
   ]);
   const project = await projectPromise;
   if (!project) notFound();
@@ -940,6 +945,12 @@ export default async function ProjectDetailPage({
                   scope="project"
                   projectId={project.id}
                   columns={columns}
+                  columnsLocked={boardSettings.shared}
+                  columnsSettingsHref={
+                    boardSettings.shared && (ctx.role === "owner" || ctx.role === "admin")
+                      ? `/${orgSlug}/settings?tab=board`
+                      : undefined
+                  }
                   tasks={tasks}
                   milestones={milestones.flatMap((item, index) =>
                     item.projectId === project.id

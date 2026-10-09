@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { LayoutGrid, List, MoreHorizontal, Plus } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -49,6 +50,8 @@ import {
   updateTaskStatusAction,
   type TaskClockStop,
 } from "@/modules/delivery/actions";
+import { moveTaskToSharedColumnAction } from "@/modules/delivery/board-column-actions";
+import type { StudioBoardColumn } from "@/modules/delivery/board-columns";
 import { LogTimeDialog } from "@/modules/delivery/components/task-time";
 import {
   TaskBoardCard,
@@ -99,11 +102,16 @@ const ORG_LANES: BoardColumn[] = [
   { id: "lane:done", projectId: "__org__", name: "Done", position: 2, systemKey: "done" },
 ];
 
-const LANE_DOT: Record<string, string> = {
-  "lane:todo": "bg-slate-400",
-  "lane:doing": "bg-sky-500",
-  "lane:done": "bg-emerald-500",
-};
+function columnDot(column: BoardColumn) {
+  if (column.systemKey === "todo" || column.id === "lane:todo") return "bg-slate-400";
+  if (column.systemKey === "doing" || column.id === "lane:doing") return "bg-sky-500";
+  if (column.systemKey === "done" || column.id === "lane:done") return "bg-emerald-500";
+  return "bg-violet-400";
+}
+
+function studioLaneId(id: string) {
+  return `studio:${id}`;
+}
 
 function laneIdForStatus(status: TaskStatus) {
   return `lane:${status}` as const;
@@ -116,16 +124,32 @@ function statusFromLaneId(laneId: string): TaskStatus | null {
   return null;
 }
 
-function groupTasks(columns: BoardColumn[], tasks: BoardTask[], useStatusLanes: boolean) {
+function groupTasks(
+  columns: BoardColumn[],
+  tasks: BoardTask[],
+  mode: "status" | "studio" | "column",
+  columnStudioById: Record<string, string>,
+  studioColumns: StudioBoardColumn[],
+) {
   const firstId = columns[0]?.id ?? null;
+  const statusLane = new Map(
+    studioColumns
+      .filter((column) => column.systemKey)
+      .map((column) => [column.systemKey, studioLaneId(column.id)] as const),
+  );
   const map = new Map<string, BoardTask[]>();
   for (const column of columns) map.set(column.id, []);
   for (const task of [...tasks].sort((a, b) => a.position - b.position)) {
-    const key = useStatusLanes
-      ? laneIdForStatus(task.status)
-      : task.columnId && map.has(task.columnId)
-        ? task.columnId
-        : firstId;
+    const studioId = task.columnId ? columnStudioById[task.columnId] : null;
+    const preferred =
+      mode === "status"
+        ? laneIdForStatus(task.status)
+        : mode === "studio"
+          ? studioId
+            ? studioLaneId(studioId)
+            : statusLane.get(task.status) ?? null
+          : task.columnId;
+    const key = preferred && map.has(preferred) ? preferred : firstId;
     if (key) map.get(key)?.push(task);
   }
   return map;
@@ -146,6 +170,9 @@ export function KanbanBoard({
   currentUserId,
   assignees = [],
   projects = [],
+  sharedColumns = null,
+  columnsLocked = false,
+  columnsSettingsHref,
   className,
 }: {
   orgSlug: string;
@@ -153,6 +180,9 @@ export function KanbanBoard({
   scope?: "project" | "org";
   columns?: BoardColumn[];
   columnsByProject?: Record<string, BoardColumn[]>;
+  sharedColumns?: StudioBoardColumn[] | null;
+  columnsLocked?: boolean;
+  columnsSettingsHref?: string;
   tasks: BoardTask[];
   milestones?: { id: string; name: string }[];
   milestonesByProject?: Record<string, { id: string; name: string }[]>;
@@ -170,15 +200,37 @@ export function KanbanBoard({
   const [filterAssignees, setFilterAssignees] = useState<Set<string>>(() => new Set());
   const [filterPriority, setFilterPriority] = useState<"" | TaskPriority>("");
 
-  // All-projects org board → status lanes. Single project (org filter or project page) → real lists.
-  const useStatusLanes = orgMode && !filterProject;
+  // All-projects org board → shared studio lists, or the status lanes when sharing is off.
+  const useStudioLanes = orgMode && !filterProject && Boolean(sharedColumns?.length);
+  const useStatusLanes = orgMode && !filterProject && !useStudioLanes;
   const columns = useMemo(() => {
+    if (useStudioLanes && sharedColumns) {
+      return sharedColumns.map(
+        (column): BoardColumn => ({
+          id: studioLaneId(column.id),
+          projectId: "__org__",
+          name: column.name,
+          position: column.position,
+          systemKey: column.systemKey,
+          studioColumnId: column.id,
+        }),
+      );
+    }
     if (!orgMode) return projectColumns ?? [];
     if (filterProject) return columnsByProject[filterProject] ?? [];
     return ORG_LANES;
-  }, [orgMode, projectColumns, filterProject, columnsByProject]);
+  }, [useStudioLanes, sharedColumns, orgMode, projectColumns, filterProject, columnsByProject]);
+  const columnStudioById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const list of Object.values(columnsByProject)) {
+      for (const column of list) {
+        if (column.studioColumnId) map[column.id] = column.studioColumnId;
+      }
+    }
+    return map;
+  }, [columnsByProject]);
   const resolvedProjectId = projectId || filterProject || "";
-  const manageLists = Boolean(resolvedProjectId) && !useStatusLanes;
+  const manageLists = Boolean(resolvedProjectId) && !useStatusLanes && !useStudioLanes && !columnsLocked;
 
   const [, start] = useTransition();
   const [orderedColumns, setOrderedColumns] = useOptimistic(
@@ -258,8 +310,15 @@ export function KanbanBoard({
   }
 
   const serverItems = useMemo(
-    () => groupTasks(columns, filteredTasks, useStatusLanes),
-    [columns, filteredTasks, useStatusLanes],
+    () =>
+      groupTasks(
+        columns,
+        filteredTasks,
+        useStudioLanes ? "studio" : useStatusLanes ? "status" : "column",
+        columnStudioById,
+        sharedColumns ?? [],
+      ),
+    [columns, filteredTasks, useStudioLanes, useStatusLanes, columnStudioById, sharedColumns],
   );
   const [items, setItems] = useOptimistic(
     serverItems,
@@ -364,12 +423,20 @@ export function KanbanBoard({
           ? target.length
           : overIndex;
     if (sameColumn && insertAt === fromIndex) return;
+    if (useStudioLanes && sameColumn) return;
 
-    const status = useStatusLanes ? statusFromLaneId(overColumn) : null;
+    const studioColumn = useStudioLanes
+      ? sharedColumns?.find((column) => studioLaneId(column.id) === overColumn)
+      : null;
+    const status = useStatusLanes
+      ? statusFromLaneId(overColumn)
+      : studioColumn
+        ? studioColumn.systemKey ?? "doing"
+        : null;
     const inserted = [...target];
     inserted.splice(insertAt, 0, {
       ...moving,
-      columnId: useStatusLanes ? moving.columnId : overColumn,
+      columnId: useStatusLanes || useStudioLanes ? moving.columnId : overColumn,
       ...(status ? { status } : {}),
     });
     const next = new Map(items);
@@ -379,11 +446,15 @@ export function KanbanBoard({
     const orderedIds = inserted.map((task) => task.id);
     start(async () => {
       setItems(next);
-      const result = useStatusLanes
-        ? status
-          ? await updateTaskStatusAction(orgSlug, draggedId, status)
+      const result = useStudioLanes
+        ? studioColumn
+          ? await moveTaskToSharedColumnAction(orgSlug, draggedId, studioColumn.id)
           : null
-        : await moveTaskAction(orgSlug, draggedId, overColumn, orderedIds);
+        : useStatusLanes
+          ? status
+            ? await updateTaskStatusAction(orgSlug, draggedId, status)
+            : null
+          : await moveTaskAction(orgSlug, draggedId, overColumn, orderedIds);
       handleMoveResult(result);
     });
   }
@@ -406,12 +477,19 @@ export function KanbanBoard({
     if (!canWrite || !fromColumn || fromColumn === toColumn) return;
     const moving = items.get(fromColumn)?.find((task) => task.id === taskId);
     if (!moving) return;
-    const status = useStatusLanes ? statusFromLaneId(toColumn) : null;
+    const studioColumn = useStudioLanes
+      ? sharedColumns?.find((column) => studioLaneId(column.id) === toColumn)
+      : null;
+    const status = useStatusLanes
+      ? statusFromLaneId(toColumn)
+      : studioColumn
+        ? studioColumn.systemKey ?? "doing"
+        : null;
     const inserted = [
       ...(items.get(toColumn) ?? []),
       {
         ...moving,
-        columnId: useStatusLanes ? moving.columnId : toColumn,
+        columnId: useStatusLanes || useStudioLanes ? moving.columnId : toColumn,
         ...(status ? { status } : {}),
       },
     ];
@@ -420,25 +498,33 @@ export function KanbanBoard({
     next.set(toColumn, inserted);
     start(async () => {
       setItems(next);
-      const result = useStatusLanes
-        ? status
-          ? await updateTaskStatusAction(orgSlug, taskId, status)
+      const result = useStudioLanes
+        ? studioColumn
+          ? await moveTaskToSharedColumnAction(orgSlug, taskId, studioColumn.id)
           : null
-        : await moveTaskAction(
-            orgSlug,
-            taskId,
-            toColumn,
-            inserted.map((task) => task.id),
-          );
+        : useStatusLanes
+          ? status
+            ? await updateTaskStatusAction(orgSlug, taskId, status)
+            : null
+          : await moveTaskAction(
+              orgSlug,
+              taskId,
+              toColumn,
+              inserted.map((task) => task.id),
+            );
       handleMoveResult(result);
     });
   }
 
   function addCard(columnId: string) {
+    const studioColumn = useStudioLanes
+      ? sharedColumns?.find((column) => studioLaneId(column.id) === columnId)
+      : null;
     setModal({
       mode: "create",
-      columnId: useStatusLanes ? null : columnId,
-      status: useStatusLanes ? (statusFromLaneId(columnId) ?? "todo") : undefined,
+      columnId: useStatusLanes || useStudioLanes ? null : columnId,
+      status: studioColumn?.systemKey ?? (useStatusLanes ? (statusFromLaneId(columnId) ?? "todo") : undefined),
+      studioColumnId: studioColumn?.id,
       projectId: filterProject || projects[0]?.id || resolvedProjectId,
     });
   }
@@ -488,7 +574,7 @@ export function KanbanBoard({
                 onChange={(event) => setFilterProject(event.target.value)}
                 className="h-9 w-full rounded-xl bg-muted text-sm"
               >
-                <option value="">All projects (by status)</option>
+                <option value="">{sharedColumns?.length ? "All projects" : "All projects (by status)"}</option>
                 {projects.map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.name}
@@ -517,7 +603,7 @@ export function KanbanBoard({
                 onChange={(event) => setFilterProject(event.target.value)}
                 className="h-9 w-48 rounded-xl bg-muted text-sm"
               >
-                <option value="">All projects (by status)</option>
+                <option value="">{sharedColumns?.length ? "All projects" : "All projects (by status)"}</option>
                 {projects.map((project) => (
                   <option key={project.id} value={project.id}>
                     {project.name}
@@ -646,6 +732,23 @@ export function KanbanBoard({
         </div>
       ) : null}
 
+      {columnsLocked ? (
+        <p className="shrink-0 px-4 pt-2 text-xs text-muted-foreground sm:px-6">
+          These lists are shared across the studio.
+          {columnsSettingsHref ? (
+            <>
+              {" "}
+              <Link
+                href={columnsSettingsHref}
+                className="font-medium text-foreground underline-offset-2 hover:underline"
+              >
+                Edit in settings
+              </Link>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+
       {view === "list" ? (
         <TaskListView
           columns={orderedColumns}
@@ -722,7 +825,7 @@ export function KanbanBoard({
                 <KanbanColumn
                   key={column.id}
                   orgSlug={orgSlug}
-                  statusLanes={useStatusLanes}
+                  statusLanes={useStatusLanes || useStudioLanes}
                   manageLists={manageLists}
                   column={column}
                   tasks={items.get(column.id) ?? []}
@@ -886,7 +989,7 @@ function KanbanColumn({
             </button>
           ) : statusLanes ? (
             <span
-              className={cn("ml-1 size-2.5 shrink-0 rounded-full", LANE_DOT[column.id])}
+              className={cn("ml-1 size-2.5 shrink-0 rounded-full", columnDot(column))}
               aria-hidden
             />
           ) : null}

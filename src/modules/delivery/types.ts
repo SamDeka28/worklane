@@ -97,6 +97,8 @@ export type BoardColumn = {
   name: string;
   position: number;
   systemKey: "todo" | "doing" | "done" | null;
+  /** Studio list this column mirrors, when shared columns are on. */
+  studioColumnId?: string | null;
 };
 
 export type TaskRecord = {

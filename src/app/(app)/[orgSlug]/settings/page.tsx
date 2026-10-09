@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   Building2,
+  Columns3,
   Globe,
   Mail,
   PenLine,
@@ -33,8 +34,10 @@ import { listOrgMembers } from "@/modules/identity/org";
 import { StudioSignatureForm } from "@/modules/email-signatures/components/signature-forms";
 import { getSignatures, signatureSender } from "@/modules/email-signatures/server";
 import { isEmailConfigured } from "@/shared/email";
+import { BoardColumnsForm } from "@/modules/delivery/components/board-columns-form";
+import { loadBoardSettings } from "@/modules/delivery/queries";
 
-type SettingsTab = "studio" | "business" | "email" | "signature" | "portal";
+type SettingsTab = "studio" | "business" | "board" | "email" | "signature" | "portal";
 
 type TabItem = { tab: SettingsTab; label: string; icon: LucideIcon };
 type LinkItem = { href: string; label: string; icon: LucideIcon };
@@ -74,6 +77,9 @@ export default async function SettingsPage({
   const tabItems: TabItem[] = [
     { tab: "studio", label: "Studio", icon: Store },
     { tab: "business", label: "Business details", icon: Building2 },
+    ...(elevated && ctx.org.modules.delivery
+      ? ([{ tab: "board", label: "Board columns", icon: Columns3 }] as const)
+      : []),
     ...(elevated || manageSmtp
       ? ([
           { tab: "email", label: "Sending email", icon: Mail },
@@ -174,6 +180,18 @@ async function SettingsContent({
           business={invoiceConfig.business}
           canWrite={ctx.canWrite}
         />
+      </SettingsPanel>
+    );
+  }
+
+  if (tab === "board") {
+    const board = await loadBoardSettings(orgSlug);
+    return (
+      <SettingsPanel
+        title="Board columns"
+        hint="The lists on a project board and on the studio board. Turn sharing on to use one set everywhere."
+      >
+        <BoardColumnsForm orgSlug={orgSlug} shared={board.shared} columns={board.columns} />
       </SettingsPanel>
     );
   }

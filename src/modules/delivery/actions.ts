@@ -1877,14 +1877,18 @@ export async function createTaskAction(
 
   const { data: columns } = await ctx.supabase
     .from("project_columns")
-    .select("id, system_key, position")
+    .select("id, system_key, position, studio_column_id")
     .eq("organization_id", ctx.org.id)
     .eq("project_id", projectId)
     .order("position");
 
   const statusHint = String(formData.get("status") ?? "").trim();
+  const studioColumnId = String(formData.get("studio_column_id") ?? "").trim();
   const column =
     (columnId ? columns?.find((row) => row.id === columnId) : null) ??
+    (studioColumnId
+      ? columns?.find((row) => row.studio_column_id === studioColumnId)
+      : null) ??
     (statusHint === "todo" || statusHint === "doing" || statusHint === "done"
       ? columns?.find((row) => row.system_key === statusHint)
       : null) ??

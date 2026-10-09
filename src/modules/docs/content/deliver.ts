@@ -212,7 +212,7 @@ export const DELIVER: DocArticle[] = [
       {
         type: "callout",
         tone: "tip",
-        text: "Custom lists count as “Doing” for status purposes, so you can add Review or QA columns without breaking Studio Board.",
+        text: "Custom lists count as “Doing” for status. An admin can share one column set from Settings → Board columns so every project board and Studio Board use the same lists.",
       },
     ],
   },
@@ -234,7 +234,7 @@ export const DELIVER: DocArticle[] = [
         type: "table",
         head: ["Filter", "What it does"],
         rows: [
-          ["Project", "**All projects (by status)** shows three lanes — To do, Doing, Done. Picking one project shows that project's own lists, which you can manage directly."],
+          ["Project", "**All projects (by status)** shows To do, Doing, and Done. When board columns are shared, those lists show here instead. Picking one project shows that project's lists."],
           ["Client", "Only cards for one client's projects."],
           ["Assignee", "Click avatars to show one or more people's cards."],
           ["Priority", "**All**, **H**, **M**, or **L**."],

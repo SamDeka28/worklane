@@ -193,7 +193,7 @@ function RevealedSecret({
   const empty =
     !secret.username && !secret.password && secret.fields.length === 0 && !secret.notes;
   return (
-    <div className="mt-3 rounded-xl bg-muted/50 px-3 py-2 ring-1 ring-border/60">
+    <div className="mt-3 min-w-0 overflow-hidden rounded-xl bg-muted/50 px-3 py-2 ring-1 ring-border/60">
       {empty ? (
         <p className="py-1.5 text-sm text-muted-foreground">No secret details saved yet.</p>
       ) : (
@@ -219,7 +219,7 @@ function RevealedSecret({
           {secret.notes ? (
             <div className="py-2">
               <p className="text-xs font-medium text-muted-foreground">Notes</p>
-              <p className="mt-1 whitespace-pre-wrap text-sm">{secret.notes}</p>
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm">{secret.notes}</p>
             </div>
           ) : null}
         </div>
@@ -320,7 +320,7 @@ function CredentialCard({
   }
 
   return (
-    <li className="rounded-2xl bg-card p-3.5 shadow-sm ring-1 ring-foreground/10">
+    <li className="min-w-0 overflow-hidden rounded-2xl bg-card p-3.5 shadow-sm ring-1 ring-foreground/10">
       <div className="flex items-start gap-3">
         <span
           className={cn(

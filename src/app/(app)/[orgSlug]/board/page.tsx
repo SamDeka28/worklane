@@ -5,6 +5,7 @@ import { KanbanBoard } from "@/modules/delivery/components/kanban-board";
 import {
   listColumnsForProjects,
   listMilestonesForProjects,
+  loadBoardSettings,
   listOrgBoardTasks,
   listProjects,
   listTaskComments,
@@ -29,13 +30,14 @@ export default async function BoardPage({ params }: PageProps<"/[orgSlug]/board"
       project.status === "on_hold",
   );
   const projectIds = activeProjects.map((project) => project.id);
-  const [comments, milestonesByProject, columnsByProject] = await Promise.all([
+  const [comments, milestonesByProject, columnsByProject, boardSettings] = await Promise.all([
     listTaskComments(
       orgSlug,
       tasks.map((task) => task.id),
     ),
     listMilestonesForProjects(orgSlug, projectIds),
     listColumnsForProjects(orgSlug, projectIds),
+    loadBoardSettings(orgSlug),
   ]);
 
   const assignees = members
@@ -71,6 +73,13 @@ export default async function BoardPage({ params }: PageProps<"/[orgSlug]/board"
             comments={comments}
             milestonesByProject={milestonesByProject}
             columnsByProject={columnsByProject}
+            sharedColumns={boardSettings.shared ? boardSettings.columns : null}
+            columnsLocked={boardSettings.shared}
+            columnsSettingsHref={
+              boardSettings.shared && (ctx.role === "owner" || ctx.role === "admin")
+                ? `/${orgSlug}/settings?tab=board`
+                : undefined
+            }
             canWrite={ctx.canWrite}
             currentUserId={ctx.userId}
             assignees={assignees}

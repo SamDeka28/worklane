@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { parseBoardSettings } from "@/modules/delivery/board-columns";
 import { requireOrg } from "@/modules/identity/org";
 import { asLedgerMinor } from "@/modules/finance/ledger";
 import { asIsoCurrency, type IsoCurrency } from "@/shared/money";
@@ -229,11 +230,22 @@ export async function listMilestoneItemsForProject(orgSlug: string, projectId: s
   return map;
 }
 
+export const loadBoardSettings = cache(async (orgSlug: string) => {
+  const { org, supabase } = await requireOrg(orgSlug);
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("settings")
+    .eq("id", org.id)
+    .single();
+  if (error) throw new Error(error.message);
+  return parseBoardSettings(data?.settings);
+});
+
 export async function listProjectColumns(orgSlug: string, projectId: string) {
   const { org, supabase } = await requireOrg(orgSlug);
   const { data, error } = await supabase
     .from("project_columns")
-    .select("id, project_id, name, position, system_key")
+    .select("id, project_id, name, position, system_key, studio_column_id")
     .eq("organization_id", org.id)
     .eq("project_id", projectId)
     .order("position")
@@ -249,6 +261,7 @@ export async function listProjectColumns(orgSlug: string, projectId: string) {
         row.system_key === "todo" || row.system_key === "doing" || row.system_key === "done"
           ? row.system_key
           : null,
+      studioColumnId: (row.studio_column_id as string | null) ?? null,
     }),
   );
 }
@@ -259,7 +272,7 @@ export async function listColumnsForProjects(orgSlug: string, projectIds: string
   const { org, supabase } = await requireOrg(orgSlug);
   const { data, error } = await supabase
     .from("project_columns")
-    .select("id, project_id, name, position, system_key")
+    .select("id, project_id, name, position, system_key, studio_column_id")
     .eq("organization_id", org.id)
     .in("project_id", projectIds)
     .order("position")
@@ -280,6 +293,7 @@ export async function listColumnsForProjects(orgSlug: string, projectIds: string
         row.system_key === "todo" || row.system_key === "doing" || row.system_key === "done"
           ? row.system_key
           : null,
+      studioColumnId: (row.studio_column_id as string | null) ?? null,
     });
   }
   return map;

@@ -62,6 +62,7 @@ export type TaskModalState =
       mode: "create";
       columnId?: string | null;
       status?: TaskStatus;
+      studioColumnId?: string;
       projectId?: string;
       milestoneId?: string;
     };
@@ -289,6 +290,9 @@ export function TaskModal({
                     }
                     if (state.mode === "create" && state.status) {
                       formData.set("status", state.status);
+                    }
+                    if (state.mode === "create" && state.studioColumnId) {
+                      formData.set("studio_column_id", state.studioColumnId);
                     }
                     const result = await createTaskAction(orgSlug, targetProject, formData);
                     if (result.error) {
